@@ -41,4 +41,10 @@ PKG_CONFIGURE_OPTS_TARGET="--disable-werror \
 post_makeinstall_target() {
   mkdir -p $INSTALL/usr/config/aacs
     cp -P ../KEYDB.cfg $INSTALL/usr/config/aacs
+
+# Hack! To dumb/lazy to do this in a clean way.
+  mkdir -p $INSTALL/usr/lib/bd
+  mv $INSTALL/usr/lib/libaacs.* $INSTALL/usr/lib/bd
+  ln -sf /storage/bd/lib/libaacs.so.0 $INSTALL/usr/lib/libaacs.so.0
+  ln -s /storage/bd/bin/makemkvcon $INSTALL/usr/bin/makemkvcon
 }
