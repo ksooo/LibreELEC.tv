@@ -1,0 +1,1630 @@
+diff --git a/Makefile.am b/Makefile.am
+index 3a54bfc..be16d0d 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -11,11 +11,6 @@ else
+ POSIX_C_SOURCE=200112L
+ endif
+ 
+-SET_FEATURES = -D_ISOC99_SOURCE -D_POSIX_C_SOURCE=$(POSIX_C_SOURCE) -D_REENTRANT
+-SET_INCLUDES = -I$(top_srcdir)/src -I$(top_srcdir)/src/libbluray -I$(top_builddir)/src/libbluray $(BDJAVA_CFLAGS)
+-
+-AM_CFLAGS = -std=c99 $(SET_FEATURES) $(SET_INCLUDES) $(LIBXML2_CFLAGS) $(FT2_CFLAGS) $(FONTCONFIG_CFLAGS) $(UDF_CFLAGS)
+-
+ EXTRA_DIST = \
+ 	bootstrap \
+ 	ChangeLog \
+@@ -29,7 +24,26 @@ EXTRA_DIST = \
+ 	src/libbluray/bdj/java-j2se \
+ 	contrib/asm
+ 
++AM_CFLAGS = \
++	-std=c99
++
++AM_CPPFLAGS = \
++	-D_ISOC99_SOURCE \
++	-D_POSIX_C_SOURCE=$(POSIX_C_SOURCE) \
++	-D_REENTRANT \
++	\
++	-I$(top_srcdir)/src \
++	-I$(top_srcdir)/src/libbluray
++
+ lib_LTLIBRARIES=libbluray.la
++libbluray_la_CPPFLAGS = \
++	$(AM_CPPFLAGS) \
++	-I$(top_builddir)/src/libbluray \
++	$(BDJAVA_CFLAGS) \
++	$(UDF_CFLAGS) \
++	$(LIBXML2_CFLAGS) \
++	$(FT2_CFLAGS) \
++	$(FONTCONFIG_CFLAGS)
+ libbluray_la_SOURCES = \
+ 	src/file/dirs.h \
+ 	src/file/dl.h \
+@@ -216,8 +230,6 @@ libbluray_la_SOURCES += \
+ 	src/libbluray/bdj/native/util.h \
+ 	src/libbluray/bdj/native/util.c
+ 
+-AM_CFLAGS += $(BDJAVA_CFLAGS)
+-
+ if USING_BDJAVA_BUILD_JAR
+ all-local:
+ 	ant -f $(top_srcdir)/src/libbluray/bdj/build.xml \
+diff --git a/src/devtools/bdj_test.c b/src/devtools/bdj_test.c
+index d9ebd16..870d619 100644
+--- a/src/devtools/bdj_test.c
++++ b/src/devtools/bdj_test.c
+@@ -30,7 +30,7 @@
+ #include <stdlib.h>
+ #include <unistd.h>
+ 
+-#include "libbluray/bluray.h"
++#include "bluray.h"
+ 
+ #if defined(_WIN32)
+ #include <windows.h>
+diff --git a/src/devtools/bdjo_dump.c b/src/devtools/bdjo_dump.c
+index c9c8141..616246a 100644
+--- a/src/devtools/bdjo_dump.c
++++ b/src/devtools/bdjo_dump.c
+@@ -17,8 +17,8 @@
+  * <http://www.gnu.org/licenses/>.
+  */
+ 
+-#include "libbluray/bluray.h"
+-#include "libbluray/bdj/bdjo_data.h"
++#include "bdj/bdjo_data.h"
++#include "bluray.h"
+ 
+ #include <stdio.h>
+ #include <string.h>
+diff --git a/src/devtools/clpi_dump.c b/src/devtools/clpi_dump.c
+index da412e9..98aa9cd 100644
+--- a/src/devtools/clpi_dump.c
++++ b/src/devtools/clpi_dump.c
+@@ -23,8 +23,8 @@
+ #include <unistd.h>
+ #include <inttypes.h>
+ 
+-#include "libbluray/bdnav/clpi_data.h"
+-#include "libbluray/bluray.h"
++#include "bluray.h"
++#include "bdnav/clpi_data.h"
+ 
+ #include "util.h"
+ 
+diff --git a/src/devtools/hdmv_test.c b/src/devtools/hdmv_test.c
+index 7016ee1..d2894d9 100644
+--- a/src/devtools/hdmv_test.c
++++ b/src/devtools/hdmv_test.c
+@@ -22,9 +22,9 @@
+ #include <string.h>
+ #include <inttypes.h>
+ 
++#include "decoders/overlay.h"
+ #include "util/log_control.h"
+-#include "libbluray/bluray.h"
+-#include "libbluray/decoders/overlay.h"
++#include "bluray.h"
+ 
+ 
+ #define PRINT_EV0(e)                                \
+diff --git a/src/devtools/mobj_dump.c b/src/devtools/mobj_dump.c
+index 3eaf9f4..68e78dd 100644
+--- a/src/devtools/mobj_dump.c
++++ b/src/devtools/mobj_dump.c
+@@ -17,10 +17,10 @@
+  * <http://www.gnu.org/licenses/>.
+  */
+ 
+-#include "libbluray/bluray.h"
++#include "bluray.h"
+ 
+-#include "libbluray/hdmv/mobj_data.h"
+-#include "libbluray/hdmv/mobj_print.h"
++#include "hdmv/mobj_data.h"
++#include "hdmv/mobj_print.h"
+ 
+ #include <stdio.h>
+ #include <string.h>
+diff --git a/src/devtools/mpls_dump.c b/src/devtools/mpls_dump.c
+index 147314e..0f286c1 100644
+--- a/src/devtools/mpls_dump.c
++++ b/src/devtools/mpls_dump.c
+@@ -25,8 +25,8 @@
+ #include <string.h>
+ #include <libgen.h>
+ 
+-#include "libbluray/bdnav/mpls_parse.h"
+-#include "libbluray/bluray.h"
++#include "bdnav/mpls_parse.h"
++#include "bluray.h"
+ 
+ #include "util.h"
+ 
+diff --git a/src/examples/bd_info.c b/src/examples/bd_info.c
+index de85d20..e5a8dd8 100644
+--- a/src/examples/bd_info.c
++++ b/src/examples/bd_info.c
+@@ -22,8 +22,8 @@
+ #include <inttypes.h>
+ #include <unistd.h>
+ 
+-#include "libbluray/bdnav/meta_data.h"
+-#include "libbluray/bluray.h"
++#include "bdnav/meta_data.h"
++#include "bluray.h"
+ 
+ static const char *_yes_no(int i)
+ {
+@@ -143,9 +143,13 @@ static void _print_app_info(const BLURAY_DISC_INFO *info)
+ 
+ int main(int argc, char *argv[])
+ {
++    int major, minor, micro;
+     const char *disc_root = (argc > 1) ? argv[1] : NULL;
+     const char *keyfile   = (argc > 2) ? argv[2] : NULL;
+ 
++    bd_get_version(&major, &minor, &micro);
++    printf("Using libbluray version %d.%d.%d\n", major, minor, micro);
++
+     if (!disc_root) {
+         fprintf(stderr,
+                 "%s <BD base dir> [keyfile]\n"
+@@ -178,7 +182,7 @@ int main(int argc, char *argv[])
+         printf("BD-J titles         : %d\n", info->num_bdj_titles);
+         printf("UNSUPPORTED titles  : %d\n", info->num_unsupported_titles);
+ 
+-        printf("\nBD-J detected       : %s\n", _yes_no(info->bdj_supported));
++        printf("\nBD-J detected       : %s\n", _yes_no(info->bdj_detected));
+         if (info->bdj_detected) {
+             printf("BD-J supported      : %s\n", _yes_no(info->bdj_supported));
+             if (info->bdj_supported) {
+diff --git a/src/examples/bdsplice.c b/src/examples/bdsplice.c
+index 4cf71e5..6fb54c2 100644
+--- a/src/examples/bdsplice.c
++++ b/src/examples/bdsplice.c
+@@ -27,7 +27,7 @@
+ #include <libgen.h>
+ #include <inttypes.h>
+ 
+-#include "libbluray/bluray.h"
++#include "bluray.h"
+ 
+ #define PKT_SIZE 192
+ #define BUF_SIZE (PKT_SIZE * 1024)
+diff --git a/src/examples/index_dump.c b/src/examples/index_dump.c
+index f01e608..f6a6595 100644
+--- a/src/examples/index_dump.c
++++ b/src/examples/index_dump.c
+@@ -19,7 +19,7 @@
+ 
+ #include <stdio.h>
+ 
+-#include "libbluray/bluray.h"
++#include "bluray.h"
+ 
+ static void _indx_print_title(const BLURAY_TITLE *title, int normal_title)
+ {
+diff --git a/src/examples/libbluray_test.c b/src/examples/libbluray_test.c
+index d4934a1..4588093 100644
+--- a/src/examples/libbluray_test.c
++++ b/src/examples/libbluray_test.c
+@@ -23,7 +23,7 @@
+ #include <string.h>
+ #include <inttypes.h>
+ 
+-#include "libbluray/bluray.h"
++#include "bluray.h"
+ 
+ int main(int argc, char *argv[])
+ {
+diff --git a/src/examples/list_titles.c b/src/examples/list_titles.c
+index 9319e9e..6f6edf8 100644
+--- a/src/examples/list_titles.c
++++ b/src/examples/list_titles.c
+@@ -17,7 +17,7 @@
+  * <http://www.gnu.org/licenses/>.
+  */
+ 
+-#include "libbluray/bluray.h"
++#include "bluray.h"
+ 
+ #include <stdio.h>
+ #include <stdlib.h>
+diff --git a/src/examples/sound_dump.c b/src/examples/sound_dump.c
+index a44e65b..5e65763 100644
+--- a/src/examples/sound_dump.c
++++ b/src/examples/sound_dump.c
+@@ -20,7 +20,7 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ 
+-#include "libbluray/bluray.h"
++#include "bluray.h"
+ 
+ 
+ static void _sound_print(int sound_index, BLURAY_SOUND_EFFECT *data)
+diff --git a/src/file/dl_posix.c b/src/file/dl_posix.c
+index 200a888..f1852a4 100644
+--- a/src/file/dl_posix.c
++++ b/src/file/dl_posix.c
+@@ -39,12 +39,12 @@ static void *_dl_dlopen(const char *path)
+ {
+     void *result;
+ 
+-    BD_DEBUG(DBG_FILE, "searching for library '%s' ...\n", path);
+-
+     result = dlopen(path, RTLD_LAZY);
+ 
+     if (!result) {
+         BD_DEBUG(DBG_FILE, "can't open library '%s': %s\n", path, dlerror());
++    } else {
++        BD_DEBUG(DBG_FILE, "opened library '%s'\n", path);
+     }
+ 
+     return result;
+@@ -86,8 +86,6 @@ void *dl_dlopen(const char *path, const char *version)
+             continue;
+         }
+ 
+-        BD_DEBUG(DBG_FILE, "Attempting to open %s\n", name);
+-
+         dll = _dl_dlopen (name);
+         X_FREE(name);
+         if (dll) {
+diff --git a/src/file/dl_win32.c b/src/file/dl_win32.c
+index c2cbff4..6155ad6 100644
+--- a/src/file/dl_win32.c
++++ b/src/file/dl_win32.c
+@@ -82,7 +82,6 @@ void *dl_dlopen(const char *path, const char *version)
+                        "SetDefaultDllDirectories") != NULL)
+ #endif
+         flags = LOAD_LIBRARY_SEARCH_APPLICATION_DIR |
+-                LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
+                 LOAD_LIBRARY_SEARCH_SYSTEM32;
+ 
+     result = LoadLibraryExW(wname, NULL, flags);
+@@ -90,6 +89,8 @@ void *dl_dlopen(const char *path, const char *version)
+     if (!result) {
+         char buf[128];
+         BD_DEBUG(DBG_FILE, "can't open library '%s': %s\n", path, dlerror(buf, sizeof(buf)));
++    } else {
++        BD_DEBUG(DBG_FILE, "opened library '%s'\n", path);
+     }
+ 
+     return result;
+diff --git a/src/libbluray/bdj/bdj.c b/src/libbluray/bdj/bdj.c
+index b68701f..1714cd0 100644
+--- a/src/libbluray/bdj/bdj.c
++++ b/src/libbluray/bdj/bdj.c
+@@ -74,10 +74,12 @@ static void *_load_dll(const wchar_t *lib_path, const wchar_t *dll_search_path)
+ {
+     void *result;
+ 
+-    PVOID WINAPI (*pAddDllDirectory)   (PCWSTR);
+-    BOOL  WINAPI (*pRemoveDllDirectory)(PVOID);
+-    pAddDllDirectory    = (__typeof__(pAddDllDirectory))    GetProcAddress(GetModuleHandle(TEXT("kernel32.dll")), "AddDllDirectory");
+-    pRemoveDllDirectory = (__typeof__(pRemoveDllDirectory)) GetProcAddress(GetModuleHandle(TEXT("kernel32.dll")), "RemoveDllDirectory");
++    typedef PVOID(WINAPI *AddDllDirectoryF)  (PCWSTR);
++    typedef BOOL(WINAPI *RemoveDllDirectoryF)(PVOID);
++    AddDllDirectoryF pAddDllDirectory;
++    RemoveDllDirectoryF pRemoveDllDirectory;
++    pAddDllDirectory = (AddDllDirectoryF)GetProcAddress(GetModuleHandle(TEXT("kernel32.dll")), "AddDllDirectory");
++    pRemoveDllDirectory = (RemoveDllDirectoryF)GetProcAddress(GetModuleHandle(TEXT("kernel32.dll")), "RemoveDllDirectory");
+ 
+     if (pAddDllDirectory && pRemoveDllDirectory) {
+ 
+@@ -651,7 +653,9 @@ int bdj_jvm_available(BDJ_STORAGE *storage)
+ 
+ static int _find_jvm(void *jvm_lib, JNIEnv **env, JavaVM **jvm)
+ {
+-    fptr_JNI_GetCreatedJavaVMs JNI_GetCreatedJavaVMs_fp = (fptr_JNI_GetCreatedJavaVMs)(intptr_t)dl_dlsym(jvm_lib, "JNI_GetCreatedJavaVMs");
++    fptr_JNI_GetCreatedJavaVMs JNI_GetCreatedJavaVMs_fp;
++
++    *(void **)&JNI_GetCreatedJavaVMs_fp = dl_dlsym(jvm_lib, "JNI_GetCreatedJavaVMs");
+     if (JNI_GetCreatedJavaVMs_fp == NULL) {
+         BD_DEBUG(DBG_BDJ | DBG_CRIT, "Couldn't find symbol JNI_GetCreatedJavaVMs.\n");
+         return 0;
+@@ -931,7 +935,7 @@ int bdj_process_event(BDJAVA *bdjava, unsigned ev, unsigned param)
+ 
+     if (_get_method(env, &event_class, &event_id,
+                        "org/videolan/Libbluray", "processEvent", "(II)Z")) {
+-        if ((*env)->CallStaticBooleanMethod(env, event_class, event_id, ev, param)) {
++        if ((*env)->CallStaticBooleanMethod(env, event_class, event_id, (jint)ev, (jint)param)) {
+             result = 0;
+         }
+ 
+diff --git a/src/libbluray/bdj/java-j2se/org/videolan/PortingHelper.java b/src/libbluray/bdj/java-j2se/org/videolan/PortingHelper.java
+index 7cf40b1..1cb5f43 100644
+--- a/src/libbluray/bdj/java-j2se/org/videolan/PortingHelper.java
++++ b/src/libbluray/bdj/java-j2se/org/videolan/PortingHelper.java
+@@ -30,12 +30,15 @@ public class PortingHelper {
+     }
+ 
+     public static String dumpStack(Thread t) {
+-        String dump = "";
+         StackTraceElement e[] = t.getStackTrace();
+         if (e != null) {
+-            for (int i = 0; i < e.length; i++)
+-                dump += "\n\t" + e[i].toString();
++            StringBuffer dump = new StringBuffer();
++            for (int i = 0; i < e.length; i++) {
++                dump.append("\n\t");
++                dump.append(e[i].toString());
++            }
++            return dump.toString();
+         }
+-        return dump;
++        return "";
+     }
+ }
+diff --git a/src/libbluray/bdj/java/java/awt/BDRootWindow.java b/src/libbluray/bdj/java/java/awt/BDRootWindow.java
+index 32d25a1..9fe6771 100644
+--- a/src/libbluray/bdj/java/java/awt/BDRootWindow.java
++++ b/src/libbluray/bdj/java/java/awt/BDRootWindow.java
+@@ -218,10 +218,10 @@ public class BDRootWindow extends Frame {
+     }
+ 
+     private int[] backBuffer = null;
+-    private Area dirty = new Area();
+-    private int changeCount = 0;
+-    private Timer timer = new Timer();
+-    private TimerTask timerTask = null;
++    private transient Area dirty = new Area();
++    private transient int changeCount = 0;
++    private transient Timer timer = new Timer();
++    private transient TimerTask timerTask = null;
+     private boolean overlay_open = false;
+     private Font defaultFont = null;
+ 
+diff --git a/src/libbluray/bdj/java/javax/tv/service/navigation/ServiceListImpl.java b/src/libbluray/bdj/java/javax/tv/service/navigation/ServiceListImpl.java
+index 764809f..9dd0184 100644
+--- a/src/libbluray/bdj/java/javax/tv/service/navigation/ServiceListImpl.java
++++ b/src/libbluray/bdj/java/javax/tv/service/navigation/ServiceListImpl.java
+@@ -22,6 +22,8 @@ import java.util.Arrays;
+ import java.util.Comparator;
+ import java.util.LinkedList;
+ 
++import java.io.Serializable;
++
+ import javax.tv.locator.Locator;
+ import javax.tv.locator.InvalidLocatorException;
+ import javax.tv.service.Service;
+@@ -120,7 +122,7 @@ public class ServiceListImpl implements ServiceList {
+         services.add(service);
+     }
+ 
+-    private static class TitleComparator implements Comparator {
++    private static class TitleComparator implements Comparator, Serializable {
+         public int compare(Object obj1, Object obj2) {
+             return ((TitleImpl)obj1).getTitleNum() - ((TitleImpl)obj2).getTitleNum();
+         }
+diff --git a/src/libbluray/bdj/java/org/dvb/lang/DVBClassLoader.java b/src/libbluray/bdj/java/org/dvb/lang/DVBClassLoader.java
+index c17a278..320ac42 100644
+--- a/src/libbluray/bdj/java/org/dvb/lang/DVBClassLoader.java
++++ b/src/libbluray/bdj/java/org/dvb/lang/DVBClassLoader.java
+@@ -75,7 +75,7 @@ public abstract class DVBClassLoader extends java.security.SecureClassLoader {
+         return loader.loadClass(name, resolve);
+     }
+ 
+-    protected class DVBURLClassLoader extends URLClassLoader {
++    protected static class DVBURLClassLoader extends URLClassLoader {
+         public DVBURLClassLoader(URL[] urls) {
+             super(urls);
+         }
+diff --git a/src/libbluray/bdj/java/org/dvb/user/Preference.java b/src/libbluray/bdj/java/org/dvb/user/Preference.java
+index e80c002..71ae34b 100644
+--- a/src/libbluray/bdj/java/org/dvb/user/Preference.java
++++ b/src/libbluray/bdj/java/org/dvb/user/Preference.java
+@@ -112,15 +112,21 @@ public class Preference {
+     }
+ 
+     public String toString() {
+-        String result = "Preference:" + name + "[";
++        StringBuffer result = new StringBuffer();
+         String comma = "";
++
++        result.append("Preference:");
++        result.append(name);
++        result.append("[");
++
+         Iterator it = values.iterator();
+         while (it.hasNext()) {
+-            result += comma + (String)it.next();
++            result.append(comma);
++            result.append((String)it.next());
+             comma = ",";
+         }
+-        result += ']';
+-        return result;
++        result.append("]");
++        return result.toString();
+     }
+ 
+     private String name;
+diff --git a/src/libbluray/bdj/java/org/havi/ui/HTextLook.java b/src/libbluray/bdj/java/org/havi/ui/HTextLook.java
+index 295e9f0..2b48882 100644
+--- a/src/libbluray/bdj/java/org/havi/ui/HTextLook.java
++++ b/src/libbluray/bdj/java/org/havi/ui/HTextLook.java
+@@ -57,7 +57,7 @@ public class HTextLook implements HExtendedLook {
+ 
+     public void renderVisible(Graphics g, HVisible visible, int state) {
+         String text = visible.getTextContent(state);
+-        Insets insets = getInsets(visible);
++        //Insets insets = getInsets(visible);
+         if (text == null) {
+             return;
+         }
+diff --git a/src/libbluray/bdj/java/org/videolan/Arrays.java b/src/libbluray/bdj/java/org/videolan/Arrays.java
+index 89e7c61..cf5fb34 100644
+--- a/src/libbluray/bdj/java/org/videolan/Arrays.java
++++ b/src/libbluray/bdj/java/org/videolan/Arrays.java
+@@ -36,7 +36,7 @@ public class Arrays {
+         buffer.append('[');
+         int length = array.length;
+         for (int j = 0; j < length; j++) {
+-                buffer.append(array[j]);
++            buffer.append(array[j]);
+             if (j < (length - 1))
+                 buffer.append(", ");
+         }
+diff --git a/src/libbluray/bdj/java/org/videolan/BDJActionManager.java b/src/libbluray/bdj/java/org/videolan/BDJActionManager.java
+index d8b46db..8168e60 100644
+--- a/src/libbluray/bdj/java/org/videolan/BDJActionManager.java
++++ b/src/libbluray/bdj/java/org/videolan/BDJActionManager.java
+@@ -32,7 +32,7 @@ public class BDJActionManager {
+     }
+ 
+     public BDJActionManager() {
+-        commandQueue = new BDJActionQueue("BDJActionManager");
++        commandQueue = BDJActionQueue.create("BDJActionManager");
+     }
+ 
+     protected static void shutdown() {
+diff --git a/src/libbluray/bdj/java/org/videolan/BDJActionQueue.java b/src/libbluray/bdj/java/org/videolan/BDJActionQueue.java
+index 1530c56..0e52432 100644
+--- a/src/libbluray/bdj/java/org/videolan/BDJActionQueue.java
++++ b/src/libbluray/bdj/java/org/videolan/BDJActionQueue.java
+@@ -21,23 +21,34 @@ package org.videolan;
+ import java.util.LinkedList;
+ 
+ public class BDJActionQueue implements Runnable {
+-    public BDJActionQueue(String name) {
+-        this(null, name);
++
++    public static BDJActionQueue create(String name) {
++        return create(null, name);
++    }
++
++    public static BDJActionQueue create(BDJThreadGroup threadGroup, String name) {
++        BDJActionQueue aq = new BDJActionQueue(threadGroup, name);
++        aq.startThread(threadGroup, name);
++        return aq;
+     }
+ 
+-    public BDJActionQueue(BDJThreadGroup threadGroup, String name) {
++    private BDJActionQueue(BDJThreadGroup threadGroup, String name) {
+         if (threadGroup == null) {
+             if (BDJXletContext.getCurrentContext() != null) {
+-                logger.error("BDJActionQueue created from wrong context: " + Logger.dumpStack());
++                logger.error("BDJActionQueue " + name + " created from wrong context: " + Logger.dumpStack());
++                // throw new SecurityException();
+             }
+         }
++    }
+ 
++    private void startThread(BDJThreadGroup threadGroup, String name) {
+         /* run all actions in given thread group / xlet context */
+         thread = new Thread(threadGroup, this, name + ".BDJActionQueue");
+         thread.setDaemon(true);
+         thread.start();
+ 
+-        watchdog = new Watchdog(name);
++        watchdog = new Watchdog();
++        watchdog.start(name);
+     }
+ 
+     public void shutdown() {
+@@ -115,7 +126,9 @@ public class BDJActionQueue implements Runnable {
+         private Object currentAction = null;
+         private boolean terminate = false;
+ 
+-        Watchdog(String name) {
++        Watchdog() {}
++
++        synchronized void start(String name) {
+             Thread t = new Thread(null, this, name + ".BDJActionQueue.Monitor");
+             t.setDaemon(true);
+             t.start();
+diff --git a/src/libbluray/bdj/java/org/videolan/BDJAppProxy.java b/src/libbluray/bdj/java/org/videolan/BDJAppProxy.java
+index 7130d28..ae117af 100644
+--- a/src/libbluray/bdj/java/org/videolan/BDJAppProxy.java
++++ b/src/libbluray/bdj/java/org/videolan/BDJAppProxy.java
+@@ -212,7 +212,10 @@ class BDJAppProxy implements DVBJProxy, Runnable {
+                 String persistent = System.getProperty("dvb.persistent.root") + File.separator +
+                     (String)context.getXletProperty("dvb.org.id") + File.separator +
+                     (String)context.getXletProperty("dvb.app.id");
+-                new File(persistent).mkdirs();
++                File f = new File(persistent);
++                if (!f.exists() && !f.mkdirs()) {
++                    logger.error("Error creating persistent storage " + persistent);
++                }
+                 xlet.initXlet(context);
+                 state = PAUSED;
+                 return true;
+diff --git a/src/libbluray/bdj/java/org/videolan/BDJLoader.java b/src/libbluray/bdj/java/org/videolan/BDJLoader.java
+index bbc150d..fae2397 100644
+--- a/src/libbluray/bdj/java/org/videolan/BDJLoader.java
++++ b/src/libbluray/bdj/java/org/videolan/BDJLoader.java
+@@ -136,7 +136,7 @@ public class BDJLoader {
+             return false;
+         synchronized (BDJLoader.class) {
+             if (queue == null)
+-                queue = new BDJActionQueue(null, "BDJLoader");
++                queue = BDJActionQueue.create("BDJLoader");
+         }
+         queue.put(new BDJLoaderAction(title, restart, callback));
+         return true;
+@@ -147,7 +147,7 @@ public class BDJLoader {
+ 
+         synchronized (BDJLoader.class) {
+             if (queue == null)
+-                queue = new BDJActionQueue(null, "BDJLoader");
++                queue = BDJActionQueue.create("BDJLoader");
+         }
+         queue.put(new BDJLoaderAction(null, false, callback));
+         return true;
+@@ -318,7 +318,9 @@ public class BDJLoader {
+             while (ids.hasMoreElements()) {
+                 AppID id = (AppID)ids.nextElement();
+                 BDJAppProxy proxy = (BDJAppProxy)db.getAppProxy(id);
+-                proxy.stop(true);
++                if (proxy != null) {
++                    proxy.stop(true);
++                }
+             }
+ 
+             ids = db.getAppIDs(new CurrentServiceFilter());
+diff --git a/src/libbluray/bdj/java/org/videolan/BDJThreadGroup.java b/src/libbluray/bdj/java/org/videolan/BDJThreadGroup.java
+index 905bb4a..0f9256b 100644
+--- a/src/libbluray/bdj/java/org/videolan/BDJThreadGroup.java
++++ b/src/libbluray/bdj/java/org/videolan/BDJThreadGroup.java
+@@ -31,11 +31,7 @@ class BDJThreadGroup extends ThreadGroup {
+ 
+         String stack = "";
+         if (e != null) {
+-            StackTraceElement elems[] = e.getStackTrace();
+-            if (elems != null) {
+-                for (int i = 0; i < elems.length; i++)
+-                    stack += "\n\t" + elems[i].toString();
+-            }
++            stack = Logger.dumpStack(e);
+         }
+ 
+         if (e instanceof ThreadDeath) {
+diff --git a/src/libbluray/bdj/java/org/videolan/BDJXletContext.java b/src/libbluray/bdj/java/org/videolan/BDJXletContext.java
+index d076d1a..6a54abe 100644
+--- a/src/libbluray/bdj/java/org/videolan/BDJXletContext.java
++++ b/src/libbluray/bdj/java/org/videolan/BDJXletContext.java
+@@ -54,9 +54,9 @@ public class BDJXletContext implements javax.tv.xlet.XletContext, javax.microedi
+                                               entry.getInitialClass(),
+                                               this);
+ 
+-        callbackQueue = new BDJActionQueue(this.threadGroup, "CallbackQueue");
+-        mediaQueue = new BDJActionQueue(this.threadGroup, "MediaQueue");
+-        userEventQueue = new BDJActionQueue(this.threadGroup, "UserEventQueue");
++        callbackQueue  = BDJActionQueue.create(this.threadGroup, "CallbackQueue");
++        mediaQueue     = BDJActionQueue.create(this.threadGroup, "MediaQueue");
++        userEventQueue = BDJActionQueue.create(this.threadGroup, "UserEventQueue");
+ 
+         mountHomeDir(entry);
+     }
+diff --git a/src/libbluray/bdj/java/org/videolan/CacheDir.java b/src/libbluray/bdj/java/org/videolan/CacheDir.java
+index 817928e..950193d 100644
+--- a/src/libbluray/bdj/java/org/videolan/CacheDir.java
++++ b/src/libbluray/bdj/java/org/videolan/CacheDir.java
+@@ -30,7 +30,7 @@ class CacheDir {
+         return LockFile.create(path + File.separator + "lock");
+     }
+ 
+-    private static void InitializeBaseDir() throws IOException {
++    private static synchronized void InitializeBaseDir() throws IOException {
+         if (baseDir == null) {
+             try {
+                 File tmpDir = new File(System.getProperty("java.io.tmpdir"), "libbluray-bdj-cache");
+diff --git a/src/libbluray/bdj/java/org/videolan/Libbluray.java b/src/libbluray/bdj/java/org/videolan/Libbluray.java
+index dead64b..48d6ab7 100644
+--- a/src/libbluray/bdj/java/org/videolan/Libbluray.java
++++ b/src/libbluray/bdj/java/org/videolan/Libbluray.java
+@@ -525,6 +525,10 @@ public class Libbluray {
+         try {
+             BDLocator locator = new BDLocator(null, titleNumber, -1);
+             TitleImpl title   = (TitleImpl)SIManager.createInstance().getService(locator);
++            if (title == null) {
++                System.err.println("startTitle() failed: title " + titleNumber + " not found");
++                return false;
++            }
+ 
+             titleContext = (TitleContext)ServiceContextFactory.getInstance().getServiceContext(null);
+             titleContext.start(title, true);
+diff --git a/src/libbluray/bdj/java/org/videolan/StrUtil.java b/src/libbluray/bdj/java/org/videolan/StrUtil.java
+index f7f99b2..0fe65bd 100644
+--- a/src/libbluray/bdj/java/org/videolan/StrUtil.java
++++ b/src/libbluray/bdj/java/org/videolan/StrUtil.java
+@@ -23,14 +23,16 @@ import java.util.ArrayList;
+ 
+ public class StrUtil {
+     public static String Join(String[] strings, String separator) {
+-        String result = "";
+-        if (strings != null) {
+-            result = strings[0];
++        if (strings != null && strings.length > 0) {
++            StringBuffer buffer = new StringBuffer();
++            buffer.append(strings[0]);
+             for (int i = 1; i < strings.length; i++) {
+-                result = result + separator + strings[i];
++                buffer.append(separator);
++                buffer.append(strings[i]);
+             }
++            return buffer.toString();
+         }
+-        return result;
++        return "";
+     }
+ 
+     public static String[] split(String str, char delimiter) {
+diff --git a/src/libbluray/bdj/java/org/videolan/VFSCache.java b/src/libbluray/bdj/java/org/videolan/VFSCache.java
+index 04bacb5..08f7b2f 100644
+--- a/src/libbluray/bdj/java/org/videolan/VFSCache.java
++++ b/src/libbluray/bdj/java/org/videolan/VFSCache.java
+@@ -222,8 +222,6 @@ class VFSCache {
+ 
+     protected synchronized File addFont(InputStream is) {
+ 
+-        new File(fontRoot).mkdirs();
+-
+         // copy stream to tmp file in fontRoot. freetype can not read streams.
+         File tmpFile = null;
+         for (int i = 0; i < 100; i++) {
+diff --git a/src/libbluray/bdj/java/org/videolan/bdjo/AppEntry.java b/src/libbluray/bdj/java/org/videolan/bdjo/AppEntry.java
+index 798b299..2a5b68a 100644
+--- a/src/libbluray/bdj/java/org/videolan/bdjo/AppEntry.java
++++ b/src/libbluray/bdj/java/org/videolan/bdjo/AppEntry.java
+@@ -160,7 +160,7 @@ public class AppEntry implements AppAttributes {
+         this.profiles = profiles;
+         this.priority = priority;
+         this.binding = binding;
+-        this.visibility = visibility;
++        //this.visibility = visibility;
+         this.names = names;
+         if ((iconLocator != null) && (iconLocator.length() > 0)) {
+             try {
+@@ -217,7 +217,7 @@ public class AppEntry implements AppAttributes {
+     private AppProfile[] profiles;
+     private short priority;
+     private int binding;
+-    private int visibility;
++    //private int visibility;
+     private String[][] names;
+     private AppIcon icon;
+     private String basePath;
+diff --git a/src/libbluray/bdj/java/org/videolan/media/content/BDHandler.java b/src/libbluray/bdj/java/org/videolan/media/content/BDHandler.java
+index e3af4bb..c48cbd6 100644
+--- a/src/libbluray/bdj/java/org/videolan/media/content/BDHandler.java
++++ b/src/libbluray/bdj/java/org/videolan/media/content/BDHandler.java
+@@ -79,7 +79,7 @@ public abstract class BDHandler implements Player, ServiceContentHandler {
+     }
+ 
+     private void doInitAction() {
+-        commandQueue = new BDJActionQueue("MediaPlayer");
++        commandQueue = BDJActionQueue.create("MediaPlayer");
+         PlayerManager.getInstance().registerPlayer(this);
+     }
+ 
+@@ -313,8 +313,6 @@ public abstract class BDHandler implements Player, ServiceContentHandler {
+     public void deallocate() {
+         if (isClosed) return;
+ 
+-        if (state == Started) {
+-        }
+         PlayerAction action = new PlayerAction(this, PlayerAction.ACTION_DEALLOCATE, null);
+         commandQueue.put(action);
+         action.waitEnd();
+diff --git a/src/libbluray/bdj/java/org/videolan/media/content/playlist/VideoControl.java b/src/libbluray/bdj/java/org/videolan/media/content/playlist/VideoControl.java
+index 5e46b65..32185ec 100644
+--- a/src/libbluray/bdj/java/org/videolan/media/content/playlist/VideoControl.java
++++ b/src/libbluray/bdj/java/org/videolan/media/content/playlist/VideoControl.java
+@@ -30,7 +30,7 @@ import org.videolan.StreamInfo;
+ 
+ public abstract class VideoControl extends StreamControl implements VideoPresentationControl {
+     protected VideoControl(int plane) {
+-        this.plane = plane;
++        //this.plane = plane;
+     }
+ 
+     protected HScreenRectangle getNormalizedRectangle(Dimension dimension, Rectangle rectangle) {
+@@ -118,7 +118,10 @@ public abstract class VideoControl extends StreamControl implements VideoPresent
+         Dimension vd = getInputVideoSize();
+         if ((vd.width == 0) || (vd.height == 0))
+             return new Rectangle(0, 0);
+-        srcArea = getRectangleOnScreen(getNormalizedRectangle(vd, clipRect));
++        if (clipRect != null)
++            srcArea = getRectangleOnScreen(getNormalizedRectangle(vd, clipRect));
++        else
++            srcArea = new HScreenRectangle(0.0f, 0.0f, 1.0f, 1.0f);
+ 
+         //TODO
+         org.videolan.Logger.unimplemented("VideoControl", "setClipRegion");
+@@ -153,7 +156,7 @@ public abstract class VideoControl extends StreamControl implements VideoPresent
+         return null;
+     }
+ 
+-    private int plane = 0;
++    //private int plane = 0;
+     private HScreenRectangle srcArea = new HScreenRectangle(0.0f, 0.0f, 1.0f, 1.0f);
+     private HScreenRectangle dstArea = new HScreenRectangle(0.0f, 0.0f, 1.0f, 1.0f);
+ }
+diff --git a/src/libbluray/bdj/java/org/videolan/media/content/video/dvb/mpeg/drip/VideoControl.java b/src/libbluray/bdj/java/org/videolan/media/content/video/dvb/mpeg/drip/VideoControl.java
+index c6e3b97..1d80227 100644
+--- a/src/libbluray/bdj/java/org/videolan/media/content/video/dvb/mpeg/drip/VideoControl.java
++++ b/src/libbluray/bdj/java/org/videolan/media/content/video/dvb/mpeg/drip/VideoControl.java
+@@ -114,9 +114,15 @@ public class VideoControl implements VideoPresentationControl {
+         Dimension vd = getInputVideoSize();
+         if ((vd.width == 0) || (vd.height == 0))
+             return new Rectangle(0, 0);
+-        srcArea = getRectangleOnScreen(getNormalizedRectangle(vd, clipRect));
++        if (clipRect != null)
++            srcArea = getRectangleOnScreen(getNormalizedRectangle(vd, clipRect));
++        else
++            srcArea = new HScreenRectangle(0.0f, 0.0f, 1.0f, 1.0f);
++
+         //TODO
+-       return getRectangle(vd, srcArea);
++        org.videolan.Logger.unimplemented("VideoControl", "setClipRegion");
++
++        return getRectangle(vd, srcArea);
+     }
+ 
+     public float[] supportsArbitraryHorizontalScaling() {
+diff --git a/src/libbluray/bdj/native/bdjo.c b/src/libbluray/bdj/native/bdjo.c
+index 0a0410a..8739695 100644
+--- a/src/libbluray/bdj/native/bdjo.c
++++ b/src/libbluray/bdj/native/bdjo.c
+@@ -31,7 +31,7 @@
+ 
+ #include "util.h"
+ 
+-#include "libbluray/bdj/bdjo_data.h"
++#include "bdj/bdjo_data.h"
+ 
+ #include "util/logging.h"
+ 
+@@ -44,7 +44,7 @@
+ #define JNICHK(a) \
+   do {                                                              \
+       if ((*env)->ExceptionOccurred(env)) {                         \
+-          BD_DEBUG(DBG_BDJ | DBG_CRIT, "Exception occured\n");      \
++          BD_DEBUG(DBG_BDJ | DBG_CRIT, "Exception occurred\n");     \
+           (*env)->ExceptionDescribe(env);                           \
+       }                                                             \
+       if (!(a)) {                                                   \
+@@ -61,7 +61,7 @@ static jobject _make_terminal_info(JNIEnv* env, const BDJO_TERMINAL_INFO *p)
+     jstring jdefault_font = (*env)->NewStringUTF(env, p->default_font);
+     return bdj_make_object(env, "org/videolan/bdjo/TerminalInfo", "(Ljava/lang/String;IZZ)V",
+                            jdefault_font, (jint)p->initial_havi_config_id,
+-                           (jint)p->menu_call_mask, (jint)p->title_search_mask);
++                           (jboolean)p->menu_call_mask, (jboolean)p->title_search_mask);
+ }
+ 
+ static jobject _make_app_cache_info(JNIEnv* env, const BDJO_APP_CACHE_INFO *p)
+diff --git a/src/libbluray/bdj/native/org_videolan_Libbluray.c b/src/libbluray/bdj/native/org_videolan_Libbluray.c
+index 980ebf5..5623134 100644
+--- a/src/libbluray/bdj/native/org_videolan_Libbluray.c
++++ b/src/libbluray/bdj/native/org_videolan_Libbluray.c
+@@ -25,12 +25,12 @@
+ #include "bdjo.h"
+ #include "util.h"
+ 
+-#include "libbluray/bdj/bdjo_parse.h"
++#include "bdj/bdjo_parse.h"
+ 
+-#include "libbluray/bluray.h"
+-#include "libbluray/bluray_internal.h"
+-#include "libbluray/decoders/overlay.h"
+-#include "libbluray/disc/disc.h"
++#include "bluray.h"
++#include "bluray_internal.h"
++#include "decoders/overlay.h"
++#include "disc/disc.h"
+ 
+ #include "file/file.h"
+ #include "util/logging.h"
+@@ -66,7 +66,7 @@ static jobject _make_title_info(JNIEnv* env, const BLURAY_TITLE *title, int titl
+         int playback_type = (!!title->interactive) + ((!!title->bdj) << 1);
+         ti = bdj_make_object(env, "org/videolan/TitleInfo",
+                              "(IIII)V",
+-                             title_number, title_type, playback_type, title->id_ref);
++                             (jint)title_number, (jint)title_type, (jint)playback_type, (jint)title->id_ref);
+     }
+     return ti;
+ }
+@@ -74,13 +74,18 @@ static jobject _make_title_info(JNIEnv* env, const BLURAY_TITLE *title, int titl
+ static jobjectArray _make_title_infos(JNIEnv * env, const BLURAY_DISC_INFO *disc_info)
+ {
+     jobjectArray titleArr = bdj_make_array(env, "org/videolan/TitleInfo", disc_info->num_titles + 2);
++    jobject titleInfo;
++
++    if (!titleArr) {
++        return NULL;
++    }
+ 
+     for (unsigned i = 0; i <= disc_info->num_titles; i++) {
+-        jobject titleInfo = _make_title_info(env, disc_info->titles[i], i);
++        titleInfo = _make_title_info(env, disc_info->titles[i], i);
+         (*env)->SetObjectArrayElement(env, titleArr, i, titleInfo);
+     }
+ 
+-    jobject titleInfo = _make_title_info(env, disc_info->first_play, 65535);
++    titleInfo = _make_title_info(env, disc_info->first_play, 65535);
+     (*env)->SetObjectArrayElement(env, titleArr, disc_info->num_titles + 1, titleInfo);
+ 
+     return titleArr;
+@@ -94,12 +99,21 @@ static jobjectArray _make_stream_array(JNIEnv* env, int count, BLURAY_STREAM_INF
+ {
+     jobjectArray streamArr = bdj_make_array(env,
+                     "org/videolan/StreamInfo", count);
++
++    if (!streamArr) {
++        return NULL;
++    }
++
+     for (int i = 0; i < count; i++) {
+         BLURAY_STREAM_INFO s = streams[i];
+         jstring lang = (*env)->NewStringUTF(env, (char*)s.lang);
+-        jobject streamObj = bdj_make_object(env, "org/videolan/StreamInfo",
+-                "(BBBCLjava/lang/String;BB)V", s.coding_type, s.format,
+-                s.rate, s.char_code, lang, s.aspect, s.subpath_id);
++        jobject streamObj = bdj_make_object(env,
++                "org/videolan/StreamInfo",
++                "(BBBCLjava/lang/String;BB)V",
++                (jbyte)s.coding_type, (jbyte)s.format,
++                (jbyte)s.rate, (jchar)s.char_code,
++                lang,
++                (jbyte)s.aspect, (jbyte)s.subpath_id);
+         (*env)->SetObjectArrayElement(env, streamArr, i, streamObj);
+     }
+ 
+@@ -111,16 +125,22 @@ static jobject _make_playlist_info(JNIEnv* env, BLURAY_TITLE_INFO* ti)
+     jobjectArray marks = bdj_make_array(env, "org/videolan/TIMark",
+             ti->mark_count);
+ 
++    if (marks) {
+     for (uint32_t i = 0; i < ti->mark_count; i++) {
+         BLURAY_TITLE_MARK m = ti->marks[i];
+-        jobject mark = bdj_make_object(env, "org/videolan/TIMark",
+-                "(IIJJJI)V", m.idx, m.type, m.start, m.duration, m.offset, m.clip_ref);
++        jobject mark = bdj_make_object(env,
++                "org/videolan/TIMark",
++                "(IIJJJI)V",
++                (jint)m.idx, (jint)m.type, (jlong)m.start, (jlong)m.duration,
++                (jlong)m.offset, (jint)m.clip_ref);
+         (*env)->SetObjectArrayElement(env, marks, i, mark);
+     }
++    }
+ 
+     jobjectArray clips = bdj_make_array(env, "org/videolan/TIClip",
+             ti->clip_count);
+ 
++    if (clips) {
+     for (uint32_t i = 0; i < ti->clip_count; i++) {
+         BLURAY_CLIP_INFO info = ti->clips[i];
+ 
+@@ -142,16 +162,20 @@ static jobject _make_playlist_info(JNIEnv* env, BLURAY_TITLE_INFO* ti)
+         jobjectArray secAudioStreams = _make_stream_array(env, info.sec_audio_stream_count,
+                 info.sec_audio_streams);
+ 
+-        jobject clip = bdj_make_object(env, "org/videolan/TIClip",
++        jobject clip = bdj_make_object(env,
++                "org/videolan/TIClip",
+                 "(I[Lorg/videolan/StreamInfo;[Lorg/videolan/StreamInfo;[Lorg/videolan/StreamInfo;[Lorg/videolan/StreamInfo;[Lorg/videolan/StreamInfo;[Lorg/videolan/StreamInfo;)V",
+-                i, videoStreams, audioStreams, pgStreams, igStreams, secVideoStreams, secAudioStreams);
++                (jint)i, videoStreams, audioStreams, pgStreams, igStreams, secVideoStreams, secAudioStreams);
+ 
+         (*env)->SetObjectArrayElement(env, clips, i, clip);
+     }
++    }
+ 
+-    return bdj_make_object(env, "org/videolan/PlaylistInfo",
+-            "(IJI[Lorg/videolan/TIMark;[Lorg/videolan/TIClip;)V",
+-            ti->playlist, ti->duration, ti->angle_count, marks, clips);
++    return bdj_make_object(env,
++             "org/videolan/PlaylistInfo",
++             "(IJI[Lorg/videolan/TIMark;[Lorg/videolan/TIClip;)V",
++             (jint)ti->playlist, (jlong)ti->duration, (jint)ti->angle_count,
++             marks, clips);
+ }
+ 
+ /*
+@@ -162,10 +186,12 @@ JNIEXPORT jobjectArray JNICALL Java_org_videolan_Libbluray_getTitleInfosN
+   (JNIEnv * env, jclass cls, jlong np)
+  {
+     BLURAY* bd = (BLURAY*)(intptr_t)np;
+-    const BLURAY_DISC_INFO *disc_info = bd_get_disc_info(bd);
++    const BLURAY_DISC_INFO *disc_info;
+ 
+     BD_DEBUG(DBG_JNI, "getTitleInfosN()\n");
+ 
++    disc_info = bd_get_disc_info(bd);
++
+     return  _make_title_infos(env, disc_info);
+ }
+ 
+diff --git a/src/libbluray/bdj/native/util.c b/src/libbluray/bdj/native/util.c
+index c034554..a4371a2 100644
+--- a/src/libbluray/bdj/native/util.c
++++ b/src/libbluray/bdj/native/util.c
+@@ -30,24 +30,49 @@
+ 
+ jobject bdj_make_object(JNIEnv* env, const char* name, const char* sig, ...)
+ {
+-    jclass obj_class = (*env)->FindClass(env, name);
+-    jmethodID obj_constructor = (*env)->GetMethodID(env, obj_class, "<init>", sig);
++    va_list ap;
++    jclass obj_class;
++    jmethodID obj_constructor;
++    jobject obj;
+ 
++    obj_class = (*env)->FindClass(env, name);
+     if (!obj_class) {
+         BD_DEBUG(DBG_BDJ | DBG_CRIT, "Class %s not found\n", name);
+         return NULL;
+     }
+ 
+-    va_list ap;
++    obj_constructor = (*env)->GetMethodID(env, obj_class, "<init>", sig);
++    if (!obj_constructor) {
++        BD_DEBUG(DBG_BDJ | DBG_CRIT, "Class %s constructor %s not found\n", name, sig);
++        return NULL;
++    }
++
+     va_start(ap, sig);
+-    jobject obj = (*env)->NewObjectV(env, obj_class, obj_constructor, ap);
++    obj = (*env)->NewObjectV(env, obj_class, obj_constructor, ap);
+     va_end(ap);
+ 
++    if (!obj) {
++        BD_DEBUG(DBG_BDJ | DBG_CRIT, "Failed to create %s\n", name);
++    }
++
+     return obj;
+ }
+ 
+ jobjectArray bdj_make_array(JNIEnv* env, const char* name, int count)
+ {
+-    jclass arr_class = (*env)->FindClass(env, name);
+-    return (*env)->NewObjectArray(env, count, arr_class, NULL);
++    jobjectArray arr;
++    jclass arr_class;
++
++    arr_class = (*env)->FindClass(env, name);
++    if (!arr_class) {
++        BD_DEBUG(DBG_BDJ | DBG_CRIT, "Class %s not found\n", name);
++        return NULL;
++    }
++
++    arr = (*env)->NewObjectArray(env, count, arr_class, NULL);
++    if (!arr) {
++        BD_DEBUG(DBG_BDJ | DBG_CRIT, "Failed to create %s\n", name);
++    }
++
++    return arr;
+ }
+diff --git a/src/libbluray/bdnav/clpi_parse.c b/src/libbluray/bdnav/clpi_parse.c
+index 34c1dec..839e10c 100644
+--- a/src/libbluray/bdnav/clpi_parse.c
++++ b/src/libbluray/bdnav/clpi_parse.c
+@@ -707,15 +707,11 @@ _clean_cpi(CLPI_CPI *cpi)
+     }
+ }
+ 
+-void
+-clpi_free(CLPI_CL *cl)
++static void
++_clpi_free(CLPI_CL *cl)
+ {
+     int ii;
+ 
+-    if (cl == NULL) {
+-        return;
+-    }
+-
+     X_FREE(cl->clip.atc_delta);
+     X_FREE(cl->clip.font_info.font);
+ 
+@@ -738,6 +734,15 @@ clpi_free(CLPI_CL *cl)
+     X_FREE(cl);
+ }
+ 
++void
++clpi_free(CLPI_CL **cl)
++{
++    if (*cl) {
++        _clpi_free(*cl);
++        *cl = NULL;
++    }
++}
++
+ static CLPI_CL*
+ _clpi_parse(BD_FILE_H *fp)
+ {
+@@ -756,7 +761,7 @@ _clpi_parse(BD_FILE_H *fp)
+     }
+ 
+     if (!_parse_header(&bits, cl)) {
+-        clpi_free(cl);
++        _clpi_free(cl);
+         return NULL;
+     }
+ 
+@@ -768,19 +773,19 @@ _clpi_parse(BD_FILE_H *fp)
+     }
+ 
+     if (!_parse_clipinfo(&bits, cl)) {
+-        clpi_free(cl);
++        _clpi_free(cl);
+         return NULL;
+     }
+     if (!_parse_sequence(&bits, cl)) {
+-        clpi_free(cl);
++        _clpi_free(cl);
+         return NULL;
+     }
+     if (!_parse_program_info(&bits, cl)) {
+-        clpi_free(cl);
++        _clpi_free(cl);
+         return NULL;
+     }
+     if (!_parse_cpi_info(&bits, cl)) {
+-        clpi_free(cl);
++        _clpi_free(cl);
+         return NULL;
+     }
+ 
+@@ -957,6 +962,6 @@ clpi_copy(const CLPI_CL* src_cl)
+ 
+  fail:
+     BD_DEBUG(DBG_CRIT, "out of memory\n");
+-    clpi_free(dest_cl);
++    clpi_free(&dest_cl);
+     return NULL;
+ }
+diff --git a/src/libbluray/bdnav/clpi_parse.h b/src/libbluray/bdnav/clpi_parse.h
+index 2263f66..987da65 100644
+--- a/src/libbluray/bdnav/clpi_parse.h
++++ b/src/libbluray/bdnav/clpi_parse.h
+@@ -33,6 +33,6 @@ BD_PRIVATE uint32_t clpi_access_point(const CLPI_CL *cl, uint32_t pkt, int next,
+ BD_PRIVATE CLPI_CL* clpi_parse(const char *path) BD_ATTR_MALLOC;
+ BD_PRIVATE CLPI_CL* clpi_get(struct bd_disc *disc, const char *file);
+ BD_PRIVATE CLPI_CL* clpi_copy(const CLPI_CL* src_cl);
+-BD_PRIVATE void clpi_free(CLPI_CL *cl);
++BD_PRIVATE void clpi_free(CLPI_CL **cl);
+ 
+ #endif // _CLPI_PARSE_H_
+diff --git a/src/libbluray/bdnav/mpls_parse.c b/src/libbluray/bdnav/mpls_parse.c
+index 177f04c..b003d11 100644
+--- a/src/libbluray/bdnav/mpls_parse.c
++++ b/src/libbluray/bdnav/mpls_parse.c
+@@ -693,6 +693,10 @@ _parse_playlistmark(BITSTREAM *bits, MPLS_PL *pl)
+     pl->mark_count = bs_read(bits, 16);
+ 
+     plm = calloc(pl->mark_count, sizeof(MPLS_PLM));
++    if (pl->mark_count && !plm) {
++        BD_DEBUG(DBG_CRIT, "out of memory\n");
++        return 0;
++    }
+     for (ii = 0; ii < pl->mark_count; ii++) {
+         bs_skip(bits, 8); /* reserved */
+         plm[ii].mark_type     = bs_read(bits, 8);
+@@ -766,9 +770,6 @@ _clean_playlist(MPLS_PL *pl)
+ {
+     int ii;
+ 
+-    if (pl == NULL) {
+-        return;
+-    }
+     if (pl->play_item != NULL) {
+         for (ii = 0; ii < pl->list_count; ii++) {
+             _clean_playitem(&pl->play_item[ii]);
+@@ -799,9 +800,12 @@ _clean_playlist(MPLS_PL *pl)
+ }
+ 
+ void
+-mpls_free(MPLS_PL *pl)
++mpls_free(MPLS_PL **pl)
+ {
+-    _clean_playlist(pl);
++    if (*pl) {
++        _clean_playlist(*pl);
++        *pl = NULL;
++    }
+ }
+ 
+ static int
+diff --git a/src/libbluray/bdnav/mpls_parse.h b/src/libbluray/bdnav/mpls_parse.h
+index e0e57a0..1ef0a07 100644
+--- a/src/libbluray/bdnav/mpls_parse.h
++++ b/src/libbluray/bdnav/mpls_parse.h
+@@ -194,7 +194,7 @@ struct bd_disc;
+ 
+ BD_PRIVATE MPLS_PL* mpls_parse(const char *path) BD_ATTR_MALLOC;
+ BD_PRIVATE MPLS_PL* mpls_get(struct bd_disc *disc, const char *file);
+-BD_PRIVATE void mpls_free(MPLS_PL *pl);
++BD_PRIVATE void mpls_free(MPLS_PL **pl);
+ 
+ BD_PRIVATE int  mpls_parse_uo(uint8_t *buf, BD_UO_MASK *uo);
+ 
+diff --git a/src/libbluray/bdnav/navigation.c b/src/libbluray/bdnav/navigation.c
+index 77ed1fb..12c4e70 100644
+--- a/src/libbluray/bdnav/navigation.c
++++ b/src/libbluray/bdnav/navigation.c
+@@ -386,16 +386,16 @@ NAV_TITLE_LIST* nav_get_title_list(BD_DISC *disc, uint32_t flags, uint32_t min_t
+         if (pl != NULL) {
+             if ((flags & TITLES_FILTER_DUP_TITLE) &&
+                 !_filter_dup(pl_list, ii, pl)) {
+-                mpls_free(pl);
++                mpls_free(&pl);
+                 continue;
+             }
+             if ((flags & TITLES_FILTER_DUP_CLIP) && !_filter_repeats(pl, 2)) {
+-                mpls_free(pl);
++                mpls_free(&pl);
+                 continue;
+             }
+             if (min_title_length > 0 &&
+                 _pl_duration(pl) < min_title_length*45000) {
+-                mpls_free(pl);
++                mpls_free(&pl);
+                 continue;
+             }
+             if (ii >= title_info_alloc) {
+@@ -432,16 +432,18 @@ NAV_TITLE_LIST* nav_get_title_list(BD_DISC *disc, uint32_t flags, uint32_t min_t
+ 
+     title_list->count = ii;
+     for (ii = 0; ii < title_list->count; ii++) {
+-        mpls_free(pl_list[ii]);
++        mpls_free(&pl_list[ii]);
+     }
+     X_FREE(pl_list);
+     return title_list;
+ }
+ 
+-void nav_free_title_list(NAV_TITLE_LIST *title_list)
++void nav_free_title_list(NAV_TITLE_LIST **title_list)
+ {
+-    X_FREE(title_list->title_info);
+-    X_FREE(title_list);
++    if (*title_list) {
++        X_FREE((*title_list)->title_info);
++        X_FREE((*title_list));
++    }
+ }
+ 
+ /*
+@@ -581,8 +583,7 @@ static void _fill_clip(NAV_TITLE *title,
+     strncpy(&clip->name[5], ".m2ts", 6);
+     clip->clip_id = atoi(mpls_clip[clip->angle].clip_id);
+ 
+-    clpi_free(clip->cl);
+-    clip->cl = NULL;
++    clpi_free(&clip->cl);
+ 
+     file = str_printf("%s.clpi", mpls_clip[clip->angle].clip_id);
+     if (file) {
+@@ -700,18 +701,16 @@ NAV_TITLE* nav_title_open(BD_DISC *disc, const char *playlist, unsigned angle)
+     return title;
+ }
+ 
+-void nav_title_close(NAV_TITLE *title)
++static
++void _nav_title_close(NAV_TITLE *title)
+ {
+     unsigned ii, ss;
+ 
+-    if (!title)
+-        return;
+-
+     if (title->sub_path) {
+         for (ss = 0; ss < title->sub_path_count; ss++) {
+             if (title->sub_path[ss].clip_list.clip) {
+                 for (ii = 0; ii < title->sub_path[ss].clip_list.count; ii++) {
+-                    clpi_free(title->sub_path[ss].clip_list.clip[ii].cl);
++                    clpi_free(&title->sub_path[ss].clip_list.clip[ii].cl);
+                 }
+                 X_FREE(title->sub_path[ss].clip_list.clip);
+             }
+@@ -721,17 +720,25 @@ void nav_title_close(NAV_TITLE *title)
+ 
+     if (title->clip_list.clip) {
+         for (ii = 0; ii < title->clip_list.count; ii++) {
+-            clpi_free(title->clip_list.clip[ii].cl);
++            clpi_free(&title->clip_list.clip[ii].cl);
+         }
+         X_FREE(title->clip_list.clip);
+     }
+ 
+-    mpls_free(title->pl);
++    mpls_free(&title->pl);
+     X_FREE(title->chap_list.mark);
+     X_FREE(title->mark_list.mark);
+     X_FREE(title);
+ }
+ 
++void nav_title_close(NAV_TITLE **title)
++{
++    if (*title) {
++        _nav_title_close(*title);
++        *title = NULL;
++    }
++}
++
+ // Search for random access point closest to the requested packet
+ // Packets are 192 byte TS packets
+ NAV_CLIP* nav_chapter_search(NAV_TITLE *title, unsigned chapter, uint32_t *clip_pkt, uint32_t *out_pkt)
+diff --git a/src/libbluray/bdnav/navigation.h b/src/libbluray/bdnav/navigation.h
+index 8f683dd..a07a908 100644
+--- a/src/libbluray/bdnav/navigation.h
++++ b/src/libbluray/bdnav/navigation.h
+@@ -141,7 +141,7 @@ struct nav_title_list_s
+ 
+ BD_PRIVATE uint8_t nav_lookup_aspect(NAV_CLIP *clip, int pid);
+ BD_PRIVATE NAV_TITLE* nav_title_open(struct bd_disc *disc, const char *playlist, unsigned angle) BD_ATTR_MALLOC;
+-BD_PRIVATE void nav_title_close(NAV_TITLE *title);
++BD_PRIVATE void nav_title_close(NAV_TITLE **title);
+ BD_PRIVATE NAV_CLIP* nav_next_clip(NAV_TITLE *title, NAV_CLIP *clip);
+ BD_PRIVATE NAV_CLIP* nav_packet_search(NAV_TITLE *title, uint32_t pkt, uint32_t *clip_pkt,
+                                        uint32_t *out_pkt, uint32_t *out_time);
+@@ -155,6 +155,6 @@ BD_PRIVATE uint32_t nav_angle_change_search(NAV_CLIP *clip, uint32_t pkt, uint32
+ BD_PRIVATE NAV_CLIP* nav_set_angle(NAV_TITLE *title, NAV_CLIP *clip, unsigned angle);
+ 
+ BD_PRIVATE NAV_TITLE_LIST* nav_get_title_list(struct bd_disc *disc, uint32_t flags, uint32_t min_title_length) BD_ATTR_MALLOC;
+-BD_PRIVATE void nav_free_title_list(NAV_TITLE_LIST *title_list);
++BD_PRIVATE void nav_free_title_list(NAV_TITLE_LIST **title_list);
+ 
+ #endif // _NAVIGATION_H_
+diff --git a/src/libbluray/bluray.c b/src/libbluray/bluray.c
+index 4eddac0..835c670 100644
+--- a/src/libbluray/bluray.c
++++ b/src/libbluray/bluray.c
+@@ -1501,12 +1501,8 @@ void bd_close(BLURAY *bd)
+     _close_preload(&bd->st_ig);
+     _close_preload(&bd->st_textst);
+ 
+-    if (bd->title_list != NULL) {
+-        nav_free_title_list(bd->title_list);
+-    }
+-    if (bd->title != NULL) {
+-        nav_title_close(bd->title);
+-    }
++    nav_free_title_list(&bd->title_list);
++    nav_title_close(&bd->title);
+ 
+     hdmv_vm_free(&bd->hdmv_vm);
+ 
+@@ -2290,10 +2286,7 @@ static void _close_playlist(BLURAY *bd)
+     _close_preload(&bd->st_ig);
+     _close_preload(&bd->st_textst);
+ 
+-    if (bd->title) {
+-        nav_title_close(bd->title);
+-        bd->title = NULL;
+-    }
++    nav_title_close(&bd->title);
+ 
+     /* reset UO mask */
+     memset(&bd->st0.uo_mask, 0, sizeof(BD_UO_MASK));
+@@ -2545,9 +2538,7 @@ uint32_t bd_get_titles(BLURAY *bd, uint8_t flags, uint32_t min_title_length)
+         return 0;
+     }
+ 
+-    if (bd->title_list != NULL) {
+-        nav_free_title_list(bd->title_list);
+-    }
++    nav_free_title_list(&bd->title_list);
+     bd->title_list = nav_get_title_list(bd->disc, flags, min_title_length);
+ 
+     if (!bd->title_list) {
+@@ -2707,7 +2698,7 @@ static BLURAY_TITLE_INFO *_get_title_info(BLURAY *bd, uint32_t title_idx, uint32
+ 
+     title_info = _fill_title_info(title, title_idx, playlist);
+ 
+-    nav_title_close(title);
++    nav_title_close(&title);
+     return title_info;
+ }
+ 
+@@ -3821,7 +3812,7 @@ struct clpi_cl *bd_read_clpi(const char *path)
+ 
+ void bd_free_clpi(struct clpi_cl *cl)
+ {
+-    clpi_free(cl);
++    clpi_free(&cl);
+ }
+ 
+ struct mpls_pl *bd_read_mpls(const char *mpls_file)
+@@ -3831,7 +3822,7 @@ struct mpls_pl *bd_read_mpls(const char *mpls_file)
+ 
+ void bd_free_mpls(struct mpls_pl *pl)
+ {
+-    mpls_free(pl);
++    mpls_free(&pl);
+ }
+ 
+ struct mobj_objects *bd_read_mobj(const char *mobj_file)
+diff --git a/src/libbluray/decoders/graphics_controller.h b/src/libbluray/decoders/graphics_controller.h
+index dca6d4a..e356f04 100644
+--- a/src/libbluray/decoders/graphics_controller.h
++++ b/src/libbluray/decoders/graphics_controller.h
+@@ -22,7 +22,7 @@
+ 
+ #include "util/attributes.h"
+ 
+-#include "libbluray/bdnav/uo_mask_table.h"
++#include "bdnav/uo_mask_table.h"
+ 
+ #include <stdint.h>
+ #include <stddef.h> /* size_t */
+diff --git a/src/libbluray/decoders/textst_render.c b/src/libbluray/decoders/textst_render.c
+index 967964a..e02a473 100644
+--- a/src/libbluray/decoders/textst_render.c
++++ b/src/libbluray/decoders/textst_render.c
+@@ -23,7 +23,7 @@
+ 
+ #include "util/macro.h"
+ #include "util/logging.h"
+-#include "libbluray/bluray.h"          /* bd_char_code_e */
++#include "bluray.h"          /* bd_char_code_e */
+ 
+ #include <stdint.h>
+ 
+diff --git a/src/libbluray/disc/aacs.c b/src/libbluray/disc/aacs.c
+index 1c8984d..5896a35 100644
+--- a/src/libbluray/disc/aacs.c
++++ b/src/libbluray/disc/aacs.c
+@@ -282,7 +282,7 @@ int libaacs_get_bec_enabled(BD_AACS *p)
+ 
+     *(void **)(&get_bec) = dl_dlsym(p->h_libaacs, "aacs_get_bus_encryption");
+     if (!get_bec) {
+-        BD_DEBUG(DBG_BLURAY | DBG_CRIT, "aacs_get_bus_encryption() dlsym failed!\n");
++        BD_DEBUG(DBG_BLURAY, "aacs_get_bus_encryption() dlsym failed!\n");
+         return 0;
+     }
+ 
+diff --git a/src/libbluray/hdmv/hdmv_vm.c b/src/libbluray/hdmv/hdmv_vm.c
+index 617d521..10a4fd1 100644
+--- a/src/libbluray/hdmv/hdmv_vm.c
++++ b/src/libbluray/hdmv/hdmv_vm.c
+@@ -1,6 +1,6 @@
+ /*
+  * This file is part of libbluray
+- * Copyright (C) 2010-2014  Petri Hintukainen <phintuka@users.sourceforge.net>
++ * Copyright (C) 2010-2017  Petri Hintukainen <phintuka@users.sourceforge.net>
+  *
+  * This library is free software; you can redistribute it and/or
+  * modify it under the terms of the GNU Lesser General Public
+@@ -56,6 +56,7 @@ struct hdmv_vm_s {
+     HDMV_EVENT     event[5];      /* pending events to return */
+ 
+     NV_TIMER       nv_timer;      /* navigation timer */
++    uint64_t       rand;          /* RAND state */
+ 
+     /* movie objects */
+     MOBJ_OBJECTS  *movie_objects; /* disc movie objects */
+@@ -353,6 +354,11 @@ HDMV_VM *hdmv_vm_init(struct bd_disc *disc, BD_REGISTERS *regs,
+     p->num_titles      = num_titles;
+     p->have_top_menu   = top_menu_available;
+     p->have_first_play = first_play_available;
++#ifdef DEBUG
++    p->rand = 1;
++#else
++    p->rand = time(NULL);
++#endif
+ 
+     bd_mutex_init(&p->mutex);
+ 
+@@ -982,9 +988,16 @@ static void _hdmv_trace_res(uint32_t new_src, uint32_t new_dst, uint32_t orig_sr
+ 
+ #define SWAP_u32(a, b) do { uint32_t tmp = a; a = b; b = tmp; } while(0)
+ 
+-static inline uint32_t RAND_u32(uint32_t range)
++static inline uint32_t RAND_u32(HDMV_VM *p, uint32_t range)
+ {
+-  return range > 0 ? rand() % range + 1 : 0;
++    p->rand = p->rand * UINT64_C(6364136223846793005) + UINT64_C(1);
++
++    if (range == 0) {
++      BD_DEBUG(DBG_HDMV|DBG_CRIT, "RAND_u32: invalid range (0)\n");
++      return 1;
++    }
++
++    return ((uint32_t)(p->rand >> 32)) % range + 1;
+ }
+ 
+ static inline uint32_t ADD_u32(uint32_t a, uint32_t b)
+@@ -1111,7 +1124,7 @@ static int _hdmv_step(HDMV_VM *p)
+                         case INSN_MOD:    dst  = src > 0   ? dst % src : 0xffffffff; break;
+                         case INSN_ADD:    dst  = ADD_u32(src, dst);  break;
+                         case INSN_MUL:    dst  = MUL_u32(dst, src);  break;
+-                        case INSN_RND:    dst  = RAND_u32(src);      break;
++                        case INSN_RND:    dst  = RAND_u32(p, src);   break;
+                         case INSN_AND:    dst &= src;         break;
+                         case INSN_OR:     dst |= src;         break;
+                         case INSN_XOR:    dst ^= src;         break;
+diff --git a/src/libbluray/register.c b/src/libbluray/register.c
+index 60bd06c..731a392 100644
+--- a/src/libbluray/register.c
++++ b/src/libbluray/register.c
+@@ -362,9 +362,9 @@ void bd_psr_restore_state(BD_REGISTERS *p)
+  * GPR read / write
+  */
+ 
+-int bd_gpr_write(BD_REGISTERS *p, int reg, uint32_t val)
++int bd_gpr_write(BD_REGISTERS *p, unsigned int reg, uint32_t val)
+ {
+-    if (reg < 0 || reg >= BD_GPR_COUNT) {
++    if (reg >= BD_GPR_COUNT) {
+         BD_DEBUG(DBG_BLURAY, "bd_gpr_write(%d): invalid register\n", reg);
+         return -1;
+     }
+@@ -373,9 +373,9 @@ int bd_gpr_write(BD_REGISTERS *p, int reg, uint32_t val)
+     return 0;
+ }
+ 
+-uint32_t bd_gpr_read(BD_REGISTERS *p, int reg)
++uint32_t bd_gpr_read(BD_REGISTERS *p, unsigned int reg)
+ {
+-    if (reg < 0 || reg >= BD_GPR_COUNT) {
++    if (reg >= BD_GPR_COUNT) {
+         BD_DEBUG(DBG_BLURAY, "bd_gpr_read(%d): invalid register\n", reg);
+         return 0;
+     }
+@@ -387,11 +387,11 @@ uint32_t bd_gpr_read(BD_REGISTERS *p, int reg)
+  * PSR read / write
+  */
+ 
+-uint32_t bd_psr_read(BD_REGISTERS *p, int reg)
++uint32_t bd_psr_read(BD_REGISTERS *p, unsigned int reg)
+ {
+     uint32_t val;
+ 
+-    if (reg < 0 || reg >= BD_PSR_COUNT) {
++    if (reg >= BD_PSR_COUNT) {
+         BD_DEBUG(DBG_BLURAY, "bd_psr_read(%d): invalid register\n", reg);
+         return -1;
+     }
+@@ -405,9 +405,9 @@ uint32_t bd_psr_read(BD_REGISTERS *p, int reg)
+     return val;
+ }
+ 
+-int bd_psr_setting_write(BD_REGISTERS *p, int reg, uint32_t val)
++int bd_psr_setting_write(BD_REGISTERS *p, unsigned int reg, uint32_t val)
+ {
+-    if (reg < 0 || reg >= BD_PSR_COUNT) {
++    if (reg >= BD_PSR_COUNT) {
+         BD_DEBUG(DBG_BLURAY, "bd_psr_write(%d, %d): invalid register\n", reg, val);
+         return -1;
+     }
+@@ -447,7 +447,7 @@ int bd_psr_setting_write(BD_REGISTERS *p, int reg, uint32_t val)
+     return 0;
+ }
+ 
+-int bd_psr_write(BD_REGISTERS *p, int reg, uint32_t val)
++int bd_psr_write(BD_REGISTERS *p, unsigned int reg, uint32_t val)
+ {
+     if ((reg == 13) ||
+         (reg >= 15 && reg <= 21) ||
+@@ -461,7 +461,7 @@ int bd_psr_write(BD_REGISTERS *p, int reg, uint32_t val)
+   return bd_psr_setting_write(p, reg, val);
+ }
+ 
+-int bd_psr_write_bits(BD_REGISTERS *p, int reg, uint32_t val, uint32_t mask)
++int bd_psr_write_bits(BD_REGISTERS *p, unsigned int reg, uint32_t val, uint32_t mask)
+ {
+     int result;
+ 
+diff --git a/src/libbluray/register.h b/src/libbluray/register.h
+index e263855..757eeb4 100644
+--- a/src/libbluray/register.h
++++ b/src/libbluray/register.h
+@@ -104,7 +104,7 @@ BD_PRIVATE void bd_registers_free(BD_REGISTERS *);
+  * @param reg  register number
+  * @return value stored in register, -1 on error (invalid register number)
+  */
+-uint32_t bd_gpr_read(BD_REGISTERS *, int reg);
++uint32_t bd_gpr_read(BD_REGISTERS *, unsigned int reg);
+ 
+ /**
+  *
+@@ -115,7 +115,7 @@ uint32_t bd_gpr_read(BD_REGISTERS *, int reg);
+  * @param val  new value for register
+  * @return 0 on success, -1 on error (invalid register number)
+  */
+-int bd_gpr_write(BD_REGISTERS *, int reg, uint32_t val);
++int bd_gpr_write(BD_REGISTERS *, unsigned int reg, uint32_t val);
+ 
+ 
+ /*
+@@ -130,7 +130,7 @@ int bd_gpr_write(BD_REGISTERS *, int reg, uint32_t val);
+  * @param reg  register number
+  * @return value stored in register, -1 on error (invalid register number)
+  */
+-uint32_t bd_psr_read(BD_REGISTERS *, int reg);
++uint32_t bd_psr_read(BD_REGISTERS *, unsigned int reg);
+ 
+ /**
+  *
+@@ -143,7 +143,7 @@ uint32_t bd_psr_read(BD_REGISTERS *, int reg);
+  * @param val  new value for register
+  * @return 0 on success, -1 on error (invalid register number)
+  */
+-int bd_psr_write(BD_REGISTERS *, int reg, uint32_t val);
++int bd_psr_write(BD_REGISTERS *, unsigned int reg, uint32_t val);
+ 
+ /**
+  *
+@@ -159,7 +159,7 @@ int bd_psr_write(BD_REGISTERS *, int reg, uint32_t val);
+  * @param mask  bit mask. bits to be written are set to 1.
+  * @return 0 on success, -1 on error (invalid register number)
+  */
+-BD_PRIVATE int bd_psr_write_bits(BD_REGISTERS *, int reg, uint32_t val, uint32_t mask);
++BD_PRIVATE int bd_psr_write_bits(BD_REGISTERS *, unsigned int reg, uint32_t val, uint32_t mask);
+ 
+ /**
+  *
+@@ -172,7 +172,7 @@ BD_PRIVATE int bd_psr_write_bits(BD_REGISTERS *, int reg, uint32_t val, uint32_t
+  * @param val  new value for register
+  * @return 0 on success, -1 on error (invalid register number)
+  */
+-BD_PRIVATE int bd_psr_setting_write(BD_REGISTERS *, int reg, uint32_t val);
++BD_PRIVATE int bd_psr_setting_write(BD_REGISTERS *, unsigned int reg, uint32_t val);
+ 
+ /**
+  *
+@@ -234,9 +234,9 @@ BD_PRIVATE void bd_psr_reset_backup_registers(BD_REGISTERS *);
+ 
+ /* event data */
+ typedef struct {
+-    int      ev_type; /* event type */
++    unsigned ev_type; /* event type */
+ 
+-    int      psr_idx; /* register index */
++    unsigned psr_idx; /* register index */
+     uint32_t old_val; /* old value of register */
+     uint32_t new_val; /* new value of register */
+ } BD_PSR_EVENT;
+diff --git a/src/util/logging.c b/src/util/logging.c
+index 62e6b59..94ef131 100644
+--- a/src/util/logging.c
++++ b/src/util/logging.c
+@@ -84,6 +84,7 @@ void bd_debug(const char *file, int line, uint32_t mask, const char *format, ...
+         char buffer[4096];
+         va_list args;
+         int len, len2;
++        BD_LOG_FUNC lf;
+ 
+         len = sprintf(buffer, "%s:%d: ", f ? f + 1 : file, line);
+         if (len < 0) {
+@@ -97,10 +98,10 @@ void bd_debug(const char *file, int line, uint32_t mask, const char *format, ...
+         if (len2 < 0) {
+             return;
+         }
+-
+-        if (log_func) {
++        lf = log_func;
++        if (lf) {
+             buffer[sizeof(buffer)-1] = 0;
+-            log_func(buffer);
++            lf(buffer);
+ 
+         } else {
+             len += len2;
