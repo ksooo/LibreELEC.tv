@@ -1,0 +1,2263 @@
+diff --git a/addons/library.xbmc.pvr/libXBMC_pvr.h b/addons/library.xbmc.pvr/libXBMC_pvr.h
+index 3116514..3e3d479 100644
+--- a/addons/library.xbmc.pvr/libXBMC_pvr.h
++++ b/addons/library.xbmc.pvr/libXBMC_pvr.h
+@@ -154,6 +154,14 @@ public:
+     if (PVR_allocate_demux_packet == NULL) { fprintf(stderr, "Unable to assign function %s\n", dlerror()); return false; }
+ #endif
+ 
++    PVR_connection_state_change = (void (*)(void* HANDLE, void* CB, const char *strConnectionString, PVR_CONNECTION_STATE newState, const char *strMessage))
++      dlsym(m_libXBMC_pvr, "PVR_connection_state_change");
++    if (PVR_connection_state_change == NULL) { fprintf(stderr, "Unable to assign function %s\n", dlerror()); return false; }
++
++    PVR_epg_event_state_change = (void (*)(void* HANDLE, void* CB, EPG_TAG* tag, unsigned int iUniqueChannelId, EPG_EVENT_STATE newState))
++      dlsym(m_libXBMC_pvr, "PVR_epg_event_state_change");
++    if (PVR_epg_event_state_change == NULL) { fprintf(stderr, "Unable to assign function %s\n", dlerror()); return false; }
++
+     m_Callbacks = PVR_register_me(m_Handle);
+     return m_Callbacks != NULL;
+   }
+@@ -300,6 +308,30 @@ public:
+   }
+ #endif
+ 
++  /*!
++   * @brief Notify a state change for a PVR backend connection
++   * @param strConnectionString The connection string reported by the backend that can be displayed in the UI.
++   * @param newState The new state.
++   * @param strMessage A localized addon-defined string representing the new state, that can be displayed
++   *        in the UI or NULL if the Kodi-defined default string for the new state shall be displayed.
++   */
++  void ConnectionStateChange(const char *strConnectionString, PVR_CONNECTION_STATE newState, const char *strMessage)
++  {
++    return PVR_connection_state_change(m_Handle, m_Callbacks, strConnectionString, newState, strMessage);
++  }
++
++  /*!
++   * @brief Notify a state change for an EPG event
++   * @param tag The EPG event.
++   * @param iUniqueChannelId The unique id of the channel for the EPG event
++   * @param newState The new state. For EPG_EVENT_CREATED and EPG_EVENT_UPDATED, tag must be filled with all available
++   *        event data, not just a delta. For EPG_EVENT_DELETED, it is sufficient to fill EPG_TAG.iUniqueBroadcastId
++   */
++  void EpgEventStateChange(EPG_TAG *tag, unsigned int iUniqueChannelId, EPG_EVENT_STATE newState)
++  {
++    return PVR_epg_event_state_change(m_Handle, m_Callbacks, tag, iUniqueChannelId, newState);
++  }
++
+ protected:
+   void* (*PVR_register_me)(void*);
+   void (*PVR_unregister_me)(void*, void*);
+@@ -320,6 +352,8 @@ protected:
+   void (*PVR_free_demux_packet)(void*, void*, DemuxPacket*);
+   DemuxPacket* (*PVR_allocate_demux_packet)(void*, void*, int);
+ #endif
++  void (*PVR_connection_state_change)(void*, void*, const char*, PVR_CONNECTION_STATE, const char*);
++  void (*PVR_epg_event_state_change)(void*, void*, EPG_TAG*, unsigned int, EPG_EVENT_STATE);
+ 
+ private:
+   void* m_libXBMC_pvr;
+diff --git a/addons/resource.language.en_gb/resources/strings.po b/addons/resource.language.en_gb/resources/strings.po
+index 06542bc..877c7bd 100644
+--- a/addons/resource.language.en_gb/resources/strings.po
++++ b/addons/resource.language.en_gb/resources/strings.po
+@@ -15277,7 +15277,33 @@ msgctxt "#35102"
+ msgid "Product ID"
+ msgstr ""
+ 
+-#empty strings from id 35505 to 35999
++#empty strings from id 35103 to 35504
++
++#. connection state "host unreachable"
++#: xbmc/addons/AddonCallbacksPVR.cpp
++msgctxt "#35505"
++msgid "Server is unreachable."
++msgstr ""
++
++#. connection state "server type mismatch" (reachable, but maybe an HTTP server where an FTP server is expected)
++#: xbmc/addons/AddonCallbacksPVR.cpp
++msgctxt "#35506"
++msgid "Server does not respond properly."
++msgstr ""
++
++#. connection state "client - server version mismatch (reachable, but maybe server version to low)"
++#: xbmc/addons/AddonCallbacksPVR.cpp
++msgctxt "#35507"
++msgid "Server version is not compatible."
++msgstr ""
++
++#. connection state "access denied" (e.g. due to wrong credentials)
++#: xbmc/addons/AddonCallbacksPVR.cpp
++msgctxt "#35508"
++msgid "Access denied."
++msgstr ""
++
++#empty strings from id 35509 to 35999
+ 
+ #: xbmc/peripherals/devices/PeripheralCecAdapter.cpp
+ msgctxt "#36000"
+@@ -15424,6 +15450,7 @@ msgid "When the TV is switched off"
+ msgstr ""
+ 
+ #: xbmc/addons/addonstatushandler.cpp
++#: xbmc/addons/AddonCallbacksPVR.cpp
+ #: xbmc/peripherals/devices/PeripheralCecAdapter.cpp
+ msgctxt "#36030"
+ msgid "Connection lost"
+@@ -15444,7 +15471,10 @@ msgctxt "#36033"
+ msgid "Action when switching to another source"
+ msgstr ""
+ 
+-#empty string with id 36034
++#: xbmc/addons/AddonCallbacksPVR.cpp
++msgctxt "#36034"
++msgid "Connection established"
++msgstr ""
+ 
+ #. adjust refreshrate
+ #: system/settings/settings.xml
+diff --git a/addons/xbmc.pvr/addon.xml b/addons/xbmc.pvr/addon.xml
+index eef8d3d..976b568 100644
+--- a/addons/xbmc.pvr/addon.xml
++++ b/addons/xbmc.pvr/addon.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+-<addon id="xbmc.pvr" version="4.2.0" provider-name="Team Kodi">
+-  <backwards-compatibility abi="4.2.0"/>
++<addon id="xbmc.pvr" version="5.0.0" provider-name="Team-Kodi">
++  <backwards-compatibility abi="5.0.0"/>
+   <requires>
+     <import addon="xbmc.core" version="0.1.0"/>
+   </requires>
+diff --git a/lib/addons/library.xbmc.pvr/libXBMC_pvr.cpp b/lib/addons/library.xbmc.pvr/libXBMC_pvr.cpp
+index b16a540..2858693 100644
+--- a/lib/addons/library.xbmc.pvr/libXBMC_pvr.cpp
++++ b/lib/addons/library.xbmc.pvr/libXBMC_pvr.cpp
+@@ -164,6 +164,22 @@ DLLEXPORT DemuxPacket* PVR_allocate_demux_packet(void *hdl, void* cb, int iDataS
+   return ((CB_PVRLib*)cb)->AllocateDemuxPacket(((AddonCB*)hdl)->addonData, iDataSize);
+ }
+ 
++DLLEXPORT void PVR_connection_state_change(void *hdl, void* cb, const char *strConnectionString, PVR_CONNECTION_STATE newState, const char *strMessage)
++{
++  if (cb == NULL)
++    return;
++
++  ((CB_PVRLib*)cb)->ConnectionStateChange(((AddonCB*)hdl)->addonData, strConnectionString, newState, strMessage);
++}
++
++DLLEXPORT void PVR_epg_event_state_change(void *hdl, void* cb, EPG_TAG *tag, unsigned int iUniqueChannelId, EPG_EVENT_STATE newState)
++{
++  if (cb == NULL)
++    return;
++
++  ((CB_PVRLib*)cb)->EpgEventStateChange(((AddonCB*)hdl)->addonData, tag, iUniqueChannelId, newState);
++}
++
+ DLLEXPORT void PVR_transfer_channel_group(void *hdl, void* cb, const ADDON_HANDLE handle, const PVR_CHANNEL_GROUP *group)
+ {
+   if (cb == NULL)
+diff --git a/xbmc/GUIInfoManager.cpp b/xbmc/GUIInfoManager.cpp
+index 307de1b..8d0fe9c 100644
+--- a/xbmc/GUIInfoManager.cpp
++++ b/xbmc/GUIInfoManager.cpp
+@@ -726,9 +726,6 @@ const infomap pvr[] =            {{ "isrecording",              PVR_IS_RECORDING
+                                   { "actstreamsnr",             PVR_ACTUAL_STREAM_SNR },
+                                   { "actstreamber",             PVR_ACTUAL_STREAM_BER },
+                                   { "actstreamunc",             PVR_ACTUAL_STREAM_UNC },
+-                                  { "actstreamvideobitrate",    PVR_ACTUAL_STREAM_VIDEO_BR },
+-                                  { "actstreamaudiobitrate",    PVR_ACTUAL_STREAM_AUDIO_BR },
+-                                  { "actstreamdolbybitrate",    PVR_ACTUAL_STREAM_DOLBY_BR },
+                                   { "actstreamprogrsignal",     PVR_ACTUAL_STREAM_SIG_PROGR },
+                                   { "actstreamprogrsnr",        PVR_ACTUAL_STREAM_SNR_PROGR },
+                                   { "actstreamisencrypted",     PVR_ACTUAL_STREAM_ENCRYPTED },
+@@ -1588,9 +1585,6 @@ std::string CGUIInfoManager::GetLabel(int info, int contextWindow, std::string *
+   case PVR_ACTUAL_STREAM_SNR_PROGR:
+   case PVR_ACTUAL_STREAM_BER:
+   case PVR_ACTUAL_STREAM_UNC:
+-  case PVR_ACTUAL_STREAM_VIDEO_BR:
+-  case PVR_ACTUAL_STREAM_AUDIO_BR:
+-  case PVR_ACTUAL_STREAM_DOLBY_BR:
+   case PVR_ACTUAL_STREAM_CRYPTION:
+   case PVR_ACTUAL_STREAM_SERVICE:
+   case PVR_ACTUAL_STREAM_MUX:
+@@ -2909,7 +2903,7 @@ bool CGUIInfoManager::GetBool(int condition1, int contextWindow, const CGUIListI
+     case VIDEOPLAYER_CAN_RESUME_LIVE_TV:
+       if (m_currentFile->HasPVRRecordingInfoTag())
+       {
+-        EPG::CEpgInfoTagPtr epgTag = EPG::CEpgContainer::GetInstance().GetTagById(m_currentFile->GetPVRRecordingInfoTag()->EpgEvent());
++        EPG::CEpgInfoTagPtr epgTag = EPG::CEpgContainer::GetInstance().GetTagById(m_currentFile->GetPVRRecordingInfoTag()->Channel(), m_currentFile->GetPVRRecordingInfoTag()->BroadcastUid());
+         bReturn = (epgTag && epgTag->IsActive() && epgTag->ChannelTag());
+       }
+       break;
+diff --git a/xbmc/addons/AddonCallbacks.h b/xbmc/addons/AddonCallbacks.h
+index d12c9a4..81e8fa9 100644
+--- a/xbmc/addons/AddonCallbacks.h
++++ b/xbmc/addons/AddonCallbacks.h
+@@ -487,6 +487,9 @@ typedef void (*PVRTransferChannelGroupMember)(void *addonData, const ADDON_HANDL
+ typedef void (*PVRFreeDemuxPacket)(void *addonData, DemuxPacket* pPacket);
+ typedef DemuxPacket* (*PVRAllocateDemuxPacket)(void *addonData, int iDataSize);
+ 
++typedef void (*PVRConnectionStateChange)(void* addonData, const char* strConnectionString, PVR_CONNECTION_STATE newState, const char *strMessage);
++typedef void (*PVREpgEventStateChange)(void* addonData, EPG_TAG* tag, unsigned int iUniqueChannelId, EPG_EVENT_STATE newState);
++
+ typedef struct CB_PVRLib
+ {
+   PVRTransferEpgEntry           TransferEpgEntry;
+@@ -504,6 +507,8 @@ typedef struct CB_PVRLib
+   PVRAllocateDemuxPacket        AllocateDemuxPacket;
+   PVRTransferChannelGroup       TransferChannelGroup;
+   PVRTransferChannelGroupMember TransferChannelGroupMember;
++  PVRConnectionStateChange      ConnectionStateChange;
++  PVREpgEventStateChange        EpgEventStateChange;
+ 
+ } CB_PVRLib;
+ 
+diff --git a/xbmc/addons/AddonCallbacksPVR.cpp b/xbmc/addons/AddonCallbacksPVR.cpp
+index 4a7325f..63fb8c6 100644
+--- a/xbmc/addons/AddonCallbacksPVR.cpp
++++ b/xbmc/addons/AddonCallbacksPVR.cpp
+@@ -22,9 +22,11 @@
+ #include "AddonCallbacksPVR.h"
+ #include "events/EventLog.h"
+ #include "events/NotificationEvent.h"
++#include "threads/SingleLock.h"
+ #include "utils/log.h"
+ #include "utils/StringUtils.h"
+ #include "dialogs/GUIDialogKaiToast.h"
++#include "settings/Settings.h"
+ 
+ #include "epg/EpgContainer.h"
+ #include "pvr/PVRManager.h"
+@@ -62,6 +64,8 @@ CAddonCallbacksPVR::CAddonCallbacksPVR(CAddon* addon)
+   m_callbacks->AllocateDemuxPacket        = PVRAllocateDemuxPacket;
+   m_callbacks->TransferChannelGroup       = PVRTransferChannelGroup;
+   m_callbacks->TransferChannelGroupMember = PVRTransferChannelGroupMember;
++  m_callbacks->ConnectionStateChange      = PVRConnectionStateChange;
++  m_callbacks->EpgEventStateChange        = PVREpgEventStateChange;
+ }
+ 
+ CAddonCallbacksPVR::~CAddonCallbacksPVR()
+@@ -314,4 +318,151 @@ DemuxPacket* CAddonCallbacksPVR::PVRAllocateDemuxPacket(void *addonData, int iDa
+   return CDVDDemuxUtils::AllocateDemuxPacket(iDataSize);
+ }
+ 
++void CAddonCallbacksPVR::PVRConnectionStateChange(void* addonData, const char* strConnectionString, PVR_CONNECTION_STATE newState, const char *strMessage)
++{
++  CPVRClient *client = GetPVRClient(addonData);
++  if (!client || !strConnectionString)
++  {
++    CLog::Log(LOGERROR, "PVR - %s - invalid handler data", __FUNCTION__);
++    return;
++  }
++
++  const PVR_CONNECTION_STATE prevState(client->GetConnectionState());
++  if (prevState == newState)
++    return;
++
++  CLog::Log(LOGDEBUG, "PVR - %s - state for connection '%s' on client '%s' changed from '%d' to '%d'", __FUNCTION__, strConnectionString, client->Name().c_str(), prevState, newState);
++
++  client->SetConnectionState(newState);
++
++  int iMsg(-1);
++  bool bError(true);
++  bool bNotify(true);
++
++  switch (newState)
++  {
++    case PVR_CONNECTION_STATE_SERVER_UNREACHABLE:
++      iMsg = 35505; // Server is unreachable
++      break;
++    case PVR_CONNECTION_STATE_SERVER_MISMATCH:
++      iMsg = 35506; // Server does not respond properly
++      break;
++    case PVR_CONNECTION_STATE_VERSION_MISMATCH:
++      iMsg = 35507; // Server version is not compatible
++      break;
++    case PVR_CONNECTION_STATE_ACCESS_DENIED:
++      iMsg = 35508; // Access denied
++      break;
++    case PVR_CONNECTION_STATE_CONNECTED:
++      iMsg = 36034; // Connection established
++      bError = false;
++      // No notification for the first successful connect.
++      bNotify = (prevState != PVR_CONNECTION_STATE_UNKNOWN);
++      break;
++    case PVR_CONNECTION_STATE_DISCONNECTED:
++      iMsg = 36030; // Connection lost
++      break;
++    default:
++      CLog::Log(LOGERROR, "PVR - %s - unknown connection state", __FUNCTION__);
++      return;
++  }
++
++  // Use addon-supplied message, if present
++  std::string strMsg;
++  if (strMessage && strlen(strMessage) > 0)
++    strMsg = strMessage;
++  else
++    strMsg = g_localizeStrings.Get(iMsg);
++
++  // Notify user.
++  if (bNotify && !CSettings::GetInstance().GetBool(CSettings::SETTING_PVRMANAGER_HIDECONNECTIONLOSTWARNING))
++    CGUIDialogKaiToast::QueueNotification(
++      bError ? CGUIDialogKaiToast::Error : CGUIDialogKaiToast::Info, client->Name().c_str(), strMsg, 5000, true);
++
++  // Write event log entry.
++  CEventLog::GetInstance().Add(EventPtr(new CNotificationEvent(
++    client->Name(), strMsg, client->Icon(), bError ? EventLevelError : EventLevelInformation)));
++}
++
++typedef struct EpgEventStateChange
++{
++  int             iClientId;
++  unsigned int    iUniqueChannelId;
++  CEpgInfoTagPtr  event;
++  EPG_EVENT_STATE state;
++
++  EpgEventStateChange(int _iClientId, unsigned int _iUniqueChannelId, EPG_TAG *_event, EPG_EVENT_STATE _state)
++  : iClientId(_iClientId),
++    iUniqueChannelId(_iUniqueChannelId),
++    event(new CEpgInfoTag(*_event)),
++    state(_state) {}
++
++} EpgEventStateChange;
++
++void CAddonCallbacksPVR::UpdateEpgEvent(const EpgEventStateChange &ch, bool bQueued)
++{
++  const CPVRChannelPtr channel(g_PVRChannelGroups->GetByUniqueID(ch.iUniqueChannelId, ch.iClientId));
++  if (channel)
++  {
++    const CEpgPtr epg(channel->GetEPG());
++    if (epg)
++    {
++      if (!epg->UpdateEntry(ch.event, ch.state))
++        CLog::Log(LOGERROR, "PVR - %s - epg update failed for %sevent change (%d)",
++                  __FUNCTION__, bQueued ? "queued " : "", ch.event->UniqueBroadcastID());
++    }
++    else
++    {
++      CLog::Log(LOGERROR, "PVR - %s - channel '%s' does not have an EPG! Unable to deliver %sevent change (%d)!",
++                __FUNCTION__, channel->ChannelName().c_str(), bQueued ? "queued " : "", ch.event->UniqueBroadcastID());
++    }
++  }
++  else
++    CLog::Log(LOGERROR, "PVR - %s - invalid channel (%d)! Unable to deliver %sevent change (%d)!",
++              __FUNCTION__, ch.iUniqueChannelId, bQueued ? "queued " : "", ch.event->UniqueBroadcastID());
++}
++
++void CAddonCallbacksPVR::PVREpgEventStateChange(void* addonData, EPG_TAG* tag, unsigned int iUniqueChannelId, EPG_EVENT_STATE newState)
++{
++  CPVRClient *client = GetPVRClient(addonData);
++  if (!client || !tag)
++  {
++    CLog::Log(LOGERROR, "PVR - %s - invalid handler data", __FUNCTION__);
++    return;
++  }
++
++  CLog::Log(LOGDEBUG, "PVR - %s - state for epg event '%d' on channel '%d' on client '%s' changed to '%d'.",
++            __FUNCTION__, tag->iUniqueBroadcastId, iUniqueChannelId, client->Name().c_str(), newState);
++
++  static CCriticalSection queueMutex;
++  static std::vector<EpgEventStateChange> queuedChanges;
++
++  // during Kodi startup, addons may push updates very early, even before EPGs are ready to use.
++  if (g_PVRManager.EpgsCreated())
++  {
++    {
++      // deliver queued changes, if any. discard event if delivery fails.
++      CSingleLock lock(queueMutex);
++      if (!queuedChanges.empty())
++        CLog::Log(LOGNOTICE, "PVR - %s - processing %ld queued epg event changes.", __FUNCTION__, queuedChanges.size());
++
++      while (!queuedChanges.empty())
++      {
++        auto it = queuedChanges.begin();
++        UpdateEpgEvent(*it, true);
++        queuedChanges.erase(it);
++      }
++    }
++
++    // deliver current change.
++    UpdateEpgEvent(EpgEventStateChange(client->GetID(), iUniqueChannelId, tag, newState), false);
++  }
++  else
++  {
++    // queue for later delivery.
++    CSingleLock lock(queueMutex);
++    queuedChanges.push_back(EpgEventStateChange(client->GetID(), iUniqueChannelId, tag, newState));
++  }
++}
++
+ }; /* namespace ADDON */
+diff --git a/xbmc/addons/AddonCallbacksPVR.h b/xbmc/addons/AddonCallbacksPVR.h
+index 3fa48ec..945c789 100644
+--- a/xbmc/addons/AddonCallbacksPVR.h
++++ b/xbmc/addons/AddonCallbacksPVR.h
+@@ -29,6 +29,7 @@ namespace PVR
+ 
+ namespace ADDON
+ {
++struct EpgEventStateChange;
+ 
+ /*!
+  * Callbacks for a PVR add-on to XBMC.
+@@ -156,8 +157,30 @@ public:
+    */
+   static DemuxPacket* PVRAllocateDemuxPacket(void* addonData, int iDataSize = 0);
+ 
++  /*!
++   * @brief Notify a state change for a PVR backend connection
++   * @param addonData A pointer to the add-on.
++   * @param strConnectionString The connection string reported by the backend that can be displayed in the UI.
++   * @param newState The new state.
++   * @param strMessage A localized addon-defined string representing the new state, that can be displayed
++   *        in the UI or NULL if the Kodi-defined default string for the new state shall be displayed.
++   */
++  static void PVRConnectionStateChange(void* addonData, const char* strConnectionString, PVR_CONNECTION_STATE newState, const char *strMessage);
++
++  /*!
++   * @brief Notify a state change for an EPG event
++   * @param addonData A pointer to the add-on.
++   * @param tag The EPG event.
++   * @param iUniqueChannelId The unique id of the channel for the EPG event
++   * @param newState The new state.
++   * @param newState The new state. For EPG_EVENT_CREATED and EPG_EVENT_UPDATED, tag must be filled with all available
++   *        event data, not just a delta. For EPG_EVENT_DELETED, it is sufficient to fill EPG_TAG.iUniqueBroadcastId
++   */
++  static void PVREpgEventStateChange(void* addonData, EPG_TAG* tag, unsigned int iUniqueChannelId, EPG_EVENT_STATE newState);
++
+ private:
+   static PVR::CPVRClient* GetPVRClient(void* addonData);
++  static void UpdateEpgEvent(const EpgEventStateChange &ch, bool bQueued);
+ 
+   CB_PVRLib    *m_callbacks; /*!< callback addresses */
+   CAddon       *m_addon;     /*!< the addon */
+diff --git a/xbmc/addons/include/xbmc_epg_types.h b/xbmc/addons/include/xbmc_epg_types.h
+index 5ca1429..9460952 100644
+--- a/xbmc/addons/include/xbmc_epg_types.h
++++ b/xbmc/addons/include/xbmc_epg_types.h
+@@ -59,21 +59,38 @@
+ //@}
+ 
+ /* Set EPGTAG.iGenreType to EPG_GENRE_USE_STRING to transfer genre strings to XBMC */
+-#define EPG_GENRE_USE_STRING                          0x100
+-
+-/* EPG_TAG.iFlags values */
+-const unsigned int EPG_TAG_FLAG_UNDEFINED =           0x00000000; /*!< @brief nothing special to say about this entry */
+-const unsigned int EPG_TAG_FLAG_IS_SERIES =           0x00000001; /*!< @brief this EPG entry is part of a series */
++#define EPG_GENRE_USE_STRING                           0x100
+ 
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+ 
++  /* EPG_TAG.iFlags values */
++  const unsigned int EPG_TAG_FLAG_UNDEFINED = 0x00000000; /*!< @brief nothing special to say about this entry */
++  const unsigned int EPG_TAG_FLAG_IS_SERIES = 0x00000001; /*!< @brief this EPG entry is part of a series */
++
++  /* Special EPG_TAG.iUniqueBroadcastId value */
++
++  /*!
++   * @brief special EPG_TAG.iUniqueBroadcastId value to indicate that a tag has not a valid EPG event uid.
++   */
++  const unsigned int EPG_TAG_INVALID_UID = 0;
++
++  /*!
++   * @brief EPG event states. Used with EpgEventStateChange callback.
++   */
++  typedef enum
++  {
++    EPG_EVENT_CREATED = 0,  /*!< @brief event created */
++    EPG_EVENT_UPDATED = 1,  /*!< @brief event updated */
++    EPG_EVENT_DELETED = 2,  /*!< @brief event deleted */
++  } EPG_EVENT_STATE;
++
+   /*!
+    * @brief Representation of an EPG event.
+    */
+   typedef struct EPG_TAG {
+-    unsigned int  iUniqueBroadcastId;  /*!< @brief (required) identifier for this event */
++    unsigned int  iUniqueBroadcastId;  /*!< @brief (required) identifier for this event. Valid uids must be greater than EPG_TAG_INVALID_UID. */
+     const char *  strTitle;            /*!< @brief (required) this event's title */
+     unsigned int  iChannelNumber;      /*!< @brief (required) the number of the channel this event occurs on */
+     time_t        startTime;           /*!< @brief (required) start time in UTC */
+diff --git a/xbmc/addons/include/xbmc_pvr_dll.h b/xbmc/addons/include/xbmc_pvr_dll.h
+index ae75b28..8b54ea6 100644
+--- a/xbmc/addons/include/xbmc_pvr_dll.h
++++ b/xbmc/addons/include/xbmc_pvr_dll.h
+@@ -52,16 +52,18 @@ extern "C"
+   /*!
+    * Get the XBMC_GUI_API_VERSION that was used to compile this add-on.
+    * Used to check if this add-on is compatible with XBMC.
+-   * @return The XBMC_GUI_API_VERSION that was used to compile this add-on.
++   * @return The XBMC_GUI_API_VERSION that was used to compile this add-on or empty string if this add-on does not depend on Kodi GUI API.
+    * @remarks Valid implementation required.
++   * @note see libKODI_guilib.h about related parts
+    */
+   const char* GetGUIAPIVersion(void);
+ 
+   /*!
+    * Get the XBMC_GUI_MIN_API_VERSION that was used to compile this add-on.
+    * Used to check if this add-on is compatible with XBMC.
+-   * @return The XBMC_GUI_MIN_API_VERSION that was used to compile this add-on.
++   * @return The XBMC_GUI_MIN_API_VERSION that was used to compile this add-on or empty string if this add-on does not depend on Kodi GUI API.
+    * @remarks Valid implementation required.
++   * @note see libKODI_guilib.h about related parts
+    */
+   const char* GetMininumGUIAPIVersion(void);
+ 
+@@ -434,12 +436,6 @@ extern "C"
+   long long LengthLiveStream(void);
+ 
+   /*!
+-   * @return The channel number on the backend of the live stream that's currently being read.
+-   * @remarks Required if bHandlesInputStream or bHandlesDemuxing is set to true. Return -1 if this add-on won't provide this function.
+-   */
+-  int GetCurrentClientChannel(void);
+-
+-  /*!
+    * Switch to another channel. Only to be called when a live stream has already been opened.
+    * @param channel The channel to switch to.
+    * @return True if the switch was successful, false otherwise.
+@@ -641,6 +637,17 @@ extern "C"
+   bool IsRealTimeStream();
+ 
+   /*!
++   * Tell the client the time frame to use when notifying epg events back to Kodi. The client might push epg events asynchronously
++   * to Kodi using the callback function EpgEventStateChange. To be able to only push events that are actually of interest for Kodi,
++   * client needs to know about the epg time frame Kodi uses. Kodi calls this function once after the client add-on has been sucessfully
++   * initialized and then everytime the time frame value changes.
++   * @param iDays number of days from "now". EPG_TIMEFRAME_UNLIMITED means that Kodi is interested in all epg events, regardless of event times.
++   * @return PVR_ERROR_NO_ERROR if new value was successfully set.
++   * @remarks Required if bSupportsEPG is set to true. Return PVR_ERROR_NOT_IMPLEMENTED if this add-on won't provide this function.
++   */
++  PVR_ERROR SetEPGTimeFrame(int iDays);
++
++  /*!
+    * Called by XBMC to assign the function pointers of this add-on to pClient.
+    * @param pClient The struct to assign the function pointers to.
+    */
+@@ -697,7 +704,6 @@ extern "C"
+     pClient->SeekLiveStream                 = SeekLiveStream;
+     pClient->PositionLiveStream             = PositionLiveStream;
+     pClient->LengthLiveStream               = LengthLiveStream;
+-    pClient->GetCurrentClientChannel        = GetCurrentClientChannel;
+     pClient->SwitchChannel                  = SwitchChannel;
+     pClient->SignalStatus                   = SignalStatus;
+     pClient->GetLiveStreamURL               = GetLiveStreamURL;
+@@ -728,6 +734,8 @@ extern "C"
+ 
+     pClient->IsTimeshifting                 = IsTimeshifting;
+     pClient->IsRealTimeStream               = IsRealTimeStream;
++
++    pClient->SetEPGTimeFrame                = SetEPGTimeFrame;
+   };
+ };
+ 
+diff --git a/xbmc/addons/include/xbmc_pvr_types.h b/xbmc/addons/include/xbmc_pvr_types.h
+index 18bc331..83bb13a 100644
+--- a/xbmc/addons/include/xbmc_pvr_types.h
++++ b/xbmc/addons/include/xbmc_pvr_types.h
+@@ -77,10 +77,10 @@ struct DemuxPacket;
+ #define PVR_STREAM_MAX_STREAMS 20
+ 
+ /* current PVR API version */
+-#define XBMC_PVR_API_VERSION "4.2.0"
++#define XBMC_PVR_API_VERSION "5.0.0"
+ 
+ /* min. PVR API version */
+-#define XBMC_PVR_MIN_API_VERSION "4.2.0"
++#define XBMC_PVR_MIN_API_VERSION "5.0.0"
+ 
+ #ifdef __cplusplus
+ extern "C" {
+@@ -104,7 +104,7 @@ extern "C" {
+   /*!
+    * @brief special PVR_TIMER.iEpgUid value to indicate that a timer has no EPG event uid.
+    */
+-  const unsigned int PVR_TIMER_NO_EPG_UID = 0; /*!< @brief timer has no EPG event uid. */
++  const unsigned int PVR_TIMER_NO_EPG_UID = EPG_TAG_INVALID_UID; /*!< @brief timer has no EPG event uid. */
+ 
+   /*!
+    * @brief special PVR_TIMER.iClientChannelUid value to indicate "any channel". Useful for some repeating timer types.
+@@ -158,6 +158,16 @@ extern "C" {
+                                              PVR_WEEKDAY_SUNDAY;
+ 
+   /*!
++   * @brief timeframe value for use with SetEPGTimeFrame function to indicate "no timeframe".
++   */
++  const int EPG_TIMEFRAME_UNLIMITED = -1;
++
++  /*!
++   * @brief special PVR_TIMER.iClientChannelUid and PVR_RECORDING.iChannelUid value to indicate that no channel uid is available.
++   */
++  const int PVR_CHANNEL_INVALID_UID = -1; /*!< @brief denotes that no channel uid is avaliable. */
++
++  /*!
+    * @brief PVR add-on error codes
+    */
+   typedef enum
+@@ -207,6 +217,20 @@ extern "C" {
+   } PVR_MENUHOOK_CAT;
+ 
+   /*!
++   * @brief PVR backend connection states. Used with ConnectionStateChange callback.
++   */
++  typedef enum
++  {
++    PVR_CONNECTION_STATE_UNKNOWN            = 0,  /*!< @brief unknown state (e.g. not yet tried to connect) */
++    PVR_CONNECTION_STATE_SERVER_UNREACHABLE = 1,  /*!< @brief backend server is not reachable (e.g. server not existing or network down)*/
++    PVR_CONNECTION_STATE_SERVER_MISMATCH    = 2,  /*!< @brief backend server is reachable, but there is not the expected type of server running (e.g. HTSP required, but FTP running at given server:port) */
++    PVR_CONNECTION_STATE_VERSION_MISMATCH   = 3,  /*!< @brief backend server is reachable, but server version does not match client requirements */
++    PVR_CONNECTION_STATE_ACCESS_DENIED      = 4,  /*!< @brief backend server is reachable, but denies client access (e.g. due to wrong credentials) */
++    PVR_CONNECTION_STATE_CONNECTED          = 5,  /*!< @brief connection to backend server is established */
++    PVR_CONNECTION_STATE_DISCONNECTED       = 6,  /*!< @brief no connection to backend server (e.g. due to network errors or client initiated disconnect)*/
++  } PVR_CONNECTION_STATE;
++
++  /*!
+    * @brief Properties passed to the Create() method of an add-on.
+    */
+   typedef struct PVR_PROPERTIES
+@@ -277,9 +301,6 @@ extern "C" {
+     int    iSignal;                                        /*!< @brief (optional) signal strength */
+     long   iBER;                                           /*!< @brief (optional) bit error rate */
+     long   iUNC;                                           /*!< @brief (optional) uncorrected blocks */
+-    double dVideoBitrate;                                  /*!< @brief (optional) video bitrate */
+-    double dAudioBitrate;                                  /*!< @brief (optional) audio bitrate */
+-    double dDolbyBitrate;                                  /*!< @brief (optional) dolby bitrate */
+   } ATTRIBUTE_PACKED PVR_SIGNAL_STATUS;
+ 
+   /*!
+@@ -399,7 +420,7 @@ extern "C" {
+                                                                     Kodi and passed the first time to the client. A valid index must be greater than PVR_TIMER_NO_CLIENT_INDEX. */
+     unsigned int    iParentClientIndex;                        /*!< @brief (optional) for timers scheduled by a repeating timer, the index of the repeating timer that scheduled this timer (it's PVR_TIMER.iClientIndex value). Use PVR_TIMER_NO_PARENT
+                                                                     to indicate that this timer was no scheduled by a repeating timer. */
+-    int             iClientChannelUid;                         /*!< @brief (optional) unique identifier of the channel to record on. PVR_TIMER_ANY_CHANNEL will denote "any channel", not a specifoc one. */
++    int             iClientChannelUid;                         /*!< @brief (optional) unique identifier of the channel to record on. PVR_TIMER_ANY_CHANNEL will denote "any channel", not a specific one. PVR_CHANNEL_INVALID_UID denotes that channel uid is not available.*/
+     time_t          startTime;                                 /*!< @brief (optional) start time of the recording in UTC. Instant timers that are sent to the add-on by Kodi will have this value set to 0.*/
+     time_t          endTime;                                   /*!< @brief (optional) end time of the recording in UTC. */
+     bool            bStartAnyTime;                             /*!< @brief (optional) for EPG based (not Manual) timers indicates startTime does not apply. Default = false */
+@@ -421,7 +442,7 @@ extern "C" {
+     unsigned int    iWeekdays;                                 /*!< @brief (optional) week days, for repeating timers */
+     unsigned int    iPreventDuplicateEpisodes;                 /*!< @brief (optional) 1 if backend should only record new episodes in case of a repeating epg-based timer, 0 if all episodes shall be recorded (no duplicate detection). Actual algorithm for
+                                                                     duplicate detection is defined by the backend. Addons may define own values for different duplicate detection algorithms, thus this is not just a bool.*/
+-    unsigned int    iEpgUid;                                   /*!< @brief (optional) epg event id. Use PVR_TIMER_NO_EPG_UID to state that there is no EPG event id available for this timer. Values greater than PVR_TIMER_NO_EPG_UID represent a valid epg event id. */
++    unsigned int    iEpgUid;                                   /*!< @brief (optional) EPG event id associated with this timer. Valid ids must be greater than EPG_TAG_INVALID_UID. */
+     unsigned int    iMarginStart;                              /*!< @brief (optional) if set, the backend starts the recording iMarginStart minutes before startTime. */
+     unsigned int    iMarginEnd;                                /*!< @brief (optional) if set, the backend ends the recording iMarginEnd minutes after endTime. */
+     int             iGenreType;                                /*!< @brief (optional) genre type */
+@@ -456,7 +477,8 @@ extern "C" {
+     int    iPlayCount;                                    /*!< @brief (optional) play count of this recording on the client */
+     int    iLastPlayedPosition;                           /*!< @brief (optional) last played position of this recording on the client */
+     bool   bIsDeleted;                                    /*!< @brief (optional) shows this recording is deleted and can be undelete */
+-    unsigned int iEpgEventId;                             /*!< @brief (optional) EPG event id associated with this recording */
++    unsigned int iEpgEventId;                             /*!< @brief (optional) EPG event id associated with this recording. Valid ids must be greater than EPG_TAG_INVALID_UID. */
++    int    iChannelUid;                                   /*!< @brief (optional) unique identifier of the channel for this recording. PVR_CHANNEL_INVALID_UID denotes that channel uid is not available. */
+   } ATTRIBUTE_PACKED PVR_RECORDING;
+ 
+   /*!
+@@ -541,7 +563,6 @@ extern "C" {
+     long long    (__cdecl* SeekLiveStream)(long long, int);
+     long long    (__cdecl* PositionLiveStream)(void);
+     long long    (__cdecl* LengthLiveStream)(void);
+-    int          (__cdecl* GetCurrentClientChannel)(void);
+     bool         (__cdecl* SwitchChannel)(const PVR_CHANNEL&);
+     PVR_ERROR    (__cdecl* SignalStatus)(PVR_SIGNAL_STATUS&);
+     const char*  (__cdecl* GetLiveStreamURL)(const PVR_CHANNEL&);
+@@ -567,6 +588,7 @@ extern "C" {
+     const char*  (__cdecl* GetBackendHostname)(void);
+     bool         (__cdecl* IsTimeshifting)(void);
+     bool         (__cdecl* IsRealTimeStream)(void);
++    PVR_ERROR    (__cdecl* SetEPGTimeFrame)(int);
+   } PVRClient;
+ 
+ #ifdef __cplusplus
+diff --git a/xbmc/epg/Epg.cpp b/xbmc/epg/Epg.cpp
+index 0de86c0..e7233ac 100644
+--- a/xbmc/epg/Epg.cpp
++++ b/xbmc/epg/Epg.cpp
+@@ -264,6 +264,20 @@ CEpgInfoTagPtr CEpg::GetTag(const CDateTime &StartTime) const
+   return CEpgInfoTagPtr();
+ }
+ 
++CEpgInfoTagPtr CEpg::GetTagByBroadcastId(unsigned int iUniqueBroadcastId) const
++{
++  if (iUniqueBroadcastId != EPG_TAG_INVALID_UID)
++  {
++    CSingleLock lock(m_critSection);
++    for (const auto &infoTag : m_tags)
++    {
++      if (infoTag.second->UniqueBroadcastID() == iUniqueBroadcastId)
++        return infoTag.second;
++    }
++  }
++  return CEpgInfoTagPtr();
++}
++
+ CEpgInfoTagPtr CEpg::GetTagBetween(const CDateTime &beginTime, const CDateTime &endTime) const
+ {
+   CSingleLock lock(m_critSection);
+@@ -309,31 +323,100 @@ void CEpg::AddEntry(const CEpgInfoTag &tag)
+   }
+ }
+ 
+-bool CEpg::UpdateEntry(const CEpgInfoTag &tag, bool bUpdateDatabase /* = false */, bool bSort /* = true */)
++bool CEpg::UpdateEntry(const EPG_TAG *data, bool bUpdateDatabase /* = false */)
++{
++  if (!data)
++    return false;
++
++  CEpgInfoTagPtr tag(new CEpgInfoTag(*data));
++  return UpdateEntry(tag, bUpdateDatabase);
++}
++
++bool CEpg::UpdateEntry(const CEpgInfoTagPtr &tag, bool bUpdateDatabase /* = false */)
++{
++  CSingleLock lock(m_critSection);
++  auto it = m_tags.find(tag->StartAsUTC());
++  EPG_EVENT_STATE state = (it == m_tags.end()) ? EPG_EVENT_CREATED : EPG_EVENT_UPDATED;
++  return UpdateEntry(tag, state, it, bUpdateDatabase);
++}
++
++bool CEpg::UpdateEntry(const CEpgInfoTagPtr &tag, EPG_EVENT_STATE newState, bool bUpdateDatabase /* = false */)
+ {
+-  CEpgInfoTagPtr infoTag;
+   CSingleLock lock(m_critSection);
+-  std::map<CDateTime, CEpgInfoTagPtr>::iterator it = m_tags.find(tag.StartAsUTC());
++  auto it = m_tags.end();
++  return UpdateEntry(tag, newState, it, bUpdateDatabase);
++}
++
++bool CEpg::UpdateEntry(const CEpgInfoTagPtr &tag, EPG_EVENT_STATE newState, std::map<CDateTime, CEpgInfoTagPtr>::iterator &eit, bool bUpdateDatabase /* = false */)
++{
++  CEpgInfoTagPtr infoTag;
+   bool bNewTag(false);
+-  if (it != m_tags.end())
++
++  CSingleLock lock(m_critSection);
++
++  if (newState == EPG_EVENT_CREATED || newState == EPG_EVENT_UPDATED)
++  {
++    // Reuse passed iterator in favor of doing expensive find self
++    auto it = (eit == m_tags.end()) ? m_tags.find(tag->StartAsUTC()) : eit;
++    if (it != m_tags.end())
++    {
++      if (newState == EPG_EVENT_CREATED)
++        CLog::Log(LOGERROR, "EPG - %s - Error: EPG_EVENT_CREATED: uid %d found! Updating existing event.", __FUNCTION__, tag->UniqueBroadcastID());
++
++      infoTag = it->second;
++    }
++    else
++    {
++      if (newState == EPG_EVENT_UPDATED)
++        CLog::Log(LOGERROR, "EPG - %s - Error: EPG_EVENT_UPDATED: uid %d not found. Inserting new event.", __FUNCTION__, tag->UniqueBroadcastID());
++
++      infoTag.reset(new CEpgInfoTag(this, m_pvrChannel, m_strName, m_pvrChannel ? m_pvrChannel->IconPath() : ""));
++      infoTag->SetUniqueBroadcastID(tag->UniqueBroadcastID());
++      m_tags.insert(std::make_pair(tag->StartAsUTC(), infoTag));
++      bNewTag = true;
++    }
++  }
++  else if (newState == EPG_EVENT_DELETED)
+   {
+-    infoTag = it->second;
++    // Reuse passed iterator in favor of doing expensive find self
++    auto it = (eit == m_tags.end()) ? m_tags.find(tag->StartAsUTC()) : eit;
++    if (it == m_tags.end())
++    {
++      // not guranteed that deleted tag contains valid start time. search sequential.
++      for (it = m_tags.begin(); it != m_tags.end(); ++it)
++      {
++        if (it->second->UniqueBroadcastID() == tag->UniqueBroadcastID())
++          break;
++      }
++    }
++
++    if (it != m_tags.end())
++    {
++      it->second->ClearTimer();
++      m_tags.erase(it);
++
++      if (bUpdateDatabase)
++        m_deletedTags.insert(std::make_pair(infoTag->UniqueBroadcastID(), infoTag));
++    }
++    else
++    {
++      CLog::Log(LOGERROR, "EPG - %s - Error: EPG_EVENT_DELETED: uid %d not found.", __FUNCTION__, tag->UniqueBroadcastID());
++      return false;
++    }
++    return true;
+   }
+   else
+   {
+-    /* create a new tag if no tag with this ID exists */
+-    infoTag.reset(new CEpgInfoTag(this, m_pvrChannel, m_strName, m_pvrChannel ? m_pvrChannel->IconPath() : ""));
+-    infoTag->SetUniqueBroadcastID(tag.UniqueBroadcastID());
+-    m_tags.insert(make_pair(tag.StartAsUTC(), infoTag));
+-    bNewTag = true;
++    CLog::Log(LOGERROR, "EPG - %s - unknownn epg event state '%d'.", __FUNCTION__, newState);
++    return false;
+   }
+ 
+-  infoTag->Update(tag, bNewTag);
++  infoTag->Update(*tag, bNewTag);
+   infoTag->SetEpg(this);
+   infoTag->SetPVRChannel(m_pvrChannel);
+ 
+   if (bUpdateDatabase)
+-    m_changedTags.insert(make_pair(infoTag->UniqueBroadcastID(), infoTag));
++    m_changedTags.insert(std::make_pair(infoTag->UniqueBroadcastID(), infoTag));
+ 
+   return true;
+ }
+@@ -377,7 +460,7 @@ bool CEpg::UpdateEntries(const CEpg &epg, bool bStoreInDb /* = true */)
+ #endif
+   /* copy over tags */
+   for (std::map<CDateTime, CEpgInfoTagPtr>::const_iterator it = epg.m_tags.begin(); it != epg.m_tags.end(); ++it)
+-    UpdateEntry(*it->second, bStoreInDb, false);
++    UpdateEntry(it->second, bStoreInDb);
+ 
+ #if EPG_DEBUGGING
+   CLog::Log(LOGDEBUG, "EPG - %s - %" PRIuS" entries in memory after merging and before fixing", __FUNCTION__, m_tags.size());
+@@ -720,15 +803,6 @@ const std::string &CEpg::ConvertGenreIdToString(int iID, int iSubID)
+   return g_localizeStrings.Get(iLabelId);
+ }
+ 
+-bool CEpg::UpdateEntry(const EPG_TAG *data, bool bUpdateDatabase /* = false */)
+-{
+-  if (!data)
+-    return false;
+-
+-  CEpgInfoTagPtr tag(new CEpgInfoTag(*data));
+-  return UpdateEntry(*tag, bUpdateDatabase);
+-}
+-
+ bool CEpg::IsRadio(void) const
+ {
+   CSingleLock lock(m_critSection);
+@@ -857,15 +931,3 @@ bool CEpg::IsValid(void) const
+   return true;
+ }
+ 
+-std::vector<CEpgInfoTagPtr> CEpg::GetAllEventsWithBroadcastId() const
+-{
+-  CSingleLock lock(m_critSection);
+-  std::vector<CEpgInfoTagPtr> events;
+-  events.reserve(m_tags.size());
+-  for (const auto &infoTag : m_tags)
+-  {
+-    if (infoTag.second->UniqueBroadcastID())
+-      events.push_back(infoTag.second);
+-  }
+-  return events;
+-}
+diff --git a/xbmc/epg/Epg.h b/xbmc/epg/Epg.h
+index 51bf728..f45ed20 100644
+--- a/xbmc/epg/Epg.h
++++ b/xbmc/epg/Epg.h
+@@ -206,13 +206,28 @@ namespace EPG
+     CEpgInfoTagPtr GetTag(const CDateTime &beginTime) const;
+ 
+     /*!
++     * @brief Get the event matching the given unique broadcast id
++     * @param iUniqueBroadcastId The uid to look up
++     * @return The matching event or NULL if it wasn't found.
++     */
++    CEpgInfoTagPtr GetTagByBroadcastId(unsigned int iUniqueBroadcastId) const;
++
++    /*!
++     * @brief Update an entry in this EPG.
++     * @param tag The tag to update.
++     * @param bUpdateDatabase If set to true, this event will be persisted in the database.
++     * @return True if it was updated successfully, false otherwise.
++     */
++    bool UpdateEntry(const CEpgInfoTagPtr &tag, bool bUpdateDatabase = false);
++
++    /*!
+      * @brief Update an entry in this EPG.
+      * @param tag The tag to update.
++     * @param newState the new state of the event.
+      * @param bUpdateDatabase If set to true, this event will be persisted in the database.
+-     * @param bSort If set to false, epg entries will not be sorted after updating; used for mass updates
+      * @return True if it was updated successfully, false otherwise.
+      */
+-    bool UpdateEntry(const CEpgInfoTag &tag, bool bUpdateDatabase = false, bool bSort = true);
++    bool UpdateEntry(const CEpgInfoTagPtr &tag, EPG_EVENT_STATE newState, bool bUpdateDatabase = false);
+ 
+     /*!
+      * @brief Update the EPG from 'start' till 'end'.
+@@ -300,16 +315,20 @@ namespace EPG
+      */
+     bool IsValid(void) const;
+ 
+-    /*!
+-     * @brief Get all events with a valid broadcast Id
+-     * @return the table of events
+-     */
+-    std::vector<CEpgInfoTagPtr> GetAllEventsWithBroadcastId() const;
+-
+   protected:
+     CEpg(void);
+ 
+     /*!
++     * @brief Update an entry in this EPG.
++     * @param data The tag to update.
++     * @param newState The new state of the event.
++     * @param it An iterator pointing to m_tags entry for the EPG event to update or m_tags.end().
++     * @param bUpdateDatabase If set to true, this event will be persisted in the database.
++     * @return True if it was updated successfully, false otherwise.
++     */
++    bool UpdateEntry(const CEpgInfoTagPtr &tag, EPG_EVENT_STATE newState, std::map<CDateTime, CEpgInfoTagPtr>::iterator &eit, bool bUpdateDatabase = false);
++
++    /*!
+      * @brief Update the EPG from a scraper set in the channel tag.
+      * TODO: not implemented yet for non-pvr EPGs
+      * @param start Get entries with a start date after this time.
+diff --git a/xbmc/epg/EpgContainer.cpp b/xbmc/epg/EpgContainer.cpp
+index 279d920..7811b06 100644
+--- a/xbmc/epg/EpgContainer.cpp
++++ b/xbmc/epg/EpgContainer.cpp
+@@ -109,8 +109,6 @@ void CEpgContainer::Clear(bool bClearDb /* = false */)
+     {
+       epgEntry.second->UnregisterObserver(this);
+     }
+-    m_epgEvents.clear();
+-    m_epgScans.clear();
+     m_epgs.clear();
+     m_iNextEpgUpdate  = 0;
+     m_bStarted = false;
+@@ -206,8 +204,6 @@ bool CEpgContainer::Stop(void)
+ 
+ void CEpgContainer::Notify(const Observable &obs, const ObservableMessage msg)
+ {
+-  if (msg == ObservableMessageEpg)
+-    UpdateEpgEvents();
+   SetChanged();
+   NotifyObservers(msg);
+ }
+@@ -396,13 +392,17 @@ CEpgPtr CEpgContainer::GetById(int iEpgId) const
+   return epgEntry != m_epgs.end() ? epgEntry->second : NULL;
+ }
+ 
+-CEpgInfoTagPtr CEpgContainer::GetTagById(unsigned int iBroadcastId) const
++CEpgInfoTagPtr CEpgContainer::GetTagById(const CPVRChannelPtr &channel, unsigned int iBroadcastId) const
+ {
+   CEpgInfoTagPtr retval;
+-  CSingleLock lock(m_critSection);
+-  const auto &infoTag = m_epgEvents.find(iBroadcastId);
+-  if (infoTag != m_epgEvents.end())
+-    retval = infoTag->second;
++
++  if (!channel || iBroadcastId == EPG_TAG_INVALID_UID)
++    return retval;
++
++  const CEpgPtr epg(channel->GetEPG());
++  if (epg)
++    retval = epg->GetTagByBroadcastId(iBroadcastId);
++
+   return retval;
+ }
+ 
+@@ -525,7 +525,6 @@ bool CEpgContainer::DeleteEpg(const CEpg &epg, bool bDeleteFromDatabase /* = fal
+     m_database.Delete(*epgEntry->second);
+ 
+   epgEntry->second->UnregisterObserver(this);
+-  CleanupEpgEvents(epgEntry->second);
+   m_epgs.erase(epgEntry);
+ 
+   return true;
+@@ -826,68 +825,3 @@ void CEpgContainer::UpdateRequest(int clientID, unsigned int channelID)
+   m_updateRequests.push_back(request);
+ }
+ 
+-void CEpgContainer::UpdateEpgEvents()
+-{
+-  CLog::Log(LOGDEBUG, "EPGContainer - %s", __FUNCTION__);
+-  CSingleLock lock(m_critSection);
+-  CDateTime now = CDateTime::GetUTCDateTime();
+-  int count = 0;
+-
+-  // Purge old events from the map with daily frequency and in according with EPG setting 'LingerTime'
+-  if (!m_lastEpgEventPurge.IsValid() || m_lastEpgEventPurge < (now - CDateTimeSpan(1,0,0,0)))
+-  {
+-    CDateTime purgeTime = now - CDateTimeSpan(0, g_advancedSettings.m_iEpgLingerTime / 60, g_advancedSettings.m_iEpgLingerTime % 60, 0);
+-    for (auto event = m_epgEvents.begin(); event != m_epgEvents.end();)
+-    {
+-      if (event->second->EndAsUTC() < purgeTime)
+-      {
+-        event = m_epgEvents.erase(event);
+-        ++count;
+-      }
+-      else
+-        ++event;
+-    }
+-    m_lastEpgEventPurge = now;
+-    CLog::Log(LOGDEBUG, "EPGContainer - %s - %d item(s) purged", __FUNCTION__, count);
+-  }
+-
+-  // Fill updated entries
+-  count = 0;
+-  for (const auto &epgEntry : m_epgs)
+-  {
+-    if (!epgEntry.second->IsValid())
+-      continue;
+-
+-    int epgId = epgEntry.second->EpgID();
+-    CDateTime epgScanTime = epgEntry.second->GetLastScanTime();
+-
+-    const auto &scan = m_epgScans.find(epgId);
+-    if (scan != m_epgScans.end() && scan->second == epgScanTime)
+-      continue;
+-
+-    if (scan == m_epgScans.end())
+-      m_epgScans.insert(std::make_pair(epgId, epgScanTime));
+-    else
+-      scan->second = epgScanTime;
+-
+-    auto events = epgEntry.second->GetAllEventsWithBroadcastId();
+-    for (const auto &infoTag : events)
+-    {
+-      m_epgEvents[infoTag->UniqueBroadcastID()] = infoTag;
+-      ++count;
+-    }
+-  }
+-  CLog::Log(LOGDEBUG, "EPGContainer - %s - %d item(s) updated", __FUNCTION__, count);
+-}
+-
+-void CEpgContainer::CleanupEpgEvents(const CEpgPtr& epg)
+-{
+-  CSingleLock lock(m_critSection);
+-  if (epg)
+-  {
+-    m_epgScans.erase(epg->EpgID());
+-    auto events = epg->GetAllEventsWithBroadcastId();
+-    for (const auto &infoTag : events)
+-      m_epgEvents.erase(infoTag->UniqueBroadcastID());
+-  }
+-}
+diff --git a/xbmc/epg/EpgContainer.h b/xbmc/epg/EpgContainer.h
+index 43dc44d..3b5d3a9 100644
+--- a/xbmc/epg/EpgContainer.h
++++ b/xbmc/epg/EpgContainer.h
+@@ -161,10 +161,11 @@ namespace EPG
+ 
+     /*!
+      * @brief Get the EPG event with the given event id
++     * @param channel The channel to get the event for.
+      * @param iBroadcastId The event id to get
+      * @return The requested event, or an empty tag when not found
+      */
+-    virtual CEpgInfoTagPtr GetTagById(unsigned int iBroadcastId) const;
++    virtual CEpgInfoTagPtr GetTagById(const PVR::CPVRChannelPtr &channel, unsigned int iBroadcastId) const;
+ 
+     /*!
+      * @brief Get an EPG table given a PVR channel.
+@@ -292,13 +293,6 @@ namespace EPG
+ 
+     void InsertFromDatabase(int iEpgID, const std::string &strName, const std::string &strScraperName);
+ 
+-    /*!
+-     * @brief Update map of epg events
+-     */
+-    void UpdateEpgEvents();
+-
+-    void CleanupEpgEvents(const CEpgPtr& epg);
+-
+     CEpgDatabase m_database;           /*!< the EPG database */
+ 
+     /** @name Configuration */
+@@ -330,9 +324,5 @@ namespace EPG
+ 
+     std::list<SUpdateRequest> m_updateRequests; /*!< list of update requests triggered by addon*/
+     CCriticalSection m_updateRequestsLock;      /*!< protect update requests*/
+-
+-    std::map<unsigned int, CEpgInfoTagPtr> m_epgEvents; /*!< map of EPG events by unique broadcast Id*/
+-    std::map<unsigned int, CDateTime> m_epgScans;       /*!< map of last scan time by EPG Id*/
+-    CDateTime m_lastEpgEventPurge;                      /*!< when the last purge has been processed*/
+   };
+ }
+diff --git a/xbmc/epg/EpgDatabase.cpp b/xbmc/epg/EpgDatabase.cpp
+index da1ccf6..3954160 100644
+--- a/xbmc/epg/EpgDatabase.cpp
++++ b/xbmc/epg/EpgDatabase.cpp
+@@ -235,7 +235,7 @@ int CEpgDatabase::Get(CEpg &epg)
+ 
+         int iBroadcastUID = m_pDS->fv("iBroadcastUid").get_asInt();
+         // Compat: null value for broadcast uid changed from numerical -1 to 0 with PVR Addon API v4.0.0
+-        newTag->m_iUniqueBroadcastID = iBroadcastUID == -1 ? PVR_TIMER_NO_EPG_UID : iBroadcastUID;
++        newTag->m_iUniqueBroadcastID = iBroadcastUID == -1 ? EPG_TAG_INVALID_UID : iBroadcastUID;
+ 
+         newTag->m_iBroadcastId       = m_pDS->fv("idBroadcast").get_asInt();
+         newTag->m_strTitle           = m_pDS->fv("sTitle").get_asString().c_str();
+diff --git a/xbmc/epg/EpgInfoTag.cpp b/xbmc/epg/EpgInfoTag.cpp
+index 4ce11ae..23ab035 100644
+--- a/xbmc/epg/EpgInfoTag.cpp
++++ b/xbmc/epg/EpgInfoTag.cpp
+@@ -22,6 +22,7 @@
+ #include "guilib/LocalizeStrings.h"
+ #include "pvr/PVRManager.h"
+ #include "pvr/addons/PVRClients.h"
++#include "pvr/timers/PVRTimers.h"
+ #include "settings/AdvancedSettings.h"
+ #include "settings/Settings.h"
+ #include "utils/log.h"
+@@ -51,7 +52,7 @@ CEpgInfoTag::CEpgInfoTag(void) :
+     m_iSeriesNumber(0),
+     m_iEpisodeNumber(0),
+     m_iEpisodePart(0),
+-    m_iUniqueBroadcastID(0),
++    m_iUniqueBroadcastID(EPG_TAG_INVALID_UID),
+     m_iYear(0),
+     m_epg(NULL),
+     m_iFlags(EPG_TAG_FLAG_UNDEFINED)
+@@ -68,7 +69,7 @@ CEpgInfoTag::CEpgInfoTag(CEpg *epg, PVR::CPVRChannelPtr pvrChannel, const std::s
+     m_iSeriesNumber(0),
+     m_iEpisodeNumber(0),
+     m_iEpisodePart(0),
+-    m_iUniqueBroadcastID(0),
++    m_iUniqueBroadcastID(EPG_TAG_INVALID_UID),
+     m_iYear(0),
+     m_strIconPath(strIconPath),
+     m_epg(epg),
+@@ -88,7 +89,7 @@ CEpgInfoTag::CEpgInfoTag(const EPG_TAG &data) :
+     m_iSeriesNumber(0),
+     m_iEpisodeNumber(0),
+     m_iEpisodePart(0),
+-    m_iUniqueBroadcastID(0),
++    m_iUniqueBroadcastID(EPG_TAG_INVALID_UID),
+     m_epg(NULL)
+ {
+   m_startTime = (data.startTime + g_advancedSettings.m_iPVRTimeCorrection);
+@@ -712,9 +713,9 @@ const int CEpgInfoTag::EpgID(void) const
+   return m_epg ? m_epg->EpgID() : -1;
+ }
+ 
+-void CEpgInfoTag::SetTimer(CPVRTimerInfoTagPtr timer)
++void CEpgInfoTag::SetTimer(unsigned int iTimerId)
+ {
+-  m_timer = timer;
++  m_timer = g_PVRTimers->GetById(iTimerId);
+ }
+ 
+ void CEpgInfoTag::ClearTimer(void)
+diff --git a/xbmc/epg/EpgInfoTag.h b/xbmc/epg/EpgInfoTag.h
+index 03dddd8..8ddff69 100644
+--- a/xbmc/epg/EpgInfoTag.h
++++ b/xbmc/epg/EpgInfoTag.h
+@@ -50,6 +50,12 @@ namespace EPG
+      */
+     static CEpgInfoTagPtr CreateDefaultTag();
+ 
++    /*!
++     * @brief Create a new EPG infotag with 'data' as content.
++     * @param data The tag's content.
++     */
++    CEpgInfoTag(const EPG_TAG &data);
++
+   private:
+     /*!
+      * @brief Create a new empty event.
+@@ -61,12 +67,6 @@ namespace EPG
+      */
+     CEpgInfoTag(CEpg *epg, PVR::CPVRChannelPtr pvrChannel, const std::string &strTableName = "", const std::string &strIconPath = "");
+ 
+-    /*!
+-     * @brief Create a new EPG infotag with 'data' as content.
+-     * @param data The tag's content.
+-     */
+-    CEpgInfoTag(const EPG_TAG &data);
+-
+     // Prevent copy construction, even for CEpgInfoTag instances and friends.
+     // Note: Only declared, but intentionally not implemented
+     //       to prevent compiler generated copy ctor and to force
+@@ -320,10 +320,14 @@ namespace EPG
+     std::string Path(void) const;
+ 
+     /*!
+-     * @brief Set a timer for this event or NULL to clear it.
+-     * @param newTimer The new timer value.
++     * @brief Set a timer for this event.
++     * @param iTimerId The id of the new timer.
++     */
++    void SetTimer(unsigned int iTimerId);
++
++    /*!
++     * @brief Clear the timer for this event.
+      */
+-    void SetTimer(PVR::CPVRTimerInfoTagPtr newTimer);
+     void ClearTimer(void);
+ 
+     /*!
+diff --git a/xbmc/guiinfo/GUIInfoLabels.h b/xbmc/guiinfo/GUIInfoLabels.h
+index 46f3b17..4874f5b 100644
+--- a/xbmc/guiinfo/GUIInfoLabels.h
++++ b/xbmc/guiinfo/GUIInfoLabels.h
+@@ -469,9 +469,6 @@
+ #define PVR_ACTUAL_STREAM_SNR_PROGR (PVR_STRINGS_START + 28)
+ #define PVR_ACTUAL_STREAM_BER       (PVR_STRINGS_START + 29)
+ #define PVR_ACTUAL_STREAM_UNC       (PVR_STRINGS_START + 30)
+-#define PVR_ACTUAL_STREAM_VIDEO_BR  (PVR_STRINGS_START + 31)
+-#define PVR_ACTUAL_STREAM_AUDIO_BR  (PVR_STRINGS_START + 32)
+-#define PVR_ACTUAL_STREAM_DOLBY_BR  (PVR_STRINGS_START + 33)
+ #define PVR_ACTUAL_STREAM_CRYPTION  (PVR_STRINGS_START + 34)
+ #define PVR_ACTUAL_STREAM_SERVICE   (PVR_STRINGS_START + 35)
+ #define PVR_ACTUAL_STREAM_MUX       (PVR_STRINGS_START + 36)
+diff --git a/xbmc/interfaces/json-rpc/FileItemHandler.cpp b/xbmc/interfaces/json-rpc/FileItemHandler.cpp
+index b66a27b..ed381a8 100644
+--- a/xbmc/interfaces/json-rpc/FileItemHandler.cpp
++++ b/xbmc/interfaces/json-rpc/FileItemHandler.cpp
+@@ -293,7 +293,7 @@ void CFileItemHandler::HandleFileItem(const char *ID, bool allowFile, const char
+     {
+       if (item->HasPVRChannelInfoTag() && item->GetPVRChannelInfoTag()->ChannelID() > 0)
+          object[ID] = item->GetPVRChannelInfoTag()->ChannelID();
+-      else if (item->HasEPGInfoTag() && item->GetEPGInfoTag()->UniqueBroadcastID() > 0)
++      else if (item->HasEPGInfoTag() && item->GetEPGInfoTag()->UniqueBroadcastID() > EPG_TAG_INVALID_UID)
+          object[ID] = item->GetEPGInfoTag()->UniqueBroadcastID();
+       else if (item->HasPVRRecordingInfoTag() && item->GetPVRRecordingInfoTag()->m_iRecordingId > 0)
+          object[ID] = item->GetPVRRecordingInfoTag()->m_iRecordingId;
+diff --git a/xbmc/pvr/PVRGUIInfo.cpp b/xbmc/pvr/PVRGUIInfo.cpp
+index c43f172..ff0733a 100644
+--- a/xbmc/pvr/PVRGUIInfo.cpp
++++ b/xbmc/pvr/PVRGUIInfo.cpp
+@@ -358,15 +358,6 @@ bool CPVRGUIInfo::TranslateCharInfo(DWORD dwInfo, std::string &strValue) const
+   case PVR_NEXT_TIMER:
+     CharInfoNextTimer(strValue);
+     break;
+-  case PVR_ACTUAL_STREAM_VIDEO_BR:
+-    CharInfoVideoBR(strValue);
+-    break;
+-  case PVR_ACTUAL_STREAM_AUDIO_BR:
+-    CharInfoAudioBR(strValue);
+-    break;
+-  case PVR_ACTUAL_STREAM_DOLBY_BR:
+-    CharInfoDolbyBR(strValue);
+-    break;
+   case PVR_ACTUAL_STREAM_SIG:
+     CharInfoSignal(strValue);
+     break;
+@@ -604,21 +595,6 @@ void CPVRGUIInfo::CharInfoTotalDiskSpace(std::string &strValue) const
+   strValue = StringUtils::SizeToString(m_iBackendDiskTotal).c_str();
+ }
+ 
+-void CPVRGUIInfo::CharInfoVideoBR(std::string &strValue) const
+-{
+-  strValue = StringUtils::Format("%.2f Mbit/s", m_qualityInfo.dVideoBitrate);
+-}
+-
+-void CPVRGUIInfo::CharInfoAudioBR(std::string &strValue) const
+-{
+-  strValue = StringUtils::Format("%.0f kbit/s", m_qualityInfo.dAudioBitrate);
+-}
+-
+-void CPVRGUIInfo::CharInfoDolbyBR(std::string &strValue) const
+-{
+-  strValue = StringUtils::Format("%.0f kbit/s", m_qualityInfo.dDolbyBitrate);
+-}
+-
+ void CPVRGUIInfo::CharInfoSignal(std::string &strValue) const
+ {
+   strValue = StringUtils::Format("%d %%", m_qualityInfo.iSignal / 655);
+diff --git a/xbmc/pvr/PVRGUIInfo.h b/xbmc/pvr/PVRGUIInfo.h
+index bc451d6..fafa5be 100644
+--- a/xbmc/pvr/PVRGUIInfo.h
++++ b/xbmc/pvr/PVRGUIInfo.h
+@@ -121,9 +121,6 @@ namespace PVR
+     void CharInfoNextTimer(std::string &strValue) const;
+     void CharInfoBackendNumber(std::string &strValue) const;
+     void CharInfoTotalDiskSpace(std::string &strValue) const;
+-    void CharInfoVideoBR(std::string &strValue) const;
+-    void CharInfoAudioBR(std::string &strValue) const;
+-    void CharInfoDolbyBR(std::string &strValue) const;
+     void CharInfoSignal(std::string &strValue) const;
+     void CharInfoSNR(std::string &strValue) const;
+     void CharInfoBER(std::string &strValue) const;
+diff --git a/xbmc/pvr/PVRManager.cpp b/xbmc/pvr/PVRManager.cpp
+index 2e1ebb3..9ab92dc 100644
+--- a/xbmc/pvr/PVRManager.cpp
++++ b/xbmc/pvr/PVRManager.cpp
+@@ -56,6 +56,7 @@
+ #include "settings/MediaSettings.h"
+ #include "settings/Settings.h"
+ #include "threads/SingleLock.h"
++#include "threads/SystemClock.h"
+ #include "Util.h"
+ #include "utils/JobManager.h"
+ #include "utils/log.h"
+@@ -174,6 +175,10 @@ void CPVRManager::OnSettingChanged(const CSetting *setting)
+         ((CSettingBool*)setting)->SetValue(false);
+     }
+   }
++  else if(settingId == CSettings::SETTING_EPG_DAYSTODISPLAY)
++  {
++    m_addons->SetEPGTimeFrame(static_cast<const CSettingInt*>(setting)->GetValue());
++  }
+ }
+ 
+ void CPVRManager::OnSettingAction(const CSetting *setting)
+@@ -334,12 +339,11 @@ bool CPVRManager::UpgradeOutdatedAddons(void)
+   SetState(ManagerStateStarting);
+   ResetProperties();
+ 
+-  while (!Load() && IsInitialising())
++  const unsigned int MAX_PROGRESS_DISPLAY_TIME = 30000; // 30 secs
++  XbmcThreads::EndTime progressTimeout(MAX_PROGRESS_DISPLAY_TIME);
++  while (!Load(!progressTimeout.IsTimePast()) && IsInitialising())
+   {
+     CLog::Log(LOGERROR, "PVRManager - %s - failed to load PVR data, retrying", __FUNCTION__);
+-    if (m_guiInfo) m_guiInfo->Stop();
+-    if (m_addons) m_addons->Stop();
+-    Cleanup();
+     Sleep(1000);
+   }
+ 
+@@ -513,12 +517,10 @@ void CPVRManager::Process(void)
+   g_EpgContainer.Stop();
+ 
+   /* load the pvr data from the db and clients if it's not already loaded */
+-  while (!Load() && IsInitialising())
++  XbmcThreads::EndTime progressTimeout(30000); // 30 secs
++  while (!Load(!progressTimeout.IsTimePast()) && IsInitialising())
+   {
+     CLog::Log(LOGERROR, "PVRManager - %s - failed to load PVR data, retrying", __FUNCTION__);
+-    if (m_guiInfo) m_guiInfo->Stop();
+-    if (m_addons) m_addons->Stop();
+-    Cleanup();
+     Sleep(1000);
+   }
+ 
+@@ -629,8 +631,11 @@ void CPVRManager::StopUpdateThreads(void)
+     m_addons->Stop();
+ }
+ 
+-bool CPVRManager::Load(void)
++bool CPVRManager::Load(bool bShowProgress)
+ {
++  if (!bShowProgress)
++    HideProgressDialog();
++
+   /* start the add-on update thread */
+   if (m_addons)
+     m_addons->Start();
+@@ -654,27 +659,32 @@ bool CPVRManager::Load(void)
+   }
+ 
+   /* load all channels and groups */
+-  ShowProgressDialog(g_localizeStrings.Get(19236), 0); // Loading channels from clients
++  if (bShowProgress)
++    ShowProgressDialog(g_localizeStrings.Get(19236), 0); // Loading channels from clients
+   if (!m_channelGroups->Load() || !IsInitialising())
+     return false;
+ 
+   /* get timers from the backends */
+-  ShowProgressDialog(g_localizeStrings.Get(19237), 50); // Loading timers from clients
++  if (bShowProgress)
++    ShowProgressDialog(g_localizeStrings.Get(19237), 50); // Loading timers from clients
+   m_timers->Load();
+ 
+   /* get recordings from the backend */
+-  ShowProgressDialog(g_localizeStrings.Get(19238), 75); // Loading recordings from clients
++  if (bShowProgress)
++    ShowProgressDialog(g_localizeStrings.Get(19238), 75); // Loading recordings from clients
+   m_recordings->Load();
+ 
+   if (!IsInitialising())
+     return false;
+ 
+   /* start the other pvr related update threads */
+-  ShowProgressDialog(g_localizeStrings.Get(19239), 85); // Starting background threads
++  if (bShowProgress)
++    ShowProgressDialog(g_localizeStrings.Get(19239), 85); // Starting background threads
+   m_guiInfo->Start();
+ 
+   /* close the progess dialog */
+-  HideProgressDialog();
++  if (bShowProgress)
++    HideProgressDialog();
+ 
+   return true;
+ }
+diff --git a/xbmc/pvr/PVRManager.h b/xbmc/pvr/PVRManager.h
+index 0239abd..5aeba08 100644
+--- a/xbmc/pvr/PVRManager.h
++++ b/xbmc/pvr/PVRManager.h
+@@ -596,9 +596,10 @@ namespace PVR
+     /*!
+      * @brief Load at least one client and load all other PVR data after loading the client.
+      * If some clients failed to load here, the pvrmanager will retry to load them every second.
++     * @param bShowProgress True, to show a progress dialog for the different load stages.
+      * @return If at least one client and all pvr data was loaded, false otherwise.
+      */
+-    bool Load(void);
++    bool Load(bool bShowProgress);
+ 
+     /*!
+      * @brief Reset all properties.
+diff --git a/xbmc/pvr/addons/PVRClient.cpp b/xbmc/pvr/addons/PVRClient.cpp
+index a41ba7b..25e692b 100644
+--- a/xbmc/pvr/addons/PVRClient.cpp
++++ b/xbmc/pvr/addons/PVRClient.cpp
+@@ -151,6 +151,7 @@ void CPVRClient::ResetProperties(int iClientId /* = PVR_INVALID_CLIENT_ID */)
+   m_menuhooks.clear();
+   m_timertypes.clear();
+   m_bReadyToUse           = false;
++  m_connectionState       = PVR_CONNECTION_STATE_UNKNOWN;
+   m_iClientId             = iClientId;
+   m_strBackendVersion     = DEFAULT_INFO_STRING_VALUE;
+   m_strConnectionString   = DEFAULT_INFO_STRING_VALUE;
+@@ -184,6 +185,8 @@ ADDON_STATUS CPVRClient::Create(int iClientId)
+ 
+   m_bReadyToUse = bReadyToUse;
+ 
++  SetEPGTimeFrame(CSettings::GetInstance().GetInt(CSettings::SETTING_EPG_DAYSTODISPLAY));
++
+   return status;
+ }
+ 
+@@ -226,6 +229,20 @@ bool CPVRClient::ReadyToUse(void) const
+   return m_bReadyToUse;
+ }
+ 
++void CPVRClient::SetConnectionState(PVR_CONNECTION_STATE state)
++{
++  if (m_connectionState != state)
++  {
++    m_connectionState = state;
++
++    if (state == PVR_CONNECTION_STATE_CONNECTED)
++    {
++      CLog::Log(LOGDEBUG, "PVRClient - %s - refetching addon properties", __FUNCTION__);
++      GetAddonProperties();
++    }
++  }
++}
++
+ int CPVRClient::GetID(void) const
+ {
+   return m_iClientId;
+@@ -314,8 +331,8 @@ void CPVRClient::WriteClientTimerInfo(const CPVRTimerInfoTag &xbmcTimer, PVR_TIM
+   strncpy(addonTimer.strSummary, xbmcTimer.m_strSummary.c_str(), sizeof(addonTimer.strSummary) - 1);
+   addonTimer.iMarginStart              = xbmcTimer.m_iMarginStart;
+   addonTimer.iMarginEnd                = xbmcTimer.m_iMarginEnd;
+-  addonTimer.iGenreType                = xbmcTimer.m_iGenreType;
+-  addonTimer.iGenreSubType             = xbmcTimer.m_iGenreSubType;
++  addonTimer.iGenreType                = epgTag ? epgTag->GenreType() : 0;
++  addonTimer.iGenreSubType             = epgTag ? epgTag->GenreSubType() : 0;
+ }
+ 
+ /*!
+@@ -374,7 +391,8 @@ bool CPVRClient::CheckAPIVersion(void)
+   try { guiVersion = AddonVersion(m_pStruct->GetGUIAPIVersion()); }
+   catch (std::exception &e) { LogException(e, "GetGUIAPIVersion()"); return false;  }
+ 
+-  if (!IsCompatibleGUIAPIVersion(minVersion, guiVersion))
++  /* Only do the check, if add-on depends on GUI API. */
++  if (!guiVersion.empty() && !IsCompatibleGUIAPIVersion(minVersion, guiVersion))
+   {
+     CLog::Log(LOGERROR, "PVR - Add-on '%s' is using an incompatible GUI API version. XBMC minimum GUI API version = '%s', add-on GUI API version '%s'", Name().c_str(), minVersion.asString().c_str(), guiVersion.asString().c_str());
+     return false;
+@@ -782,6 +800,29 @@ PVR_ERROR CPVRClient::GetEPGForChannel(const CPVRChannelPtr &channel, CEpg *epg,
+   return retVal;
+ }
+ 
++PVR_ERROR CPVRClient::SetEPGTimeFrame(int iDays)
++{
++  if (!m_bReadyToUse)
++    return PVR_ERROR_SERVER_ERROR;
++
++  if (!m_addonCapabilities.bSupportsEPG)
++    return PVR_ERROR_NOT_IMPLEMENTED;
++
++  PVR_ERROR retVal(PVR_ERROR_UNKNOWN);
++  try
++  {
++    retVal = m_pStruct->SetEPGTimeFrame(iDays);
++
++    LogError(retVal, __FUNCTION__);
++  }
++  catch (std::exception &e)
++  {
++    LogException(e, __FUNCTION__);
++  }
++
++  return retVal;
++}
++
+ int CPVRClient::GetChannelGroupsAmount(void)
+ {
+   int iReturn(-EINVAL);
+@@ -1376,16 +1417,6 @@ int64_t CPVRClient::GetStreamLength(void)
+   return -EINVAL;
+ }
+ 
+-int CPVRClient::GetCurrentClientChannel(void)
+-{
+-  if (IsPlayingLiveStream())
+-  {
+-    try { return m_pStruct->GetCurrentClientChannel(); }
+-    catch (std::exception &e) { LogException(e, __FUNCTION__); }
+-  }
+-  return -EINVAL;
+-}
+-
+ bool CPVRClient::SwitchChannel(const CPVRChannelPtr &channel)
+ {
+   bool bSwitched(false);
+diff --git a/xbmc/pvr/addons/PVRClient.h b/xbmc/pvr/addons/PVRClient.h
+index 889a98e..9d9e27f 100644
+--- a/xbmc/pvr/addons/PVRClient.h
++++ b/xbmc/pvr/addons/PVRClient.h
+@@ -98,11 +98,23 @@ namespace PVR
+     void ReCreate(void);
+ 
+     /*!
+-     * @return True if this instance is initialised, false otherwise.
++     * @return True if this instance is initialised (ADDON_Create returned true), false otherwise.
+      */
+     bool ReadyToUse(void) const;
+ 
+     /*!
++     * @brief Gets the backend connection state.
++     * @return the backend connection state.
++     */
++    PVR_CONNECTION_STATE GetConnectionState(void) const { return m_connectionState; }
++
++    /*!
++     * @brief Sets the backend connection state.
++     * @param state the new backend connection state.
++     */
++    void SetConnectionState(PVR_CONNECTION_STATE state);
++
++    /*!
+      * @return The ID of this instance.
+      */
+     int GetID(void) const;
+@@ -223,6 +235,15 @@ namespace PVR
+      */
+     PVR_ERROR GetEPGForChannel(const CPVRChannelPtr &channel, EPG::CEpg *epg, time_t start = 0, time_t end = 0, bool bSaveInDb = false);
+ 
++    /*!
++     * Tell the client the time frame to use when notifying epg events back to Kodi. The client might push epg events asynchronously
++     * to Kodi using the callback function EpgEventStateChange. To be able to only push events that are actually of interest for Kodi,
++     * client needs to know about the epg time frame Kodi uses.
++     * @param iDays number of days from "now". EPG_TIMEFRAME_UNLIMITED means that Kodi is interested in all epg events, regardless of event times.
++     * @return PVR_ERROR_NO_ERROR if new value was successfully set.
++     */
++    PVR_ERROR SetEPGTimeFrame(int iDays);
++
+     //@}
+     /** @name PVR channel group methods */
+     //@{
+@@ -440,11 +461,6 @@ namespace PVR
+     void PauseStream(bool bPaused);
+ 
+     /*!
+-     * @return The channel number on the server of the live stream that's currently being read.
+-     */
+-    int GetCurrentClientChannel(void);
+-
+-    /*!
+      * @brief Switch to another channel. Only to be called when a live stream has already been opened.
+      * @param channel The channel to switch to.
+      * @return True if the switch was successful, false otherwise.
+@@ -666,7 +682,8 @@ namespace PVR
+     bool LogError(const PVR_ERROR error, const char *strMethod) const;
+     void LogException(const std::exception &e, const char *strFunctionName) const;
+ 
+-    bool                   m_bReadyToUse;          /*!< true if this add-on is connected to the backend, false otherwise */
++    bool                   m_bReadyToUse;          /*!< true if this add-on is initialised (ADDON_Create returned true), false otherwise */
++    PVR_CONNECTION_STATE   m_connectionState;      /*!< the backend connection state */
+     PVR_MENUHOOKS          m_menuhooks;            /*!< the menu hooks for this add-on */
+     CPVRTimerTypes         m_timertypes;           /*!< timer types supported by this backend */
+     int                    m_iClientId;            /*!< database ID of the client */
+diff --git a/xbmc/pvr/addons/PVRClients.cpp b/xbmc/pvr/addons/PVRClients.cpp
+index df1f96a..54c0d4b 100644
+--- a/xbmc/pvr/addons/PVRClients.cpp
++++ b/xbmc/pvr/addons/PVRClients.cpp
+@@ -795,6 +795,26 @@ PVR_ERROR CPVRClients::GetEPGForChannel(const CPVRChannelPtr &channel, CEpg *epg
+   return error;
+ }
+ 
++PVR_ERROR CPVRClients::SetEPGTimeFrame(int iDays)
++{
++  PVR_ERROR error(PVR_ERROR_NO_ERROR);
++  PVR_CLIENTMAP clients;
++  GetConnectedClients(clients);
++
++  for (const auto &client : clients)
++  {
++    PVR_ERROR currentError = client.second->SetEPGTimeFrame(iDays);
++    if (currentError != PVR_ERROR_NOT_IMPLEMENTED &&
++        currentError != PVR_ERROR_NO_ERROR)
++    {
++      error = currentError;
++      CLog::Log(LOGERROR, "PVR - %s - cannot set epg time frame for client '%d': %s",__FUNCTION__, client.first, CPVRClient::ToString(error));
++    }
++  }
++
++  return error;
++}
++
+ PVR_ERROR CPVRClients::GetChannels(CPVRChannelGroupInternal *group)
+ {
+   PVR_ERROR error(PVR_ERROR_NO_ERROR);
+diff --git a/xbmc/pvr/addons/PVRClients.h b/xbmc/pvr/addons/PVRClients.h
+index 971f3a9..d6cf98a 100644
+--- a/xbmc/pvr/addons/PVRClients.h
++++ b/xbmc/pvr/addons/PVRClients.h
+@@ -531,6 +531,15 @@ namespace PVR
+      */
+     PVR_ERROR GetEPGForChannel(const CPVRChannelPtr &channel, EPG::CEpg *epg, time_t start, time_t end);
+ 
++    /*!
++     * Tell the client the time frame to use when notifying epg events back to Kodi. The client might push epg events asynchronously
++     * to Kodi using the callback function EpgEventStateChange. To be able to only push events that are actually of interest for Kodi,
++     * client needs to know about the epg time frame Kodi uses.
++     * @param iDays number of days from "now". EPG_TIMEFRAME_UNLIMITED means that Kodi is interested in all epg events, regardless of event times.
++     * @return PVR_ERROR_NO_ERROR if new value was successfully set.
++     */
++    PVR_ERROR SetEPGTimeFrame(int iDays);
++
+     //@}
+ 
+     /*! @name Channel methods */
+diff --git a/xbmc/pvr/channels/PVRChannel.h b/xbmc/pvr/channels/PVRChannel.h
+index 5db1631..8edd3dd 100644
+--- a/xbmc/pvr/channels/PVRChannel.h
++++ b/xbmc/pvr/channels/PVRChannel.h
+@@ -28,8 +28,6 @@
+ #include "utils/ISerializable.h"
+ #include "utils/Observer.h"
+ 
+-#define PVR_INVALID_CHANNEL_UID -1
+-
+ class CVariant;
+ 
+ namespace EPG
+diff --git a/xbmc/pvr/dialogs/GUIDialogPVRTimerSettings.cpp b/xbmc/pvr/dialogs/GUIDialogPVRTimerSettings.cpp
+index 6ff7ce4..541300c 100644
+--- a/xbmc/pvr/dialogs/GUIDialogPVRTimerSettings.cpp
++++ b/xbmc/pvr/dialogs/GUIDialogPVRTimerSettings.cpp
+@@ -152,7 +152,7 @@ void CGUIDialogPVRTimerSettings::SetTimer(CFileItem *item)
+   // Channel
+   m_channel = ChannelDescriptor();
+ 
+-  if (m_timerInfoTag->m_iClientChannelUid == PVR_INVALID_CHANNEL_UID)
++  if (m_timerInfoTag->m_iClientChannelUid == PVR_CHANNEL_INVALID_UID)
+   {
+     bool bChannelSet(false);
+     if (m_timerType && m_timerType->IsRepeatingEpgBased())
+@@ -170,7 +170,7 @@ void CGUIDialogPVRTimerSettings::SetTimer(CFileItem *item)
+       // Select first real (not "Any channel") entry.
+       for (const auto &channel : m_channelEntries)
+       {
+-        if (channel.second.channelUid != PVR_INVALID_CHANNEL_UID)
++        if (channel.second.channelUid != PVR_CHANNEL_INVALID_UID)
+         {
+           m_channel = channel.second;
+           bChannelSet = true;
+@@ -180,7 +180,7 @@ void CGUIDialogPVRTimerSettings::SetTimer(CFileItem *item)
+     }
+ 
+     if (!bChannelSet)
+-      CLog::Log(LOGERROR, "CGUIDialogPVRTimerSettings::SetTimer - Unable to map PVR_INVALID_CHANNEL_UID to channel entry!");
++      CLog::Log(LOGERROR, "CGUIDialogPVRTimerSettings::SetTimer - Unable to map PVR_CHANNEL_INVALID_UID to channel entry!");
+   }
+   else
+   {
+@@ -773,7 +773,7 @@ void CGUIDialogPVRTimerSettings::InitializeChannelsList()
+   // Add special "any channel" entry (used for epg-based repeating timers).
+   m_channelEntries.insert(
+     std::make_pair(
+-      ENTRY_ANY_CHANNEL, ChannelDescriptor(PVR_INVALID_CHANNEL_UID, 0, g_localizeStrings.Get(809))));
++      ENTRY_ANY_CHANNEL, ChannelDescriptor(PVR_CHANNEL_INVALID_UID, 0, g_localizeStrings.Get(809))));
+ }
+ 
+ void CGUIDialogPVRTimerSettings::TypesFiller(
+diff --git a/xbmc/pvr/dialogs/GUIDialogPVRTimerSettings.h b/xbmc/pvr/dialogs/GUIDialogPVRTimerSettings.h
+index 53eea7e..ad4b67a 100644
+--- a/xbmc/pvr/dialogs/GUIDialogPVRTimerSettings.h
++++ b/xbmc/pvr/dialogs/GUIDialogPVRTimerSettings.h
+@@ -19,7 +19,7 @@
+  *
+  */
+ 
+-#include "pvr/channels/PVRChannel.h" // PVR_INVALID_CHANNEL_UID
++#include "pvr/channels/PVRChannel.h" // PVR_CHANNEL_INVALID_UID
+ #include "settings/dialogs/GUIDialogSettingsManualBase.h"
+ 
+ #include <map>
+@@ -120,7 +120,7 @@ namespace PVR
+       int         clientId;
+       std::string description;
+ 
+-      ChannelDescriptor(int _channelUid = PVR_INVALID_CHANNEL_UID,
++      ChannelDescriptor(int _channelUid = PVR_CHANNEL_INVALID_UID,
+                         int _clientId   = -1,
+                         const std::string& _description = "")
+       : channelUid(_channelUid),
+diff --git a/xbmc/pvr/recordings/PVRRecording.cpp b/xbmc/pvr/recordings/PVRRecording.cpp
+index b25da21..c90f7cb 100644
+--- a/xbmc/pvr/recordings/PVRRecording.cpp
++++ b/xbmc/pvr/recordings/PVRRecording.cpp
+@@ -29,6 +29,7 @@
+ 
+ #include "pvr/PVRManager.h"
+ #include "pvr/addons/PVRClients.h"
++#include "pvr/channels/PVRChannelGroupsContainer.h"
+ 
+ #include "PVRRecording.h"
+ 
+@@ -112,6 +113,7 @@ CPVRRecording::CPVRRecording(const PVR_RECORDING &recording, unsigned int iClien
+   m_strFanartPath                  = recording.strFanartPath;
+   m_bIsDeleted                     = recording.bIsDeleted;
+   m_iEpgEventId                    = recording.iEpgEventId;
++  m_iChannelUid                    = recording.iChannelUid;
+ }
+ 
+ bool CPVRRecording::operator ==(const CPVRRecording& right) const
+@@ -139,7 +141,8 @@ bool CPVRRecording::operator ==(const CPVRRecording& right) const
+        m_strFanartPath      == right.m_strFanartPath &&
+        m_iRecordingId       == right.m_iRecordingId &&
+        m_bIsDeleted         == right.m_bIsDeleted &&
+-       m_iEpgEventId        == right.m_iEpgEventId);
++       m_iEpgEventId        == right.m_iEpgEventId &&
++       m_iChannelUid        == right.m_iChannelUid);
+ }
+ 
+ bool CPVRRecording::operator !=(const CPVRRecording& right) const
+@@ -162,6 +165,7 @@ void CPVRRecording::Serialize(CVariant& value) const
+   value["recordingid"] = m_iRecordingId;
+   value["deleted"] = m_bIsDeleted;
+   value["epgevent"] = m_iEpgEventId;
++  value["channeluid"] = m_iChannelUid;
+ 
+   if (!value.isMember("art"))
+     value["art"] = CVariant(CVariant::VariantTypeObject);
+@@ -187,9 +191,10 @@ void CPVRRecording::Reset(void)
+   m_bGotMetaData       = false;
+   m_iRecordingId       = 0;
+   m_bIsDeleted         = false;
+-  m_iEpgEventId        = 0;
++  m_iEpgEventId        = EPG_TAG_INVALID_UID;
+   m_iSeason            = -1;
+   m_iEpisode           = -1;
++  m_iChannelUid        = PVR_CHANNEL_INVALID_UID;
+ 
+   m_recordingTime.Reset();
+   CVideoInfoTag::Reset();
+@@ -217,9 +222,16 @@ bool CPVRRecording::Delete(void)
+ 
+ void CPVRRecording::OnDelete(void)
+ {
+-  EPG::CEpgInfoTagPtr epgTag = EPG::CEpgContainer::GetInstance().GetTagById(EpgEvent());
+-  if (epgTag)
+-    epgTag->ClearRecording();
++  if (m_iEpgEventId != EPG_TAG_INVALID_UID)
++  {
++    const CPVRChannelPtr channel(Channel());
++    if (channel)
++    {
++      const EPG::CEpgInfoTagPtr epgTag(EPG::CEpgContainer::GetInstance().GetTagById(channel, m_iEpgEventId));
++      if (epgTag)
++        epgTag->ClearRecording();
++    }
++  }
+ }
+ 
+ bool CPVRRecording::Undelete(void)
+@@ -361,6 +373,7 @@ void CPVRRecording::Update(const CPVRRecording &tag)
+   m_strFanartPath     = tag.m_strFanartPath;
+   m_bIsDeleted        = tag.m_bIsDeleted;
+   m_iEpgEventId       = tag.m_iEpgEventId;
++  m_iChannelUid       = tag.m_iChannelUid;
+ 
+   if (g_PVRClients->SupportsRecordingPlayCount(m_iClientId))
+     m_playCount       = tag.m_playCount;
+@@ -466,21 +479,22 @@ void CPVRRecording::CopyClientInfo(CVideoInfoTag *target) const
+ 
+ CPVRChannelPtr CPVRRecording::Channel(void) const
+ {
+-  if (m_iEpgEventId)
+-  {
+-    EPG::CEpgInfoTagPtr epgTag = EPG::CEpgContainer::GetInstance().GetTagById(m_iEpgEventId);
+-    if (epgTag)
+-      return epgTag->ChannelTag();
+-  }
++  if (m_iChannelUid != PVR_CHANNEL_INVALID_UID)
++    return g_PVRChannelGroups->GetByUniqueID(m_iChannelUid, m_iClientId);
++
+   return CPVRChannelPtr();
+ }
+ 
+ bool CPVRRecording::IsBeingRecorded(void) const
+ {
+-  if (m_iEpgEventId)
++  if (m_iEpgEventId != EPG_TAG_INVALID_UID)
+   {
+-    EPG::CEpgInfoTagPtr epgTag = EPG::CEpgContainer::GetInstance().GetTagById(m_iEpgEventId);
+-    return epgTag ? epgTag->HasRecording() : false;
++    const CPVRChannelPtr channel(Channel());
++    if (channel)
++    {
++      const EPG::CEpgInfoTagPtr epgTag(EPG::CEpgContainer::GetInstance().GetTagById(channel, m_iEpgEventId));
++      return epgTag ? epgTag->HasRecording() : false;
++    }
+   }
+   return false;
+ }
+diff --git a/xbmc/pvr/recordings/PVRRecording.h b/xbmc/pvr/recordings/PVRRecording.h
+index 14e88ec..054f1ad 100644
+--- a/xbmc/pvr/recordings/PVRRecording.h
++++ b/xbmc/pvr/recordings/PVRRecording.h
+@@ -207,19 +207,24 @@ namespace PVR
+     bool IsDeleted() const { return m_bIsDeleted; }
+ 
+     /*!
+-     * @return Broadcast id of the EPG event associated with this recording
++     * @return Broadcast id of the EPG event associated with this recording or EPG_TAG_INVALID_UID
+      */
+-    unsigned int EpgEvent(void) const { return m_iEpgEventId; }
++    unsigned int BroadcastUid(void) const { return m_iEpgEventId; }
++
++    /*!
++     * @return channel id associated with this recording or PVR_CHANNEL_INVALID_UID
++     */
++    int ChannelUid(void) const { return m_iChannelUid; }
+ 
+     /*!
+      * @return Get the channel on which this recording is/was running
+-     * @note Only works if the recording has an EPG id provided by the add-on
++     * @note Only works if the recording has a channel uid provided by the add-on
+      */
+     CPVRChannelPtr Channel(void) const;
+ 
+     /*!
+      * @return True while the recording is running
+-     * @note Only works if the recording has an EPG id provided by the add-on
++     * @note Only works if the recording has a channel uid and an EPG id provided by the add-on
+      */
+     bool IsBeingRecorded(void) const;
+ 
+@@ -234,6 +239,7 @@ namespace PVR
+     bool         m_bGotMetaData;
+     bool         m_bIsDeleted;    /*!< set if entry is a deleted recording which can be undelete */
+     unsigned int m_iEpgEventId;   /*!< epg broadcast id associated with this recording */
++    int          m_iChannelUid;   /*!< channel uid associated with this recording */
+ 
+     void UpdatePath(void);
+     void DisplayError(PVR_ERROR err) const;
+diff --git a/xbmc/pvr/recordings/PVRRecordings.cpp b/xbmc/pvr/recordings/PVRRecordings.cpp
+index 5288a34..9f42a25 100644
+--- a/xbmc/pvr/recordings/PVRRecordings.cpp
++++ b/xbmc/pvr/recordings/PVRRecordings.cpp
+@@ -500,11 +500,15 @@ void CPVRRecordings::UpdateFromClient(const CPVRRecordingPtr &tag)
+   {
+     newTag = CPVRRecordingPtr(new CPVRRecording);
+     newTag->Update(*tag);
+-    if (newTag->EpgEvent() > 0)
++    if (newTag->BroadcastUid() != EPG_TAG_INVALID_UID)
+     {
+-      EPG::CEpgInfoTagPtr epgTag = EPG::CEpgContainer::GetInstance().GetTagById(newTag->EpgEvent());
+-      if (epgTag)
+-        epgTag->SetRecording(newTag);
++      const CPVRChannelPtr channel(newTag->Channel());
++      if (channel)
++      {
++        const EPG::CEpgInfoTagPtr epgTag = EPG::CEpgContainer::GetInstance().GetTagById(channel, newTag->BroadcastUid());
++        if (epgTag)
++          epgTag->SetRecording(newTag);
++      }
+     }
+     newTag->m_iRecordingId = ++m_iLastId;
+     m_recordings.insert(std::make_pair(CPVRRecordingUid(newTag->m_iClientId, newTag->m_strRecordingId), newTag));
+@@ -515,14 +519,19 @@ void CPVRRecordings::UpdateEpgTags(void)
+ {
+   CSingleLock lock(m_critSection);
+   unsigned int iEpgEvent;
++  CPVRChannelPtr channel;
+   for (PVR_RECORDINGMAP_ITR it = m_recordings.begin(); it != m_recordings.end(); ++it)
+   {
+-    iEpgEvent = it->second->EpgEvent();
+-    if (iEpgEvent > 0 && !it->second->IsDeleted())
++    iEpgEvent = it->second->BroadcastUid();
++    if (iEpgEvent != EPG_TAG_INVALID_UID && !it->second->IsDeleted())
+     {
+-      EPG::CEpgInfoTagPtr epgTag = EPG::CEpgContainer::GetInstance().GetTagById(iEpgEvent);
+-      if (epgTag)
+-        epgTag->SetRecording(it->second);
++      channel = it->second->Channel();
++      if (channel)
++      {
++        const EPG::CEpgInfoTagPtr epgTag = EPG::CEpgContainer::GetInstance().GetTagById(channel, iEpgEvent);
++        if (epgTag)
++          epgTag->SetRecording(it->second);
++      }
+     }
+   }
+ }
+diff --git a/xbmc/pvr/timers/PVRTimerInfoTag.cpp b/xbmc/pvr/timers/PVRTimerInfoTag.cpp
+index bf8df11..c631156 100644
+--- a/xbmc/pvr/timers/PVRTimerInfoTag.cpp
++++ b/xbmc/pvr/timers/PVRTimerInfoTag.cpp
+@@ -45,12 +45,13 @@ using KODI::MESSAGING::HELPERS::DialogResponse;
+ 
+ CPVRTimerInfoTag::CPVRTimerInfoTag(bool bRadio /* = false */) :
+   m_strTitle(g_localizeStrings.Get(19056)), // New Timer
+-  m_bFullTextEpgSearch(false)
++  m_bFullTextEpgSearch(false),
++  m_iEpgUid(EPG_TAG_INVALID_UID)
+ {
+   m_iClientId           = g_PVRClients->GetFirstConnectedClientID();
+   m_iClientIndex        = PVR_TIMER_NO_CLIENT_INDEX;
+   m_iParentClientIndex  = PVR_TIMER_NO_PARENT;
+-  m_iClientChannelUid   = PVR_INVALID_CHANNEL_UID;
++  m_iClientChannelUid   = PVR_CHANNEL_INVALID_UID;
+   m_iPriority           = CSettings::GetInstance().GetInt(CSettings::SETTING_PVRRECORD_DEFAULTPRIORITY);
+   m_iLifetime           = CSettings::GetInstance().GetInt(CSettings::SETTING_PVRRECORD_DEFAULTLIFETIME);
+   m_iMaxRecordings      = 0;
+@@ -60,8 +61,6 @@ CPVRTimerInfoTag::CPVRTimerInfoTag(bool bRadio /* = false */) :
+   m_bIsRadio            = bRadio;
+   m_iMarginStart        = CSettings::GetInstance().GetInt(CSettings::SETTING_PVRRECORD_MARGINSTART);
+   m_iMarginEnd          = CSettings::GetInstance().GetInt(CSettings::SETTING_PVRRECORD_MARGINEND);
+-  m_iGenreType          = 0;
+-  m_iGenreSubType       = 0;
+   m_StartTime           = CDateTime::GetUTCDateTime();
+   m_StopTime            = m_StartTime;
+   m_bStartAnyTime       = false;
+@@ -96,7 +95,8 @@ CPVRTimerInfoTag::CPVRTimerInfoTag(const PVR_TIMER &timer, const CPVRChannelPtr
+   m_strTitle(timer.strTitle),
+   m_strEpgSearchString(timer.strEpgSearchString),
+   m_bFullTextEpgSearch(timer.bFullTextEpgSearch),
+-  m_strDirectory(timer.strDirectory)
++  m_strDirectory(timer.strDirectory),
++  m_iEpgUid(timer.iEpgUid)
+ {
+   m_iClientId           = iClientId;
+   m_iClientIndex        = timer.iClientIndex;
+@@ -105,7 +105,7 @@ CPVRTimerInfoTag::CPVRTimerInfoTag(const PVR_TIMER &timer, const CPVRChannelPtr
+     CLog::Log(LOGERROR, "%s: invalid client index supplied by client %d (must be > 0)!", __FUNCTION__, m_iClientId);
+ 
+   m_iParentClientIndex  = timer.iParentClientIndex;
+-  m_iClientChannelUid   = channel ? channel->UniqueID() : (timer.iClientChannelUid > 0) ? timer.iClientChannelUid : PVR_INVALID_CHANNEL_UID;
++  m_iClientChannelUid   = channel ? channel->UniqueID() : (timer.iClientChannelUid > 0) ? timer.iClientChannelUid : PVR_CHANNEL_INVALID_UID;
+   m_iChannelNumber      = channel ? g_PVRChannelGroups->GetGroupAll(channel->IsRadio())->GetChannelNumber(channel) : 0;
+   m_StartTime           = timer.startTime + g_advancedSettings.m_iPVRTimeCorrection;
+   m_StopTime            = timer.endTime + g_advancedSettings.m_iPVRTimeCorrection;
+@@ -120,9 +120,6 @@ CPVRTimerInfoTag::CPVRTimerInfoTag(const PVR_TIMER &timer, const CPVRChannelPtr
+   m_iMaxRecordings      = timer.iMaxRecordings;
+   m_iMarginStart        = timer.iMarginStart;
+   m_iMarginEnd          = timer.iMarginEnd;
+-  m_genre               = StringUtils::Split(CEpg::ConvertGenreIdToString(timer.iGenreType, timer.iGenreSubType), g_advancedSettings.m_videoItemSeparator);
+-  m_iGenreType          = timer.iGenreType;
+-  m_iGenreSubType       = timer.iGenreSubType;
+   m_channel             = channel;
+   m_bIsRadio            = channel && channel->IsRadio();
+   m_state               = timer.state;
+@@ -169,6 +166,8 @@ CPVRTimerInfoTag::CPVRTimerInfoTag(const PVR_TIMER &timer, const CPVRChannelPtr
+ 
+     if (!m_timerType)
+       CLog::Log(LOGERROR, "%s: no timer type, although timers are supported by client %d!", __FUNCTION__, m_iClientId);
++    else if (m_iEpgUid == EPG_TAG_INVALID_UID && m_timerType->IsOnetimeEpgBased())
++      CLog::Log(LOGERROR, "%s: no epg tag given for epg based timer type (%d)!", __FUNCTION__, m_timerType->GetTypeId());
+   }
+ 
+   UpdateSummary();
+@@ -210,6 +209,7 @@ bool CPVRTimerInfoTag::operator ==(const CPVRTimerInfoTag& right) const
+           m_state               == right.m_state &&
+           m_timerType           == right.m_timerType &&
+           m_iTimerId            == right.m_iTimerId &&
++          m_iEpgUid             == right.m_iEpgUid &&
+           m_iActiveChildTimers  == right.m_iActiveChildTimers &&
+           m_bHasChildConflictNOK== right.m_bHasChildConflictNOK &&
+           m_bHasChildRecording  == right.m_bHasChildRecording &&
+@@ -327,6 +327,7 @@ void CPVRTimerInfoTag::Serialize(CVariant &value) const
+   value["fulltextepgsearch"] = m_bFullTextEpgSearch;
+   value["recordinggroup"]    = m_iRecordingGroup;
+   value["maxrecordings"]     = m_iMaxRecordings;
++  value["epguid"]            = m_iEpgUid;
+ }
+ 
+ int CPVRTimerInfoTag::Compare(const CPVRTimerInfoTag &timer) const
+@@ -623,10 +624,8 @@ bool CPVRTimerInfoTag::UpdateEntry(const CPVRTimerInfoTagPtr &tag)
+   m_bIsRadio            = tag->m_bIsRadio;
+   m_iMarginStart        = tag->m_iMarginStart;
+   m_iMarginEnd          = tag->m_iMarginEnd;
++  m_iEpgUid             = tag->m_iEpgUid;
+   m_epgTag              = tag->m_epgTag;
+-  m_genre               = tag->m_genre;
+-  m_iGenreType          = tag->m_iGenreType;
+-  m_iGenreSubType       = tag->m_iGenreSubType;
+   m_strSummary          = tag->m_strSummary;
+ 
+   SetTimerType(tag->m_timerType);
+@@ -701,16 +700,6 @@ void CPVRTimerInfoTag::DisplayError(PVR_ERROR err) const
+     CGUIDialogOK::ShowAndGetInput(CVariant{19033}, CVariant{19110}); /* print info dialog "Unknown error!" */
+ }
+ 
+-void CPVRTimerInfoTag::SetEpgInfoTag(CEpgInfoTagPtr &tag)
+-{
+-  CSingleLock lock(m_critSection);
+-  if (tag && *m_epgTag != *tag)
+-    CLog::Log(LOGINFO, "CPVRTimerInfoTag: timer %s set to epg event %s", m_strTitle.c_str(), tag->Title().c_str());
+-  else if (!tag && m_epgTag)
+-    CLog::Log(LOGINFO, "CPVRTimerInfoTag: timer %s set to no epg event", m_strTitle.c_str());
+-  m_epgTag = tag;
+-}
+-
+ int CPVRTimerInfoTag::ChannelNumber() const
+ {
+   CPVRChannelPtr channeltag = ChannelTag();
+@@ -780,9 +769,8 @@ CPVRTimerInfoTagPtr CPVRTimerInfoTag::CreateFromEpg(const CEpgInfoTagPtr &tag, b
+   newTag->m_iClientChannelUid  = channel->UniqueID();
+   newTag->m_iClientId          = channel->ClientID();
+   newTag->m_bIsRadio           = channel->IsRadio();
+-  newTag->m_iGenreType         = tag->GenreType();
+-  newTag->m_iGenreSubType      = tag->GenreSubType();
+   newTag->m_channel            = channel;
++  newTag->m_iEpgUid            = tag->UniqueBroadcastID();
+   newTag->SetStartFromUTC(newStart);
+   newTag->SetEndFromUTC(newEnd);
+ 
+@@ -809,7 +797,6 @@ CPVRTimerInfoTagPtr CPVRTimerInfoTag::CreateFromEpg(const CEpgInfoTagPtr &tag, b
+ 
+   newTag->SetTimerType(timerType);
+   newTag->UpdateSummary();
+-  newTag->m_epgTag = g_EpgContainer.GetById(tag->EpgID())->GetTag(tag->StartAsUTC());
+ 
+   /* unused only for reference */
+   newTag->m_strFileNameAndPath = CPVRTimersPath::PATH_NEW;
+@@ -921,16 +908,51 @@ std::string CPVRTimerInfoTag::GetDeletedNotificationText() const
+ 
+ CEpgInfoTagPtr CPVRTimerInfoTag::GetEpgInfoTag(void) const
+ {
++  return GetEpgInfoTag(true);
++}
++
++CEpgInfoTagPtr CPVRTimerInfoTag::GetEpgInfoTag(bool bSetTimer) const
++{
++  CSingleLock lock(m_critSection);
++  if (!m_epgTag)
++  {
++    const CPVRChannelPtr channel(g_PVRChannelGroups->GetByUniqueID(m_iClientChannelUid, m_iClientId));
++    if (channel)
++    {
++      const CEpgPtr epg(channel->GetEPG());
++      if (epg)
++      {
++        if (m_iEpgUid != EPG_TAG_INVALID_UID)
++        {
++          m_epgTag = epg->GetTagByBroadcastId(m_iEpgUid);
++        }
++        else if (!m_bStartAnyTime && !m_bEndAnyTime)
++        {
++          // if no epg uid present, try to find a tag according to timer's start/end time
++          m_epgTag = epg->GetTagBetween(StartAsUTC() - CDateTimeSpan(0, 0, 2, 0), EndAsUTC() + CDateTimeSpan(0, 0, 2, 0));
++        }
++
++        if (m_epgTag && bSetTimer)
++          m_epgTag->SetTimer(m_iTimerId);
++      }
++    }
++  }
++
+   return m_epgTag;
+ }
+ 
+ bool CPVRTimerInfoTag::HasEpgInfoTag(void) const
+ {
+-  return m_epgTag != NULL;
++  CSingleLock lock(m_critSection);
++  GetEpgInfoTag();
++  return m_epgTag.get() != NULL;
+ }
+ 
+ bool CPVRTimerInfoTag::HasSeriesEpgInfoTag(void) const
+ {
++  CSingleLock lock(m_critSection);
++  GetEpgInfoTag();
++
+   if (m_epgTag &&
+       (m_epgTag->IsSeries() ||
+        m_epgTag->SeriesNumber() > 0 ||
+@@ -946,11 +968,14 @@ void CPVRTimerInfoTag::ClearEpgTag(void)
+   CEpgInfoTagPtr deletedTag;
+ 
+   {
++    // important: do not just check for m_epgtag here, but do actually obtain it.
++    // epg tag may have 'this' set as timer. we need to clear the timer explicitely.
++    // otherwise epg tags with dangling timers will float around until kodi restart.
++
+     CSingleLock lock(m_critSection);
+-    deletedTag = m_epgTag;
++    deletedTag = GetEpgInfoTag(false); // get the tag, but do not set 'this' as timer at the tag, otherwise stack overflow ;-)
+ 
+-    CEpgInfoTagPtr emptyTag;
+-    m_epgTag = emptyTag;
++    m_epgTag.reset();
+   }
+ 
+   if (deletedTag)
+diff --git a/xbmc/pvr/timers/PVRTimerInfoTag.h b/xbmc/pvr/timers/PVRTimerInfoTag.h
+index bb2da18..6c04fbc 100644
+--- a/xbmc/pvr/timers/PVRTimerInfoTag.h
++++ b/xbmc/pvr/timers/PVRTimerInfoTag.h
+@@ -98,7 +98,12 @@ namespace PVR
+     bool SetDuration(int iDuration);
+ 
+     static CPVRTimerInfoTagPtr CreateFromEpg(const EPG::CEpgInfoTagPtr &tag, bool bRepeating = false);
++
++    /*!
++     * @return Return corresponding epg info tag, NULL otherwise
++     */
+     EPG::CEpgInfoTagPtr GetEpgInfoTag(void) const;
++
+     /*!
+      * @return True if this timer has a corresponding epg info tag, false otherwise
+      */
+@@ -225,7 +230,6 @@ namespace PVR
+     bool RenameOnClient(const std::string &strNewName);
+     bool UpdateOnClient();
+ 
+-    void SetEpgInfoTag(EPG::CEpgInfoTagPtr &tag);
+     void ClearEpgTag(void);
+ 
+     void UpdateChannel(void);
+@@ -271,15 +275,13 @@ namespace PVR
+     CPVRChannelPtr        m_channel;
+     unsigned int          m_iMarginStart;        /*!< @brief (optional) if set, the backend starts the recording iMarginStart minutes before startTime. */
+     unsigned int          m_iMarginEnd;          /*!< @brief (optional) if set, the backend ends the recording iMarginEnd minutes after endTime. */
+-    std::vector<std::string> m_genre;            /*!< @brief genre of the timer */
+-    int                   m_iGenreType;          /*!< @brief genre type of the timer */
+-    int                   m_iGenreSubType;       /*!< @brief genre subtype of the timer */
+ 
+   private:
+     std::string GetWeekdaysString() const;
++    EPG::CEpgInfoTagPtr GetEpgInfoTag(bool bSetTimer) const;
+ 
+     CCriticalSection      m_critSection;
+-    EPG::CEpgInfoTagPtr   m_epgTag;
++    unsigned int          m_iEpgUid;   /*!< id of epg event associated with this timer, EPG_TAG_INVALID_UID if none. */
+     CDateTime             m_StartTime; /*!< start time */
+     CDateTime             m_StopTime;  /*!< stop time */
+     CDateTime             m_FirstDay;  /*!< if it is a manual repeating timer the first date it starts */
+@@ -289,5 +291,7 @@ namespace PVR
+     bool                  m_bHasChildConflictNOK; /*!< @brief Has at least one child timer with status PVR_TIMER_STATE_CONFLICT_NOK */
+     bool                  m_bHasChildRecording;   /*!< @brief Has at least one child timer with status PVR_TIMER_STATE_RECORDING */
+     bool                  m_bHasChildErrors;      /*!< @brief Has at least one child timer with status PVR_TIMER_STATE_ERROR */
++
++    mutable EPG::CEpgInfoTagPtr m_epgTag; /*!< epg info tag matching m_iEpgUid. */
+   };
+ }
+diff --git a/xbmc/pvr/timers/PVRTimers.cpp b/xbmc/pvr/timers/PVRTimers.cpp
+index 93ad34a..6a318ec 100644
+--- a/xbmc/pvr/timers/PVRTimers.cpp
++++ b/xbmc/pvr/timers/PVRTimers.cpp
+@@ -124,7 +124,6 @@ bool CPVRTimers::UpdateEntries(const CPVRTimers &timers)
+         if (existingTimer->UpdateEntry(*timerIt))
+         {
+           bChanged = true;
+-          UpdateEpgEvent(existingTimer);
+           existingTimer->ResetChildState();
+ 
+           if (bStateChanged && g_PVRManager.IsStarted())
+@@ -143,7 +142,6 @@ bool CPVRTimers::UpdateEntries(const CPVRTimers &timers)
+         /* new timer */
+         CPVRTimerInfoTagPtr newTimer = CPVRTimerInfoTagPtr(new CPVRTimerInfoTag);
+         newTimer->UpdateEntry(*timerIt);
+-        UpdateEpgEvent(newTimer);
+ 
+         VecTimerInfoTag* addEntry = NULL;
+         MapTags::iterator itr = m_tags.find(newTimer->m_bStartAnyTime ? CDateTime() : newTimer->StartAsUTC());
+@@ -159,7 +157,6 @@ bool CPVRTimers::UpdateEntries(const CPVRTimers &timers)
+ 
+         newTimer->m_iTimerId = ++m_iLastId;
+         addEntry->push_back(newTimer);
+-        UpdateEpgEvent(newTimer);
+         bChanged = true;
+         bAddedOrDeleted = true;
+ 
+@@ -246,7 +243,6 @@ bool CPVRTimers::UpdateEntries(const CPVRTimers &timers)
+     }
+ 
+     addEntry->push_back(*timerIt);
+-    UpdateEpgEvent(*timerIt);
+   }
+ 
+   /* update child information for all parent timers */
+@@ -314,8 +310,6 @@ bool CPVRTimers::UpdateFromClient(const CPVRTimerInfoTagPtr &timer)
+     addEntry->push_back(tag);
+   }
+ 
+-  UpdateEpgEvent(tag);
+-
+   SetRecordingLED(IsRecording());
+ }
+ 
+@@ -818,43 +812,6 @@ CDateTime CPVRTimers::GetNextEventTime(void) const
+   return retVal;
+ }
+ 
+-void CPVRTimers::UpdateEpgEvent(CPVRTimerInfoTagPtr timer)
+-{
+-  CSingleLock lock(timer->m_critSection);
+-
+-  /* repeating timers have no epg event */
+-  if (timer->IsRepeating())
+-    return;
+-
+-  /* already got an epg event set */
+-  if (timer->m_epgTag)
+-    return;
+-
+-  /* try to get the channel */
+-  CPVRChannelPtr channel = g_PVRChannelGroups->GetByUniqueID(timer->m_iClientChannelUid, timer->m_iClientId);
+-  if (!channel)
+-    return;
+-
+-  /* try to get the EPG table */
+-  CEpgPtr epg = channel->GetEPG();
+-  if (!epg)
+-    return;
+-
+-  /* try to set the timer on the epg tag that matches with a 2 minute margin */
+-  CEpgInfoTagPtr epgTag = epg->GetTagBetween(timer->StartAsUTC() - CDateTimeSpan(0, 0, 2, 0), timer->EndAsUTC() + CDateTimeSpan(0, 0, 2, 0));
+-  if (!epgTag)
+-    epgTag = epg->GetTagAround(timer->StartAsUTC());
+-
+-  if (epgTag)
+-  {
+-    timer->m_epgTag = epgTag;
+-    timer->m_genre = epgTag->Genre();
+-    timer->m_iGenreType = epgTag->GenreType();
+-    timer->m_iGenreSubType = epgTag->GenreSubType();
+-    epgTag->SetTimer(timer);
+-  }
+-}
+-
+ void CPVRTimers::UpdateChannels(void)
+ {
+   CSingleLock lock(m_critSection);
+diff --git a/xbmc/pvr/timers/PVRTimers.h b/xbmc/pvr/timers/PVRTimers.h
+index af10013..a71dce0 100644
+--- a/xbmc/pvr/timers/PVRTimers.h
++++ b/xbmc/pvr/timers/PVRTimers.h
+@@ -198,7 +198,6 @@ namespace PVR
+     typedef std::vector<CPVRTimerInfoTagPtr> VecTimerInfoTag;
+ 
+     void Unload(void);
+-    void UpdateEpgEvent(CPVRTimerInfoTagPtr timer);
+     bool UpdateEntries(const CPVRTimers &timers);
+     CPVRTimerInfoTagPtr GetByClient(int iClientId, unsigned int iClientTimerId) const;
+     bool GetRootDirectory(const CPVRTimersPath &path, CFileItemList &items) const;
+diff --git a/xbmc/settings/Settings.cpp b/xbmc/settings/Settings.cpp
+index 3c929e7..8ef1d0e 100644
+--- a/xbmc/settings/Settings.cpp
++++ b/xbmc/settings/Settings.cpp
+@@ -1159,6 +1159,7 @@ void CSettings::InitializeISettingCallbacks()
+   settingSet.insert(CSettings::SETTING_PVRCLIENT_MENUHOOK);
+   settingSet.insert(CSettings::SETTING_PVRMENU_SEARCHICONS);
+   settingSet.insert(CSettings::SETTING_EPG_RESETEPG);
++  settingSet.insert(CSettings::SETTING_EPG_DAYSTODISPLAY);
+   settingSet.insert(CSettings::SETTING_PVRPARENTAL_ENABLED);
+   m_settingsManager->RegisterCallback(&PVR::g_PVRManager, settingSet);
+ 

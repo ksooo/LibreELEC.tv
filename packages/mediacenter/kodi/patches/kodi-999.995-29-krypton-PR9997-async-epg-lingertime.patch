@@ -1,0 +1,138 @@
+diff --git a/xbmc/epg/Epg.cpp b/xbmc/epg/Epg.cpp
+index 352caf3..387e02a 100644
+--- a/xbmc/epg/Epg.cpp
++++ b/xbmc/epg/Epg.cpp
+@@ -402,7 +402,7 @@ bool CEpg::UpdateEntry(const CEpgInfoTagPtr &tag, EPG_EVENT_STATE newState, std:
+     auto it = (eit == m_tags.end()) ? m_tags.find(tag->StartAsUTC()) : eit;
+     if (it == m_tags.end())
+     {
+-      // not guranteed that deleted tag contains valid start time. search sequential.
++      // It is not guaranteed that the deleted tag contains valid start time. search sequential.
+       for (it = m_tags.begin(); it != m_tags.end(); ++it)
+       {
+         if (it->second->UniqueBroadcastID() == tag->UniqueBroadcastID())
+@@ -412,11 +412,16 @@ bool CEpg::UpdateEntry(const CEpgInfoTagPtr &tag, EPG_EVENT_STATE newState, std:
+ 
+     if (it != m_tags.end())
+     {
+-      it->second->ClearTimer();
+-      m_tags.erase(it);
++      // Respect epg linger time.
++      const CDateTime cleanupTime(CDateTime::GetUTCDateTime() - CDateTimeSpan(0, g_advancedSettings.m_iEpgLingerTime / 60, g_advancedSettings.m_iEpgLingerTime % 60, 0));
++      if (it->second->EndAsUTC() < cleanupTime)
++      {
++        if (bUpdateDatabase)
++          m_deletedTags.insert(std::make_pair(it->second->UniqueBroadcastID(), it->second));
+ 
+-      if (bUpdateDatabase)
+-        m_deletedTags.insert(std::make_pair(infoTag->UniqueBroadcastID(), infoTag));
++        it->second->ClearTimer();
++        m_tags.erase(it);
++      }
+     }
+     else
+     {
+diff --git a/xbmc/epg/EpgContainer.cpp b/xbmc/epg/EpgContainer.cpp
+index 0284137..1c0209d 100644
+--- a/xbmc/epg/EpgContainer.cpp
++++ b/xbmc/epg/EpgContainer.cpp
+@@ -251,7 +251,9 @@ void CEpgContainer::LoadFromDB(void)
+       ShowProgressDialog(false);
+     }
+ 
+-    m_database.DeleteOldEpgEntries();
++    const CDateTime cleanupTime(CDateTime::GetUTCDateTime() -
++      CDateTimeSpan(0, g_advancedSettings.m_iEpgLingerTime / 60, g_advancedSettings.m_iEpgLingerTime % 60, 0));
++    m_database.DeleteEpgEntries(cleanupTime);
+     m_database.Get(*this);
+ 
+     for (const auto &epgEntry : m_epgs)
+@@ -316,7 +318,7 @@ void CEpgContainer::Process(void)
+       m_bIsInitialising = false;
+ 
+     /* clean up old entries */
+-    if (!m_bStop && iNow >= m_iLastEpgCleanup)
++    if (!m_bStop && iNow >= m_iLastEpgCleanup + g_advancedSettings.m_iEpgCleanupInterval)
+       RemoveOldEntries();
+ 
+     /* check for pending manual EPG updates */
+@@ -481,20 +483,19 @@ bool CEpgContainer::LoadSettings(void)
+ 
+ bool CEpgContainer::RemoveOldEntries(void)
+ {
+-  CDateTime now = CDateTime::GetUTCDateTime() -
+-      CDateTimeSpan(0, g_advancedSettings.m_iEpgLingerTime / 60, g_advancedSettings.m_iEpgLingerTime % 60, 0);
++  const CDateTime cleanupTime(CDateTime::GetUTCDateTime() -
++    CDateTimeSpan(0, g_advancedSettings.m_iEpgLingerTime / 60, g_advancedSettings.m_iEpgLingerTime % 60, 0));
+ 
+   /* call Cleanup() on all known EPG tables */
+   for (const auto &epgEntry : m_epgs)
+-    epgEntry.second->Cleanup(now);
++    epgEntry.second->Cleanup(cleanupTime);
+ 
+   /* remove the old entries from the database */
+   if (!m_bIgnoreDbForClient && m_database.IsOpen())
+-    m_database.DeleteOldEpgEntries();
++    m_database.DeleteEpgEntries(cleanupTime);
+ 
+   CSingleLock lock(m_critSection);
+   CDateTime::GetCurrentDateTime().GetAsUTCDateTime().GetAsTime(m_iLastEpgCleanup);
+-  m_iLastEpgCleanup += g_advancedSettings.m_iEpgCleanupInterval;
+ 
+   return true;
+ }
+diff --git a/xbmc/epg/EpgDatabase.cpp b/xbmc/epg/EpgDatabase.cpp
+index 09dcbf8..6b5049f 100644
+--- a/xbmc/epg/EpgDatabase.cpp
++++ b/xbmc/epg/EpgDatabase.cpp
+@@ -149,15 +149,13 @@ bool CEpgDatabase::Delete(const CEpg &table)
+   return DeleteValues("epg", filter);
+ }
+ 
+-bool CEpgDatabase::DeleteOldEpgEntries(void)
++bool CEpgDatabase::DeleteEpgEntries(const CDateTime &maxEndTime)
+ {
+-  time_t iCleanupTime;
+-  CDateTime cleanupTime = CDateTime::GetCurrentDateTime().GetAsUTCDateTime() -
+-      CDateTimeSpan(0, g_advancedSettings.m_iEpgLingerTime / 60, g_advancedSettings.m_iEpgLingerTime % 60, 0);
+-  cleanupTime.GetAsTime(iCleanupTime);
++  time_t iMaxEndTime;
++  maxEndTime.GetAsTime(iMaxEndTime);
+ 
+   Filter filter;
+-  filter.AppendWhere(PrepareSQL("iEndTime < %u", iCleanupTime));
++  filter.AppendWhere(PrepareSQL("iEndTime < %u", iMaxEndTime));
+ 
+   return DeleteValues("epgtags", filter);
+ }
+diff --git a/xbmc/epg/EpgDatabase.h b/xbmc/epg/EpgDatabase.h
+index 19ac90f..b25ac20 100644
+--- a/xbmc/epg/EpgDatabase.h
++++ b/xbmc/epg/EpgDatabase.h
+@@ -84,10 +84,11 @@ namespace EPG
+     virtual bool Delete(const CEpg &table);
+ 
+     /*!
+-     * @brief Erase all EPG entries older than 1 day.
++     * @brief Erase all EPG entries with an end time less than the given time.
++     * @param maxEndTime The maximum allowed end time.
+      * @return True if the entries were removed successfully, false otherwise.
+      */
+-    virtual bool DeleteOldEpgEntries(void);
++    virtual bool DeleteEpgEntries(const CDateTime &maxEndTime);
+ 
+     /*!
+      * @brief Remove a single EPG entry.
+diff --git a/xbmc/pvr/windows/GUIWindowPVRGuide.cpp b/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
+index f38231d..b52ee7e 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
++++ b/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
+@@ -37,8 +37,6 @@
+ 
+ #include "GUIWindowPVRGuide.h"
+ 
+-#define MAX_UPDATE_FREQUENCY 3000 // limit to maximum one update/refresh in x milliseconds
+-
+ using namespace PVR;
+ using namespace EPG;
+ 

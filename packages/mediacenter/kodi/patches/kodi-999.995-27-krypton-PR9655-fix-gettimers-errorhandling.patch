@@ -1,0 +1,126 @@
+diff --git a/xbmc/pvr/addons/PVRClients.cpp b/xbmc/pvr/addons/PVRClients.cpp
+index efab9b7..1b0a371 100644
+--- a/xbmc/pvr/addons/PVRClients.cpp
++++ b/xbmc/pvr/addons/PVRClients.cpp
+@@ -458,9 +458,9 @@ bool CPVRClients::HasTimerSupport(int iClientId)
+   return false;
+ }
+ 
+-PVR_ERROR CPVRClients::GetTimers(CPVRTimers *timers)
++bool CPVRClients::GetTimers(CPVRTimers *timers, std::vector<int> &failedClients)
+ {
+-  PVR_ERROR error(PVR_ERROR_NO_ERROR);
++  bool bSuccess(true);
+   PVR_CLIENTMAP clients;
+   GetCreatedClients(clients);
+ 
+@@ -472,11 +472,12 @@ PVR_ERROR CPVRClients::GetTimers(CPVRTimers *timers)
+         currentError != PVR_ERROR_NO_ERROR)
+     {
+       CLog::Log(LOGERROR, "PVR - %s - cannot get timers from client '%d': %s",__FUNCTION__, (*itrClients).first, CPVRClient::ToString(currentError));
+-      error = currentError;
++      bSuccess = false;
++      failedClients.push_back((*itrClients).first);
+     }
+   }
+ 
+-  return error;
++  return bSuccess;
+ }
+ 
+ PVR_ERROR CPVRClients::AddTimer(const CPVRTimerInfoTag &timer)
+diff --git a/xbmc/pvr/addons/PVRClients.h b/xbmc/pvr/addons/PVRClients.h
+index 96ff73a..ce931e8 100644
+--- a/xbmc/pvr/addons/PVRClients.h
++++ b/xbmc/pvr/addons/PVRClients.h
+@@ -348,9 +348,10 @@ namespace PVR
+     /*!
+      * @brief Get all timers from clients
+      * @param timers Store the timers in this container.
+-     * @return The amount of timers that were added.
++     * @param failedClients in case of errors will contain the ids of the clients for which the timers could not be obtained.
++     * @return true on success for all clients, false in case of error for at least one client.
+      */
+-    PVR_ERROR GetTimers(CPVRTimers *timers);
++    bool GetTimers(CPVRTimers *timers, std::vector<int> &failedClients);
+ 
+     /*!
+      * @brief Add a new timer to a backend.
+diff --git a/xbmc/pvr/timers/PVRTimers.cpp b/xbmc/pvr/timers/PVRTimers.cpp
+index a8f2f8a..b42f724 100644
+--- a/xbmc/pvr/timers/PVRTimers.cpp
++++ b/xbmc/pvr/timers/PVRTimers.cpp
+@@ -86,8 +86,9 @@ bool CPVRTimers::Update(void)
+ 
+   CLog::Log(LOGDEBUG, "CPVRTimers - %s - updating timers", __FUNCTION__);
+   CPVRTimers newTimerList;
+-  g_PVRClients->GetTimers(&newTimerList);
+-  return UpdateEntries(newTimerList);
++  std::vector<int> failedClients;
++  g_PVRClients->GetTimers(&newTimerList, failedClients);
++  return UpdateEntries(newTimerList, failedClients);
+ }
+ 
+ bool CPVRTimers::IsRecording(void) const
+@@ -102,7 +103,7 @@ bool CPVRTimers::IsRecording(void) const
+   return false;
+ }
+ 
+-bool CPVRTimers::UpdateEntries(const CPVRTimers &timers)
++bool CPVRTimers::UpdateEntries(const CPVRTimers &timers, const std::vector<int> &failedClients)
+ {
+   bool bChanged(false);
+   bool bAddedOrDeleted(false);
+@@ -185,6 +186,22 @@ bool CPVRTimers::UpdateEntries(const CPVRTimers &timers)
+       if (!timers.GetByClient(timer->m_iClientId, timer->m_iClientIndex))
+       {
+         /* timer was not found */
++        bool bIgnoreTimer(false);
++        for (const auto &failedClient : failedClients)
++        {
++          if (failedClient == timer->m_iClientId)
++          {
++            bIgnoreTimer = true;
++            break;
++          }
++        }
++
++        if (bIgnoreTimer)
++        {
++          ++it2;
++          continue;
++        }
++
+         CLog::Log(LOGDEBUG,"PVRTimers - %s - deleted timer %d on client %d",
+             __FUNCTION__, timer->m_iClientIndex, timer->m_iClientId);
+ 
+@@ -259,7 +276,6 @@ bool CPVRTimers::UpdateEntries(const CPVRTimers &timers)
+     }
+   }
+ 
+-
+   m_bIsUpdating = false;
+   if (bChanged)
+   {
+@@ -269,7 +285,7 @@ bool CPVRTimers::UpdateEntries(const CPVRTimers &timers)
+ 
+     NotifyObservers(bAddedOrDeleted ? ObservableMessageTimersReset : ObservableMessageTimers);
+ 
+-    /* queue notifications / fill eventlog*/
++    /* queue notifications / fill eventlog */
+     for (const auto &entry : timerNotifications)
+     {
+       if (CSettings::GetInstance().GetBool(CSettings::SETTING_PVRRECORD_TIMERNOTIFICATIONS))
+diff --git a/xbmc/pvr/timers/PVRTimers.h b/xbmc/pvr/timers/PVRTimers.h
+index 6ea559b..3490bb8 100644
+--- a/xbmc/pvr/timers/PVRTimers.h
++++ b/xbmc/pvr/timers/PVRTimers.h
+@@ -205,7 +205,7 @@ namespace PVR
+     typedef std::vector<CPVRTimerInfoTagPtr> VecTimerInfoTag;
+ 
+     void Unload(void);
+-    bool UpdateEntries(const CPVRTimers &timers);
++    bool UpdateEntries(const CPVRTimers &timers, const std::vector<int> &failedClients);
+     CPVRTimerInfoTagPtr GetByClient(int iClientId, unsigned int iClientTimerId) const;
+     bool GetRootDirectory(const CPVRTimersPath &path, CFileItemList &items) const;
+     bool GetSubDirectory(const CPVRTimersPath &path, CFileItemList &items) const;

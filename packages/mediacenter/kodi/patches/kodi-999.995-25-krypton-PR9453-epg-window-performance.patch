@@ -1,0 +1,391 @@
+diff --git a/xbmc/pvr/windows/GUIWindowPVRGuide.cpp b/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
+index 628a10a..2cfbb01 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
++++ b/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
+@@ -15,6 +15,7 @@
+ #include "GUIUserMessages.h"
+ #include "epg/EpgContainer.h"
+ #include "input/Key.h"
++#include "messaging/ApplicationMessenger.h"
+ #include "settings/AdvancedSettings.h"
+ #include "settings/Settings.h"
+ #include "threads/SingleLock.h"
+@@ -40,15 +42,17 @@ using namespace PVR;
+ using namespace EPG;
+ 
+ CGUIWindowPVRGuide::CGUIWindowPVRGuide(bool bRadio) :
+-  CGUIWindowPVRBase(bRadio, bRadio ? WINDOW_RADIO_GUIDE : WINDOW_TV_GUIDE, "MyPVRGuide.xml")
++  CGUIWindowPVRBase(bRadio, bRadio ? WINDOW_RADIO_GUIDE : WINDOW_TV_GUIDE, "MyPVRGuide.xml"),
++  m_refreshTimelineItemsThread(new CPVRRefreshTimelineItemsThread(this)),
++  m_bRefreshTimelineItems(false)
+ {
+-  m_bUpdateRequired = false;
+   m_cachedTimeline = new CFileItemList;
+   m_cachedChannelGroup = CPVRChannelGroupPtr(new CPVRChannelGroup);
+ }
+ 
+ CGUIWindowPVRGuide::~CGUIWindowPVRGuide(void)
+ {
++  StopRefreshTimelineItemsThread();
+   delete m_cachedTimeline;
+ }
+ 
+@@ -62,9 +68,31 @@ void CGUIWindowPVRGuide::OnInitWindow()
+   if (epgGridContainer)
+     epgGridContainer->GoToNow();
+ 
++  m_bRefreshTimelineItems = true;
++  StartRefreshTimelineItemsThread();
++
+   CGUIWindowPVRBase::OnInitWindow();
+ }
+ 
++void CGUIWindowPVRGuide::OnDeinitWindow(int nextWindowID)
++{
++  StopRefreshTimelineItemsThread();
++  m_bRefreshTimelineItems = false;
++
++  CGUIWindowPVRBase::OnDeinitWindow(nextWindowID);
++}
++
++void CGUIWindowPVRGuide::StartRefreshTimelineItemsThread()
++{
++  StopRefreshTimelineItemsThread();
++  m_refreshTimelineItemsThread->Create();
++}
++
++void CGUIWindowPVRGuide::StopRefreshTimelineItemsThread()
++{
++  m_refreshTimelineItemsThread->StopThread();
++}
++
+ void CGUIWindowPVRGuide::RegisterObservers(void)
+ {
+   g_EpgContainer.RegisterObserver(this);
+@@ -75,6 +103,29 @@ void CGUIWindowPVRGuide::UnregisterObservers(void)
+   g_EpgContainer.UnregisterObserver(this);
+ }
+ 
++void CGUIWindowPVRGuide::Notify(const Observable &obs, const ObservableMessage msg)
++{
++  if (m_viewControl.GetCurrentControl() == GUIDE_VIEW_TIMELINE &&
++      (msg == ObservableMessageEpg ||
++       msg == ObservableMessageEpgContainer ||
++       msg == ObservableMessageChannelGroup))
++  {
++    if (IsActive())
++    {
++      // Only the active window must set the selected item path which is shared
++      // between all PVR windows, not the last notified window (observer).
++      UpdateSelectedItemPath();
++    }
++
++    CSingleLock lock(m_critSection);
++    m_bRefreshTimelineItems = true;
++  }
++  else
++  {
++    CGUIWindowPVRBase::Notify(obs, msg);
++  }
++}
++
+ void CGUIWindowPVRGuide::GetContextButtons(int itemNumber, CContextButtons &buttons)
+ {
+   if (itemNumber < 0 || itemNumber >= m_vecItems->Size())
+@@ -223,7 +267,6 @@ bool CGUIWindowPVRGuide::GetDirectory(const std::string &strDirectory, CFileItem
+       break;
+   }
+ 
+-  m_bUpdateRequired = false;
+   return true;
+ }
+ 
+@@ -355,7 +398,6 @@ bool CGUIWindowPVRGuide::OnMessage(CGUIMessage& message)
+     {
+       // let's set the view mode first before update
+       CGUIWindowPVRBase::OnMessage(message);
+-      m_nextUpdateTimeout.SetExpired();
+       Refresh(true);
+       bReturn = true;
+       break;
+@@ -367,13 +409,7 @@ bool CGUIWindowPVRGuide::OnMessage(CGUIMessage& message)
+         case ObservableMessageEpg:
+         case ObservableMessageEpgContainer:
+         {
+-          m_bUpdateRequired = true;
+-          // do not allow more than MAX_UPDATE_FREQUENCY updates
+-          if (m_nextUpdateTimeout.IsTimePast())
+-          {
+-            Refresh(true);
+-            m_nextUpdateTimeout.Set(MAX_UPDATE_FREQUENCY);
+-          }
++          Refresh(true);
+           bReturn = true;
+           break;
+         }
+@@ -381,8 +417,7 @@ bool CGUIWindowPVRGuide::OnMessage(CGUIMessage& message)
+         {
+           if (m_viewControl.GetCurrentControl() != GUIDE_VIEW_TIMELINE)
+             SetInvalid();
+-          else
+-            m_bUpdateRequired = true;
++
+           bReturn = true;
+           break;
+         }
+@@ -457,33 +492,61 @@ void CGUIWindowPVRGuide::GetViewNextItems(CFileItemList &items)
+   }
+ }
+ 
++bool CGUIWindowPVRGuide::RefreshTimelineItems()
++{
++  if (m_bRefreshTimelineItems)
++  {
++    m_bRefreshTimelineItems = false;
++
++    CPVRChannelGroupPtr group = GetGroup();
++    CFileItemList *pCachedTimeline = new CFileItemList;
++    // can be very expensive. never call with lock aquired.
++    group->GetEPGAll(*pCachedTimeline, true);
++
++    CFileItemList *pOldCachedTimeline = nullptr;
++    {
++      CSingleLock lock(m_critSection);
++
++      pOldCachedTimeline = m_cachedTimeline;
++      m_cachedTimeline = pCachedTimeline;
++      m_cachedChannelGroup = group;
++    }
++
++    pOldCachedTimeline->Clear(); // may acquire global graphics context!
++    delete pOldCachedTimeline;
++
++    return true;
++  }
++  return false;
++}
++
+ void CGUIWindowPVRGuide::GetViewTimelineItems(CFileItemList &items)
+ {
+-  CGUIEPGGridContainer* epgGridContainer = (CGUIEPGGridContainer*) GetControl(m_viewControl.GetCurrentControl());
++  CGUIEPGGridContainer* epgGridContainer = dynamic_cast<CGUIEPGGridContainer*>(GetControl(m_viewControl.GetCurrentControl()));
+   if (!epgGridContainer)
+     return;
+ 
+-  CPVRChannelGroupPtr group = GetGroup();
++  CPVRChannelGroupPtr group;
++  {
++    CSingleLock lock(m_critSection);
+ 
+-  // group change detected reset grid coordinate
+-  if (*m_cachedChannelGroup != *group)
+-    epgGridContainer->ResetCoordinates();
++    // group change detected reset grid coordinates and refresh grid items
++    if (!m_bRefreshTimelineItems && *m_cachedChannelGroup != *GetGroup())
++    {
++      epgGridContainer->ResetCoordinates();
++      m_bRefreshTimelineItems = true;
++      RefreshTimelineItems();
++    }
+ 
+-  if (m_bUpdateRequired || m_cachedTimeline->IsEmpty() || *m_cachedChannelGroup != *group)
+-  {
+-    m_bUpdateRequired = false;
++    items.Clear();
++    items.RemoveDiscCache(GetID());
++    items.Assign(*m_cachedTimeline, false);
+ 
+-    m_cachedTimeline->Clear();
+-    m_cachedChannelGroup = group;
+-    m_cachedChannelGroup->GetEPGAll(*m_cachedTimeline, true);
++    group = m_cachedChannelGroup;
+   }
+ 
+-  items.Clear();
+-  items.RemoveDiscCache(GetID());
+-  items.Assign(*m_cachedTimeline, false);
+-
+-  CDateTime startDate(m_cachedChannelGroup->GetFirstEPGDate());
+-  CDateTime endDate(m_cachedChannelGroup->GetLastEPGDate());
++  CDateTime startDate(group->GetFirstEPGDate());
++  CDateTime endDate(group->GetLastEPGDate());
+   CDateTime currentDate = CDateTime::GetCurrentDateTime().GetAsUTCDateTime();
+ 
+   if (!startDate.IsValid())
+@@ -611,3 +674,22 @@ bool CGUIWindowPVRGuide::OnContextButtonDeleteTimer(CFileItem *item, CONTEXT_BUT
+ 
+   return bReturn;
+ }
++
++CPVRRefreshTimelineItemsThread::CPVRRefreshTimelineItemsThread(CGUIWindowPVRGuide *pGuideWindow)
++: CThread("epg-grid-refresh-timeline-items"),
++  m_pGuideWindow(pGuideWindow)
++{
++}
++
++void CPVRRefreshTimelineItemsThread::Process()
++{
++  while (!m_bStop)
++  {
++    if (m_pGuideWindow->RefreshTimelineItems() && !m_bStop)
++    {
++      CGUIMessage m(GUI_MSG_REFRESH_LIST, m_pGuideWindow->GetID(), 0, ObservableMessageEpg);
++      KODI::MESSAGING::CApplicationMessenger::GetInstance().SendGUIMessage(m);
++    }
++    Sleep(5000);
++  }
++}
+diff --git a/xbmc/pvr/windows/GUIWindowPVRGuide.h b/xbmc/pvr/windows/GUIWindowPVRGuide.h
+index 5678e35..c4644ae 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRGuide.h
++++ b/xbmc/pvr/windows/GUIWindowPVRGuide.h
+@@ -20,13 +20,15 @@
+  */
+ 
+ #include "epg/GUIEPGGridContainer.h"
+-#include "threads/SystemClock.h"
++#include "threads/Thread.h"
+ #include "GUIWindowPVRBase.h"
+ 
+ class CSetting;
+ 
+ namespace PVR
+ {
++  class CPVRRefreshTimelineItemsThread;
++
+   class CGUIWindowPVRGuide : public CGUIWindowPVRBase
+   {
+   public:
+@@ -34,12 +36,16 @@ namespace PVR
+     virtual ~CGUIWindowPVRGuide(void);
+ 
+     virtual void OnInitWindow();
++    virtual void OnDeinitWindow(int nextWindowID);
+     bool OnMessage(CGUIMessage& message);
+     bool OnAction(const CAction &action);
+     void GetContextButtons(int itemNumber, CContextButtons &buttons);
+     bool OnContextButton(int itemNumber, CONTEXT_BUTTON button);
+     bool Update(const std::string &strDirectory, bool updateFilterPath = true);
+     void UpdateButtons(void);
++    virtual void Notify(const Observable &obs, const ObservableMessage msg);
++
++    bool RefreshTimelineItems();
+ 
+   protected:
+     void UpdateSelectedItemPath();
+@@ -65,11 +71,25 @@ namespace PVR
+     void GetViewNextItems(CFileItemList &items);
+     void GetViewTimelineItems(CFileItemList &items);
+ 
++    void StartRefreshTimelineItemsThread();
++    void StopRefreshTimelineItemsThread();
++
++    std::unique_ptr<CPVRRefreshTimelineItemsThread> m_refreshTimelineItemsThread;
++    bool m_bRefreshTimelineItems;
++
+     CFileItemList      *m_cachedTimeline;
+     CPVRChannelGroupPtr m_cachedChannelGroup;
++  };
+ 
+-    bool m_bUpdateRequired;
++  class CPVRRefreshTimelineItemsThread : public CThread
++  {
++  public:
++    CPVRRefreshTimelineItemsThread(CGUIWindowPVRGuide *pGuideWindow);
++    virtual ~CPVRRefreshTimelineItemsThread() {}
+ 
+-    XbmcThreads::EndTime m_nextUpdateTimeout;
++    virtual void Process();
++
++  private:
++    CGUIWindowPVRGuide *m_pGuideWindow;
+   };
+ }
+diff --git a/xbmc/pvr/windows/GUIWindowPVRGuide.cpp b/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
+index 654de4b..1e65939 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
++++ b/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
+@@ -46,14 +46,13 @@ CGUIWindowPVRGuide::CGUIWindowPVRGuide(bool bRadio) :
+   m_refreshTimelineItemsThread(new CPVRRefreshTimelineItemsThread(this)),
+   m_bRefreshTimelineItems(false)
+ {
+-  m_cachedTimeline = new CFileItemList;
++  m_cachedTimeline = std::make_shared<CFileItemList>();
+   m_cachedChannelGroup = CPVRChannelGroupPtr(new CPVRChannelGroup);
+ }
+ 
+ CGUIWindowPVRGuide::~CGUIWindowPVRGuide(void)
+ {
+   StopRefreshTimelineItemsThread();
+-  delete m_cachedTimeline;
+ }
+ 
+ void CGUIWindowPVRGuide::OnInitWindow()
+@@ -504,22 +503,19 @@ bool CGUIWindowPVRGuide::RefreshTimelineItems()
+     m_bRefreshTimelineItems = false;
+ 
+     CPVRChannelGroupPtr group = GetGroup();
+-    CFileItemList *pCachedTimeline = new CFileItemList;
++
++    std::shared_ptr<CFileItemList> timeline = std::make_shared<CFileItemList>();
++
+     // can be very expensive. never call with lock aquired.
+-    group->GetEPGAll(*pCachedTimeline, true);
++    group->GetEPGAll(*timeline, true);
+ 
+-    CFileItemList *pOldCachedTimeline = nullptr;
+     {
+       CSingleLock lock(m_critSection);
+ 
+-      pOldCachedTimeline = m_cachedTimeline;
+-      m_cachedTimeline = pCachedTimeline;
++      m_newTimeline = timeline;
+       m_cachedChannelGroup = group;
+     }
+ 
+-    pOldCachedTimeline->Clear(); // may acquire global graphics context!
+-    delete pOldCachedTimeline;
+-
+     return true;
+   }
+   return false;
+@@ -543,6 +539,12 @@ void CGUIWindowPVRGuide::GetViewTimelineItems(CFileItemList &items)
+       RefreshTimelineItems();
+     }
+ 
++    if (m_newTimeline != nullptr)
++    {
++      m_cachedTimeline = m_newTimeline;
++      m_newTimeline.reset();
++    }
++
+     items.Clear();
+     items.RemoveDiscCache(GetID());
+     items.Assign(*m_cachedTimeline, false);
+diff --git a/xbmc/pvr/windows/GUIWindowPVRGuide.h b/xbmc/pvr/windows/GUIWindowPVRGuide.h
+index 742b0bd..140d3ef 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRGuide.h
++++ b/xbmc/pvr/windows/GUIWindowPVRGuide.h
+@@ -19,6 +19,8 @@
+  *
+  */
+ 
++#include <atomic>
++#include <memory>
+ #include "epg/GUIEPGGridContainer.h"
+ #include "threads/Thread.h"
+ #include "GUIWindowPVRBase.h"
+@@ -75,10 +76,11 @@ namespace PVR
+     void StopRefreshTimelineItemsThread();
+ 
+     std::unique_ptr<CPVRRefreshTimelineItemsThread> m_refreshTimelineItemsThread;
+-    bool m_bRefreshTimelineItems;
++    std::atomic_bool m_bRefreshTimelineItems;
+ 
+-    CFileItemList      *m_cachedTimeline;
++    std::shared_ptr<CFileItemList> m_cachedTimeline;
+     CPVRChannelGroupPtr m_cachedChannelGroup;
++    std::shared_ptr<CFileItemList> m_newTimeline;
+   };
+ 
+   class CPVRRefreshTimelineItemsThread : public CThread

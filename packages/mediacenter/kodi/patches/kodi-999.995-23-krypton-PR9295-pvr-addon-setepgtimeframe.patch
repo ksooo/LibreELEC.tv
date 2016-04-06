@@ -1,0 +1,118 @@
+diff --git a/xbmc/addons/include/xbmc_pvr_dll.h b/xbmc/addons/include/xbmc_pvr_dll.h
+index 8b54ea6..5cb6075 100644
+--- a/xbmc/addons/include/xbmc_pvr_dll.h
++++ b/xbmc/addons/include/xbmc_pvr_dll.h
+@@ -639,8 +639,8 @@ extern "C"
+   /*!
+    * Tell the client the time frame to use when notifying epg events back to Kodi. The client might push epg events asynchronously
+    * to Kodi using the callback function EpgEventStateChange. To be able to only push events that are actually of interest for Kodi,
+-   * client needs to know about the epg time frame Kodi uses. Kodi calls this function once after the client add-on has been sucessfully
+-   * initialized and then everytime the time frame value changes.
++   * client needs to know about the epg time frame Kodi uses. Kodi supplies the current epg time frame value in PVR_PROPERTIES.iEpgMaxDays
++   * when creating the addon and calls SetEPGTimeFrame later whenever Kodi's epg time frame value changes.
+    * @param iDays number of days from "now". EPG_TIMEFRAME_UNLIMITED means that Kodi is interested in all epg events, regardless of event times.
+    * @return PVR_ERROR_NO_ERROR if new value was successfully set.
+    * @remarks Required if bSupportsEPG is set to true. Return PVR_ERROR_NOT_IMPLEMENTED if this add-on won't provide this function.
+diff --git a/xbmc/addons/include/xbmc_pvr_types.h b/xbmc/addons/include/xbmc_pvr_types.h
+index 83bb13a..a96c4a3 100644
+--- a/xbmc/addons/include/xbmc_pvr_types.h
++++ b/xbmc/addons/include/xbmc_pvr_types.h
+@@ -237,6 +237,7 @@ extern "C" {
+   {
+     const char* strUserPath;           /*!< @brief path to the user profile */
+     const char* strClientPath;         /*!< @brief path to this add-on */
++    int iEpgMaxDays;                   /*!< @brief if > EPG_TIMEFRAME_UNLIMITED, in async epg mode, deliver only events in the range from 'end time > now' to 'start time < now + iEpgMaxDays. EPG_TIMEFRAME_UNLIMITED, notify all events. */
+   } PVR_PROPERTIES;
+ 
+   /*!
+diff --git a/xbmc/epg/GUIEPGGridContainer.cpp b/xbmc/epg/GUIEPGGridContainer.cpp
+index a425b19..f361819 100644
+--- a/xbmc/epg/GUIEPGGridContainer.cpp
++++ b/xbmc/epg/GUIEPGGridContainer.cpp
+@@ -1442,15 +1442,18 @@ bool CGUIEPGGridContainer::OnMouseWheel(char wheel, const CPoint &point)
+   return true;
+ }
+ 
+-CPVRChannelPtr CGUIEPGGridContainer::GetChannel(int iIndex)
++CPVRChannelPtr CGUIEPGGridContainer::GetSelectedChannel()
+ {
+-  if (iIndex >= 0 && (size_t) iIndex < m_channelItems.size())
++  CFileItemPtr fileItem;
+   {
+-    CFileItemPtr fileItem = m_channelItems[iIndex];
+-    if (fileItem->HasPVRChannelInfoTag())
+-      return fileItem->GetPVRChannelInfoTag();
++    CSingleLock lock(m_critSection);
++    if (m_channelCursor + m_channelOffset < m_channels)
++      fileItem = m_channelItems[m_channelCursor + m_channelOffset];
+   }
+-  
++
++  if (fileItem && fileItem->HasPVRChannelInfoTag())
++    return fileItem->GetPVRChannelInfoTag();
++
+   return CPVRChannelPtr();
+ }
+ 
+@@ -1474,11 +1477,6 @@ int CGUIEPGGridContainer::GetSelectedItem() const
+   return -1;
+ }
+ 
+-const int CGUIEPGGridContainer::GetSelectedChannel() const
+-{
+-  return m_channelCursor + m_channelOffset;
+-}
+-
+ CFileItemPtr CGUIEPGGridContainer::GetSelectedChannelItem() const
+ {
+   CFileItemPtr item;
+diff --git a/xbmc/epg/GUIEPGGridContainer.h b/xbmc/epg/GUIEPGGridContainer.h
+index 86d36de..a34019e 100644
+--- a/xbmc/epg/GUIEPGGridContainer.h
++++ b/xbmc/epg/GUIEPGGridContainer.h
+@@ -65,9 +65,8 @@ namespace EPG
+     virtual std::string GetDescription() const;
+     const int GetNumChannels()   { return m_channels; };
+     virtual int GetSelectedItem() const;
+-    const int GetSelectedChannel() const;
+     CFileItemPtr GetSelectedChannelItem() const;
+-    PVR::CPVRChannelPtr GetChannel(int iIndex);
++    PVR::CPVRChannelPtr GetSelectedChannel();
+     virtual EVENT_RESULT OnMouseEvent(const CPoint &point, const CMouseEvent &event);
+ 
+     virtual void Process(unsigned int currentTime, CDirtyRegionList &dirtyregions);
+diff --git a/xbmc/pvr/addons/PVRClient.cpp b/xbmc/pvr/addons/PVRClient.cpp
+index d7e414f..ddb32f9 100644
+--- a/xbmc/pvr/addons/PVRClient.cpp
++++ b/xbmc/pvr/addons/PVRClient.cpp
+@@ -159,6 +159,7 @@ void CPVRClient::ResetProperties(int iClientId /* = PVR_INVALID_CLIENT_ID */)
+   m_pInfo->strUserPath    = m_strUserPath.c_str();
+   m_strClientPath         = CSpecialProtocol::TranslatePath(Path());
+   m_pInfo->strClientPath  = m_strClientPath.c_str();
++  m_pInfo->iEpgMaxDays    = CSettings::GetInstance().GetInt(CSettings::SETTING_EPG_DAYSTODISPLAY);
+   m_menuhooks.clear();
+   m_timertypes.clear();
+   m_bReadyToUse           = false;
+@@ -195,9 +196,6 @@ ADDON_STATUS CPVRClient::Create(int iClientId)
+   catch (std::exception &e) { LogException(e, __FUNCTION__); }
+ 
+   m_bReadyToUse = bReadyToUse;
+-
+-  SetEPGTimeFrame(CSettings::GetInstance().GetInt(CSettings::SETTING_EPG_DAYSTODISPLAY));
+-
+   return status;
+ }
+ 
+diff --git a/xbmc/pvr/windows/GUIWindowPVRGuide.cpp b/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
+index a4156aa..5f726d7 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
++++ b/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
+@@ -143,7 +143,7 @@ void CGUIWindowPVRGuide::UpdateSelectedItemPath()
+     CGUIEPGGridContainer *epgGridContainer = (CGUIEPGGridContainer*) GetControl(m_viewControl.GetCurrentControl());
+     if (epgGridContainer)
+     {
+-      CPVRChannelPtr channel(epgGridContainer->GetChannel(epgGridContainer->GetSelectedChannel()));
++      CPVRChannelPtr channel(epgGridContainer->GetSelectedChannel());
+       if (channel)
+         SetSelectedItemPath(m_bRadio, channel->Path());
+     }

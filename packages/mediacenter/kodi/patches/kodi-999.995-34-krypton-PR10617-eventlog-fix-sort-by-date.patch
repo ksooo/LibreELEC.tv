@@ -1,0 +1,227 @@
+diff --git a/xbmc/FileItem.cpp b/xbmc/FileItem.cpp
+index 9505ec1..66e74d7 100644
+--- a/xbmc/FileItem.cpp
++++ b/xbmc/FileItem.cpp
+@@ -59,6 +59,7 @@
+ #include "utils/log.h"
+ #include "utils/Variant.h"
+ #include "utils/Mime.h"
++#include "events/IEvent.h"
+ 
+ #include <assert.h>
+ #include <algorithm>
+@@ -321,6 +322,17 @@ CFileItem::CFileItem(std::shared_ptr<const ADDON::IAddon> addonInfo) : m_addonIn
+   Initialize();
+ }
+ 
++CFileItem::CFileItem(const EventPtr& eventLogEntry)
++{
++  Initialize();
++
++  m_eventLogEntry = eventLogEntry;
++  SetLabel(eventLogEntry->GetLabel());
++  m_dateTime = eventLogEntry->GetDateTime();
++  if (!eventLogEntry->GetIcon().empty())
++    SetIconImage(eventLogEntry->GetIcon());
++}
++
+ CFileItem::~CFileItem(void)
+ {
+   delete m_musicInfoTag;
+@@ -392,6 +404,7 @@ const CFileItem& CFileItem::operator=(const CFileItem& item)
+   m_pvrRecordingInfoTag = item.m_pvrRecordingInfoTag;
+   m_pvrTimerInfoTag = item.m_pvrTimerInfoTag;
+   m_pvrRadioRDSInfoTag = item.m_pvrRadioRDSInfoTag;
++  m_eventLogEntry = item.m_eventLogEntry;
+ 
+   m_lStartOffset = item.m_lStartOffset;
+   m_lStartPartNumber = item.m_lStartPartNumber;
+@@ -466,6 +479,7 @@ void CFileItem::Reset()
+   m_pictureInfoTag=NULL;
+   m_extrainfo.clear();
+   ClearProperties();
++  m_eventLogEntry.reset();
+ 
+   Initialize();
+   SetInvalid();
+@@ -671,6 +685,9 @@ void CFileItem::ToSortable(SortItem &sortable, Field field) const
+ 
+   if (HasPVRChannelInfoTag())
+     GetPVRChannelInfoTag()->ToSortable(sortable, field);
++
++  if (m_eventLogEntry)
++    m_eventLogEntry->ToSortable(sortable, field);
+ }
+ 
+ void CFileItem::ToSortable(SortItem &sortable, const Fields &fields) const
+diff --git a/xbmc/FileItem.h b/xbmc/FileItem.h
+index 1630072..7def932 100644
+--- a/xbmc/FileItem.h
++++ b/xbmc/FileItem.h
+@@ -73,6 +73,9 @@ class CFileItemList;
+ class CCueDocument;
+ typedef std::shared_ptr<CCueDocument> CCueDocumentPtr;
+ 
++class IEvent;
++typedef std::shared_ptr<const IEvent> EventPtr;
++
+ /* special startoffset used to indicate that we wish to resume */
+ #define STARTOFFSET_RESUME (-1)
+ 
+@@ -120,6 +123,8 @@ public:
+   CFileItem(const PVR::CPVRRecordingPtr& record);
+   CFileItem(const PVR::CPVRTimerInfoTagPtr& timer);
+   CFileItem(const CMediaSource& share);
++  CFileItem(const EventPtr& eventLogEntry);
++
+   virtual ~CFileItem(void);
+   virtual CGUIListItem *Clone() const { return new CFileItem(*this); };
+ 
+@@ -542,6 +547,7 @@ private:
+   PVR::CPVRTimerInfoTagPtr m_pvrTimerInfoTag;
+   PVR::CPVRRadioRDSInfoTagPtr m_pvrRadioRDSInfoTag;
+   CPictureInfoTag* m_pictureInfoTag;
++  EventPtr m_eventLogEntry;
+   bool m_bIsAlbum;
+ 
+   CCueDocumentPtr m_cueDocument;
+diff --git a/xbmc/events/BaseEvent.cpp b/xbmc/events/BaseEvent.cpp
+index aa73a9b..abdad4f 100644
+--- a/xbmc/events/BaseEvent.cpp
++++ b/xbmc/events/BaseEvent.cpp
+@@ -18,8 +18,11 @@
+  *
+  */
+ 
++#include <chrono>
++
+ #include "BaseEvent.h"
+ #include "guilib/LocalizeStrings.h"
++#include "utils/StringUtils.h"
+ 
+ CBaseEvent::CBaseEvent(const std::string& identifier, const CVariant& label, const CVariant& description, EventLevel level /* = EventLevel::Information */)
+   : m_level(level),
+@@ -29,6 +32,7 @@ CBaseEvent::CBaseEvent(const std::string& identifier, const CVariant& label, con
+     m_description(description),
+     m_details(),
+     m_executionLabel(),
++    m_timestamp(GetInternalTimestamp()),
+     m_dateTime(CDateTime::GetCurrentDateTime())
+ { }
+ 
+@@ -40,6 +44,7 @@ CBaseEvent::CBaseEvent(const std::string& identifier, const CVariant& label, con
+     m_description(description),
+     m_details(),
+     m_executionLabel(),
++    m_timestamp(GetInternalTimestamp()),
+     m_dateTime(CDateTime::GetCurrentDateTime())
+ { }
+ 
+@@ -51,6 +56,7 @@ CBaseEvent::CBaseEvent(const std::string& identifier, const CVariant& label, con
+     m_description(description),
+     m_details(details),
+     m_executionLabel(),
++    m_timestamp(GetInternalTimestamp()),
+     m_dateTime(CDateTime::GetCurrentDateTime())
+ { }
+ 
+@@ -62,9 +68,15 @@ CBaseEvent::CBaseEvent(const std::string& identifier, const CVariant& label, con
+     m_description(description),
+     m_details(details),
+     m_executionLabel(executionLabel),
++    m_timestamp(GetInternalTimestamp()),
+     m_dateTime(CDateTime::GetCurrentDateTime())
+ { }
+ 
++uint64_t CBaseEvent::GetInternalTimestamp()
++{
++  return std::chrono::time_point_cast<std::chrono::microseconds>(std::chrono::steady_clock::now()).time_since_epoch().count();
++}
++
+ std::string CBaseEvent::GetLabel() const
+ {
+   return VariantToLocalizedString(m_label);
+@@ -97,3 +109,9 @@ std::string CBaseEvent::VariantToLocalizedString(const CVariant& variant)
+ 
+   return "";
+ }
++
++void CBaseEvent::ToSortable(SortItem& sortable, Field field) const
++{
++  if (field == FieldDate)
++    sortable[FieldDate] = StringUtils::Format("%020llu", m_timestamp);
++}
+diff --git a/xbmc/events/BaseEvent.h b/xbmc/events/BaseEvent.h
+index d0f4c8a..5a7eba5 100644
+--- a/xbmc/events/BaseEvent.h
++++ b/xbmc/events/BaseEvent.h
+@@ -39,6 +39,8 @@ public:
+ 
+   virtual bool CanExecute() const { return !GetExecutionLabel().empty(); }
+ 
++  virtual void ToSortable(SortItem& sortable, Field field) const;
++
+ protected:
+   CBaseEvent(const std::string& identifier, const CVariant& label, const CVariant& description, EventLevel level = EventLevel::Information);
+   CBaseEvent(const std::string& identifier, const CVariant& label, const CVariant& description, const std::string& icon, EventLevel level = EventLevel::Information);
+@@ -55,6 +57,8 @@ protected:
+ 
+ private:
+   static std::string VariantToLocalizedString(const CVariant& variant);
++  static uint64_t GetInternalTimestamp();
+ 
+-  CDateTime m_dateTime;
++  uint64_t m_timestamp; // high res internal time stamp
++  CDateTime m_dateTime; // user interface time stamp
+ };
+diff --git a/xbmc/events/IEvent.h b/xbmc/events/IEvent.h
+index 15a5762..e9598b3 100644
+--- a/xbmc/events/IEvent.h
++++ b/xbmc/events/IEvent.h
+@@ -22,6 +22,8 @@
+ #include <memory>
+ #include <string>
+ 
++#include "utils/ISortable.h"
++
+ class CDateTime;
+ 
+ enum class EventLevel
+@@ -32,7 +34,7 @@ enum class EventLevel
+   Error = 3,
+ };
+ 
+-class IEvent
++class IEvent : public ISortable
+ {
+ public:
+   virtual ~IEvent() { }
+@@ -49,6 +51,8 @@ public:
+ 
+   virtual bool CanExecute() const = 0;
+   virtual bool Execute() const = 0;
++
++  virtual void ToSortable(SortItem& sortable, Field field) const = 0;
+ };
+ 
+ typedef std::shared_ptr<const IEvent> EventPtr;
+diff --git a/xbmc/filesystem/EventsDirectory.cpp b/xbmc/filesystem/EventsDirectory.cpp
+index 1e3e03a..7edbe8a 100644
+--- a/xbmc/filesystem/EventsDirectory.cpp
++++ b/xbmc/filesystem/EventsDirectory.cpp
+@@ -64,13 +64,10 @@ bool CEventsDirectory::GetDirectory(const CURL& url, CFileItemList &items)
+ 
+ CFileItemPtr CEventsDirectory::EventToFileItem(const EventPtr& eventItem)
+ {
+-  if (eventItem == NULL)
++  if (!eventItem)
+     return CFileItemPtr();
+ 
+-  CFileItemPtr item(new CFileItem(eventItem->GetLabel()));
+-  item->m_dateTime = eventItem->GetDateTime();
+-  if (!eventItem->GetIcon().empty())
+-    item->SetIconImage(eventItem->GetIcon());
++  CFileItemPtr item(new CFileItem(eventItem));
+ 
+   item->SetProperty(PROPERTY_EVENT_IDENTIFIER, eventItem->GetIdentifier());
+   item->SetProperty(PROPERTY_EVENT_LEVEL, CEventLog::GetInstance().EventLevelToString(eventItem->GetLevel()));

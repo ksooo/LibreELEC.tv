@@ -1,0 +1,130 @@
+77;20003;0cdiff --git a/addons/xbmc.pvr/addon.xml b/addons/xbmc.pvr/addon.xml
+index c7ae23d..eef8d3d 100644
+--- a/addons/xbmc.pvr/addon.xml
++++ b/addons/xbmc.pvr/addon.xml
+@@ -1,6 +1,6 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+-<addon id="xbmc.pvr" version="4.1.0" provider-name="Team-Kodi">
+-  <backwards-compatibility abi="4.1.0"/>
++<addon id="xbmc.pvr" version="4.2.0" provider-name="Team Kodi">
++  <backwards-compatibility abi="4.2.0"/>
+   <requires>
+     <import addon="xbmc.core" version="0.1.0"/>
+   </requires>
+diff --git a/xbmc/addons/include/xbmc_pvr_dll.h b/xbmc/addons/include/xbmc_pvr_dll.h
+index 765f961..ae75b28 100644
+--- a/xbmc/addons/include/xbmc_pvr_dll.h
++++ b/xbmc/addons/include/xbmc_pvr_dll.h
+@@ -635,6 +635,12 @@ extern "C"
+   bool IsTimeshifting();
+ 
+   /*!
++   *  Check for real-time streaming
++   *  @return true if current stream is real-time
++   */
++  bool IsRealTimeStream();
++
++  /*!
+    * Called by XBMC to assign the function pointers of this add-on to pClient.
+    * @param pClient The struct to assign the function pointers to.
+    */
+@@ -721,6 +727,7 @@ extern "C"
+     pClient->GetBackendHostname             = GetBackendHostname;
+ 
+     pClient->IsTimeshifting                 = IsTimeshifting;
++    pClient->IsRealTimeStream               = IsRealTimeStream;
+   };
+ };
+ 
+diff --git a/xbmc/addons/include/xbmc_pvr_types.h b/xbmc/addons/include/xbmc_pvr_types.h
+index 03c5eea..18bc331 100644
+--- a/xbmc/addons/include/xbmc_pvr_types.h
++++ b/xbmc/addons/include/xbmc_pvr_types.h
+@@ -77,10 +77,10 @@ struct DemuxPacket;
+ #define PVR_STREAM_MAX_STREAMS 20
+ 
+ /* current PVR API version */
+-#define XBMC_PVR_API_VERSION "4.1.0"
++#define XBMC_PVR_API_VERSION "4.2.0"
+ 
+ /* min. PVR API version */
+-#define XBMC_PVR_MIN_API_VERSION "4.1.0"
++#define XBMC_PVR_MIN_API_VERSION "4.2.0"
+ 
+ #ifdef __cplusplus
+ extern "C" {
+@@ -566,6 +566,7 @@ extern "C" {
+     time_t       (__cdecl* GetBufferTimeEnd)(void);
+     const char*  (__cdecl* GetBackendHostname)(void);
+     bool         (__cdecl* IsTimeshifting)(void);
++    bool         (__cdecl* IsRealTimeStream)(void);
+   } PVRClient;
+ 
+ #ifdef __cplusplus
+diff --git a/xbmc/pvr/addons/PVRClient.cpp b/xbmc/pvr/addons/PVRClient.cpp
+index 400b8f0..a41ba7b 100644
+--- a/xbmc/pvr/addons/PVRClient.cpp
++++ b/xbmc/pvr/addons/PVRClient.cpp
+@@ -1972,3 +1972,17 @@ bool CPVRClient::Autoconfigure(void)
+ 
+   return bReturn;
+ }
++
++bool CPVRClient::IsRealTimeStream(void) const
++{
++  bool bReturn(false);
++  if (IsPlaying())
++  {
++    try
++    {
++      bReturn = m_pStruct->IsRealTimeStream();
++    }
++    catch (std::exception &e) { LogException(e, __FUNCTION__); }
++  }
++  return bReturn;
++}
+diff --git a/xbmc/pvr/addons/PVRClient.h b/xbmc/pvr/addons/PVRClient.h
+index 2160c84..889a98e 100644
+--- a/xbmc/pvr/addons/PVRClient.h
++++ b/xbmc/pvr/addons/PVRClient.h
+@@ -593,6 +593,11 @@ namespace PVR
+      */
+     bool Autoconfigure(void);
+ 
++    /*!
++     * @brief is real-time stream?
++     */
++    bool IsRealTimeStream() const;
++
+   private:
+     /*!
+      * @brief Checks whether the provided API version is compatible with XBMC
+diff --git a/xbmc/pvr/addons/PVRClients.cpp b/xbmc/pvr/addons/PVRClients.cpp
+index bba6f3f..efd6375 100644
+--- a/xbmc/pvr/addons/PVRClients.cpp
++++ b/xbmc/pvr/addons/PVRClients.cpp
+@@ -1759,3 +1759,11 @@ time_t CPVRClients::GetBufferTimeEnd() const
+   return time;
+ }
+ 
++bool CPVRClients::IsRealTimeStream(void) const
++{
++  PVR_CLIENT client;
++  if (GetPlayingClient(client))
++    return client->IsRealTimeStream();
++  return false;
++}
++
+diff --git a/xbmc/pvr/addons/PVRClients.h b/xbmc/pvr/addons/PVRClients.h
+index 0a1f7f7..dac75b3 100644
+--- a/xbmc/pvr/addons/PVRClients.h
++++ b/xbmc/pvr/addons/PVRClients.h
+@@ -672,6 +672,8 @@ namespace PVR
+ 
+     int GetClientId(const std::string& strId) const;
+ 
++    bool IsRealTimeStream() const;
++
+   private:
+     /*!
+      * @brief Update add-ons from the AddonManager

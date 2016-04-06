@@ -1,0 +1,37 @@
+diff --git a/xbmc/addons/RepositoryUpdater.cpp b/xbmc/addons/RepositoryUpdater.cpp
+index 4b1acd9..3e5d546 100644
+--- a/xbmc/addons/RepositoryUpdater.cpp
++++ b/xbmc/addons/RepositoryUpdater.cpp
+@@ -25,6 +25,8 @@
+ #include "addons/AddonManager.h"
+ #include "dialogs/GUIDialogExtendedProgressBar.h"
+ #include "dialogs/GUIDialogKaiToast.h"
++#include "events/AddonManagementEvent.h"
++#include "events/EventLog.h"
+ #include "guilib/GUIWindowManager.h"
+ #include "settings/Settings.h"
+ #include "threads/SingleLock.h"
+@@ -61,10 +63,10 @@ void CRepositoryUpdater::OnJobComplete(unsigned int jobID, bool success, CJob* j
+     CLog::Log(LOGDEBUG, "CRepositoryUpdater: done.");
+     m_doneEvent.Set();
+ 
+-    if (CSettings::GetInstance().GetInt(CSettings::SETTING_GENERAL_ADDONUPDATES) == AUTO_UPDATES_NOTIFY)
++    VECADDONS hasUpdate = CAddonMgr::GetInstance().GetOutdated();
++    if (!hasUpdate.empty())
+     {
+-      VECADDONS hasUpdate = CAddonMgr::GetInstance().GetOutdated();
+-      if (!hasUpdate.empty())
++      if (CSettings::GetInstance().GetInt(CSettings::SETTING_GENERAL_ADDONUPDATES) == AUTO_UPDATES_NOTIFY)
+       {
+         if (hasUpdate.size() == 1)
+           CGUIDialogKaiToast::QueueNotification(
+@@ -75,6 +77,9 @@ void CRepositoryUpdater::OnJobComplete(unsigned int jobID, bool success, CJob* j
+               "", g_localizeStrings.Get(24001), g_localizeStrings.Get(24061),
+               TOAST_DISPLAY_TIME, false, TOAST_DISPLAY_TIME);
+       }
++
++      for (const auto &addon : hasUpdate)
++        CEventLog::GetInstance().Add(EventPtr(new CAddonManagementEvent(addon, 24068)));
+     }
+ 
+     if (CSettings::GetInstance().GetInt(CSettings::SETTING_GENERAL_ADDONUPDATES) == AUTO_UPDATES_ON)

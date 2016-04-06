@@ -1,0 +1,354 @@
+diff --git a/xbmc/addons/AddonCallbacksPVR.cpp b/xbmc/addons/AddonCallbacksPVR.cpp
+index 44b6106..2e72883 100644
+--- a/xbmc/addons/AddonCallbacksPVR.cpp
++++ b/xbmc/addons/AddonCallbacksPVR.cpp
+@@ -437,9 +437,6 @@ void CAddonCallbacksPVR::PVREpgEventStateChange(void* addonData, EPG_TAG* tag, u
+     return;
+   }
+ 
+-  CLog::Log(LOGDEBUG, "PVR - %s - state for epg event '%d' on channel '%d' on client '%s' changed to '%d'.",
+-            __FUNCTION__, tag->iUniqueBroadcastId, iUniqueChannelId, client->Name().c_str(), newState);
+-
+   static CCriticalSection queueMutex;
+   static std::vector<EpgEventStateChange> queuedChanges;
+ 
+diff --git a/xbmc/epg/Epg.cpp b/xbmc/epg/Epg.cpp
+index e9640a4..5921863 100644
+--- a/xbmc/epg/Epg.cpp
++++ b/xbmc/epg/Epg.cpp
+@@ -332,17 +332,20 @@ bool CEpg::UpdateEntry(const EPG_TAG *data, bool bUpdateDatabase /* = false */)
+   return UpdateEntry(tag, false, bUpdateDatabase);
+ }
+ 
+-bool CEpg::UpdateEntry(const CEpgInfoTagPtr &tag, bool bNotifyObeservers, bool bUpdateDatabase /* = false */)
++bool CEpg::UpdateEntry(const CEpgInfoTagPtr &tag, bool bNotifyObservers, bool bUpdateDatabase /* = false */)
+ {
+   CSingleLock lock(m_critSection);
+   auto it = m_tags.find(tag->StartAsUTC());
+   EPG_EVENT_STATE state = (it == m_tags.end()) ? EPG_EVENT_CREATED : EPG_EVENT_UPDATED;
+ 
+-  if (UpdateEntry(tag, state, it, bUpdateDatabase) && bNotifyObeservers)
++  if (UpdateEntry(tag, state, it, bUpdateDatabase))
+   {
+-    SetChanged();
+-    lock.Leave();
+-    NotifyObservers(ObservableMessageEpg);
++    if (bNotifyObservers)
++    {
++      SetChanged();
++      lock.Leave();
++      NotifyObservers(ObservableMessageEpg);
++    }
+     return true;
+   }
+   return false;
+diff --git a/xbmc/pvr/windows/GUIWindowPVRBase.cpp b/xbmc/pvr/windows/GUIWindowPVRBase.cpp
+index 148a660..4888ef4 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRBase.cpp
++++ b/xbmc/pvr/windows/GUIWindowPVRBase.cpp
+@@ -85,6 +85,13 @@ std::string CGUIWindowPVRBase::GetSelectedItemPath(bool bRadio)
+   return m_selectedItemPaths[bRadio];
+ }
+ 
++void CGUIWindowPVRBase::ResetObservers(void)
++{
++  UnregisterObservers();
++  if (IsActive())
++    RegisterObservers();
++}
++
+ void CGUIWindowPVRBase::Notify(const Observable &obs, const ObservableMessage msg)
+ {
+   if (IsActive())
+@@ -181,11 +188,15 @@ void CGUIWindowPVRBase::OnInitWindow(void)
+ 
+   // mark item as selected by channel path
+   m_viewControl.SetSelectedItem(GetSelectedItemPath(m_bRadio));
++
++  RegisterObservers();
+ }
+ 
+ void CGUIWindowPVRBase::OnDeinitWindow(int nextWindowID)
+ {
++  UnregisterObservers();
+   UpdateSelectedItemPath();
++  CGUIMediaWindow::OnDeinitWindow(nextWindowID);
+ }
+ 
+ bool CGUIWindowPVRBase::OnMessage(CGUIMessage& message)
+diff --git a/xbmc/pvr/windows/GUIWindowPVRBase.h b/xbmc/pvr/windows/GUIWindowPVRBase.h
+index cbb52ae..190a54b 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRBase.h
++++ b/xbmc/pvr/windows/GUIWindowPVRBase.h
+@@ -68,11 +68,12 @@ namespace PVR
+     virtual bool OnAction(const CAction &action);
+     virtual bool OnBack(int actionID);
+     virtual bool OpenGroupSelectionDialog(void);
+-    virtual void ResetObservers(void) {};
+     virtual void Notify(const Observable &obs, const ObservableMessage msg);
+     virtual void SetInvalid();
+     virtual bool CanBeActivated() const;
+ 
++    void ResetObservers(void);
++
+     static std::string GetSelectedItemPath(bool bRadio);
+     static void SetSelectedItemPath(bool bRadio, const std::string &path);
+ 
+@@ -107,6 +108,9 @@ namespace PVR
+     bool OnContextButtonEditTimer(CFileItem *item, CONTEXT_BUTTON button);
+     bool OnContextButtonEditTimerRule(CFileItem *item, CONTEXT_BUTTON button);
+ 
++    virtual void RegisterObservers(void) {};
++    virtual void UnregisterObservers(void) {};
++
+     static CCriticalSection m_selectedItemPathsLock;
+     static std::string m_selectedItemPaths[2];
+ 
+diff --git a/xbmc/pvr/windows/GUIWindowPVRChannels.cpp b/xbmc/pvr/windows/GUIWindowPVRChannels.cpp
+index ffa5504..a6b8e6f 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRChannels.cpp
++++ b/xbmc/pvr/windows/GUIWindowPVRChannels.cpp
+@@ -52,10 +52,9 @@ CGUIWindowPVRChannels::CGUIWindowPVRChannels(bool bRadio) :
+ {
+ }
+ 
+-void CGUIWindowPVRChannels::ResetObservers(void)
++void CGUIWindowPVRChannels::RegisterObservers(void)
+ {
+   CSingleLock lock(m_critSection);
+-  UnregisterObservers();
+   g_EpgContainer.RegisterObserver(this);
+   g_PVRTimers->RegisterObserver(this);
+   g_infoManager.RegisterObserver(this);
+@@ -245,15 +244,13 @@ bool CGUIWindowPVRChannels::OnMessage(CGUIMessage& message)
+         case ObservableMessageEpgActiveItem:
+         case ObservableMessageCurrentItem:
+         {
+-          if (IsActive())
+-            SetInvalid();
++          SetInvalid();
+           bReturn = true;
+           break;
+         }
+         case ObservableMessageChannelGroupReset:
+         {
+-          if (IsActive())
+-            Refresh(true);
++          Refresh(true);
+           bReturn = true;
+           break;
+         }
+diff --git a/xbmc/pvr/windows/GUIWindowPVRChannels.h b/xbmc/pvr/windows/GUIWindowPVRChannels.h
+index c97f39a..bedbf27 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRChannels.h
++++ b/xbmc/pvr/windows/GUIWindowPVRChannels.h
+@@ -34,12 +34,12 @@ namespace PVR
+     bool OnContextButton(int itemNumber, CONTEXT_BUTTON button);
+     bool Update(const std::string &strDirectory, bool updateFilterPath = true);
+     void UpdateButtons(void);
+-    void ResetObservers(void);
+-    void UnregisterObservers(void);
+     bool OnAction(const CAction &action);
+ 
+   protected:
+     std::string GetDirectoryPath(void);
++    virtual void RegisterObservers(void);
++    virtual void UnregisterObservers(void);
+ 
+   private:
+     bool OnContextButtonAdd(CFileItem *item, CONTEXT_BUTTON button);
+diff --git a/xbmc/pvr/windows/GUIWindowPVRGuide.cpp b/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
+index 5f726d7..ba68408 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
++++ b/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
+@@ -65,9 +65,8 @@ void CGUIWindowPVRGuide::OnInitWindow()
+   CGUIWindowPVRBase::OnInitWindow();
+ }
+ 
+-void CGUIWindowPVRGuide::ResetObservers(void)
++void CGUIWindowPVRGuide::RegisterObservers(void)
+ {
+-  UnregisterObservers();
+   g_EpgContainer.RegisterObserver(this);
+ }
+ 
+@@ -364,7 +363,7 @@ bool CGUIWindowPVRGuide::OnMessage(CGUIMessage& message)
+         {
+           m_bUpdateRequired = true;
+           // do not allow more than MAX_UPDATE_FREQUENCY updates
+-          if (IsActive() && m_nextUpdateTimeout.IsTimePast())
++          if (m_nextUpdateTimeout.IsTimePast())
+           {
+             Refresh(true);
+             m_nextUpdateTimeout.Set(MAX_UPDATE_FREQUENCY);
+@@ -374,7 +373,7 @@ bool CGUIWindowPVRGuide::OnMessage(CGUIMessage& message)
+         }
+         case ObservableMessageEpgActiveItem:
+         {
+-          if (IsActive() && m_viewControl.GetCurrentControl() != GUIDE_VIEW_TIMELINE)
++          if (m_viewControl.GetCurrentControl() != GUIDE_VIEW_TIMELINE)
+             SetInvalid();
+           else
+             m_bUpdateRequired = true;
+diff --git a/xbmc/pvr/windows/GUIWindowPVRGuide.h b/xbmc/pvr/windows/GUIWindowPVRGuide.h
+index 4422113..5678e35 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRGuide.h
++++ b/xbmc/pvr/windows/GUIWindowPVRGuide.h
+@@ -38,8 +38,6 @@ namespace PVR
+     bool OnAction(const CAction &action);
+     void GetContextButtons(int itemNumber, CContextButtons &buttons);
+     bool OnContextButton(int itemNumber, CONTEXT_BUTTON button);
+-    void ResetObservers(void);
+-    void UnregisterObservers(void);
+     bool Update(const std::string &strDirectory, bool updateFilterPath = true);
+     void UpdateButtons(void);
+ 
+@@ -47,6 +45,8 @@ namespace PVR
+     void UpdateSelectedItemPath();
+     virtual std::string GetDirectoryPath(void) { return ""; }
+     virtual bool GetDirectory(const std::string &strDirectory, CFileItemList &items);
++    virtual void RegisterObservers(void);
++    virtual void UnregisterObservers(void);
+ 
+   private:
+     bool SelectPlayingFile(void);
+diff --git a/xbmc/pvr/windows/GUIWindowPVRRecordings.cpp b/xbmc/pvr/windows/GUIWindowPVRRecordings.cpp
+index 52945b7..c536132 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRRecordings.cpp
++++ b/xbmc/pvr/windows/GUIWindowPVRRecordings.cpp
+@@ -48,6 +48,14 @@ CGUIWindowPVRRecordings::CGUIWindowPVRRecordings(bool bRadio) :
+ {
+ }
+ 
++void CGUIWindowPVRRecordings::RegisterObservers(void)
++{
++  CSingleLock lock(m_critSection);
++  g_PVRRecordings->RegisterObserver(this);
++  g_PVRTimers->RegisterObserver(this);
++  g_infoManager.RegisterObserver(this);
++}
++
+ void CGUIWindowPVRRecordings::UnregisterObservers(void)
+ {
+   CSingleLock lock(m_critSection);
+@@ -58,15 +66,6 @@ void CGUIWindowPVRRecordings::UnregisterObservers(void)
+   g_infoManager.UnregisterObserver(this);
+ }
+ 
+-void CGUIWindowPVRRecordings::ResetObservers(void)
+-{
+-  CSingleLock lock(m_critSection);
+-  UnregisterObservers();
+-  g_PVRRecordings->RegisterObserver(this);
+-  g_PVRTimers->RegisterObserver(this);
+-  g_infoManager.RegisterObserver(this);
+-}
+-
+ void CGUIWindowPVRRecordings::OnWindowLoaded()
+ {
+   CONTROL_SELECT(CONTROL_BTNGROUPITEMS);
+@@ -304,16 +303,14 @@ bool CGUIWindowPVRRecordings::OnMessage(CGUIMessage &message)
+         case ObservableMessageEpgActiveItem:
+         case ObservableMessageCurrentItem:
+         {
+-          if (IsActive())
+-            SetInvalid();
++          SetInvalid();
+           bReturn = true;
+           break;
+         }
+         case ObservableMessageRecordings:
+         case ObservableMessageTimersReset:
+         {
+-          if (IsActive())
+-            Refresh(true);
++          Refresh(true);
+           bReturn = true;
+           break;
+         }
+diff --git a/xbmc/pvr/windows/GUIWindowPVRRecordings.h b/xbmc/pvr/windows/GUIWindowPVRRecordings.h
+index 6aa4f46..7347246 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRRecordings.h
++++ b/xbmc/pvr/windows/GUIWindowPVRRecordings.h
+@@ -41,12 +41,12 @@ namespace PVR
+     bool OnContextButton(int itemNumber, CONTEXT_BUTTON button);
+     bool Update(const std::string &strDirectory, bool updateFilterPath = true);
+     void UpdateButtons(void);
+-    void UnregisterObservers(void);
+-    void ResetObservers(void);
+ 
+   protected:
+     std::string GetDirectoryPath(void);
+     void OnPrepareFileItems(CFileItemList &items);
++    virtual void RegisterObservers(void);
++    virtual void UnregisterObservers(void);
+ 
+   private:
+     bool ActionDeleteRecording(CFileItem *item);
+diff --git a/xbmc/pvr/windows/GUIWindowPVRTimersBase.cpp b/xbmc/pvr/windows/GUIWindowPVRTimersBase.cpp
+index bc37aae..a8f4052 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRTimersBase.cpp
++++ b/xbmc/pvr/windows/GUIWindowPVRTimersBase.cpp
+@@ -44,20 +44,19 @@ CGUIWindowPVRTimersBase::CGUIWindowPVRTimersBase(bool bRadio, int id, const std:
+ {
+ }
+ 
+-void CGUIWindowPVRTimersBase::UnregisterObservers(void)
++void CGUIWindowPVRTimersBase::RegisterObservers(void)
+ {
+   CSingleLock lock(m_critSection);
+-  if (g_PVRTimers)
+-    g_PVRTimers->UnregisterObserver(this);
+-  g_infoManager.UnregisterObserver(this);
++  g_PVRTimers->RegisterObserver(this);
++  g_infoManager.RegisterObserver(this);
+ }
+ 
+-void CGUIWindowPVRTimersBase::ResetObservers(void)
++void CGUIWindowPVRTimersBase::UnregisterObservers(void)
+ {
+   CSingleLock lock(m_critSection);
+-  UnregisterObservers();
+-  g_PVRTimers->RegisterObserver(this);
+-  g_infoManager.RegisterObserver(this);
++  if (g_PVRTimers)
++    g_PVRTimers->UnregisterObserver(this);
++  g_infoManager.UnregisterObserver(this);
+ }
+ 
+ void CGUIWindowPVRTimersBase::GetContextButtons(int itemNumber, CContextButtons &buttons)
+@@ -233,15 +232,13 @@ bool CGUIWindowPVRTimersBase::OnMessage(CGUIMessage &message)
+         case ObservableMessageEpgActiveItem:
+         case ObservableMessageCurrentItem:
+         {
+-          if (IsActive())
+-            SetInvalid();
++          SetInvalid();
+           bReturn = true;
+           break;
+         }
+         case ObservableMessageTimersReset:
+         {
+-          if (IsActive())
+-            Refresh(true);
++          Refresh(true);
+           bReturn = true;
+           break;
+         }
+diff --git a/xbmc/pvr/windows/GUIWindowPVRTimersBase.h b/xbmc/pvr/windows/GUIWindowPVRTimersBase.h
+index 1701ad4..3812a55 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRTimersBase.h
++++ b/xbmc/pvr/windows/GUIWindowPVRTimersBase.h
+@@ -40,8 +40,10 @@ namespace PVR
+     bool OnContextButton(int itemNumber, CONTEXT_BUTTON button);
+     bool Update(const std::string &strDirectory, bool updateFilterPath = true);
+     void UpdateButtons(void);
+-    void UnregisterObservers(void);
+-    void ResetObservers(void);
++
++  protected:
++    virtual void RegisterObservers(void);
++    virtual void UnregisterObservers(void);
+ 
+   private:
+     bool ActionDeleteTimer(CFileItem *item);

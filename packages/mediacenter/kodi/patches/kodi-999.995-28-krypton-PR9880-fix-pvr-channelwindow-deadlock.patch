@@ -1,0 +1,138 @@
+diff --git a/xbmc/pvr/windows/GUIWindowPVRBase.cpp b/xbmc/pvr/windows/GUIWindowPVRBase.cpp
+index afb1639..9b4c435 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRBase.cpp
++++ b/xbmc/pvr/windows/GUIWindowPVRBase.cpp
+@@ -96,13 +96,6 @@ void CGUIWindowPVRBase::ResetObservers(void)
+ 
+ void CGUIWindowPVRBase::Notify(const Observable &obs, const ObservableMessage msg)
+ {
+-  if (IsActive())
+-  {
+-    // Only the active window must set the selected item path which is shared
+-    // between all PVR windows, not the last notified window (observer).
+-    UpdateSelectedItemPath();
+-  }
+-
+   CGUIMessage m(GUI_MSG_REFRESH_LIST, GetID(), 0, msg);
+   CApplicationMessenger::GetInstance().SendGUIMessage(m);
+ }
+@@ -173,6 +166,7 @@ void CGUIWindowPVRBase::OnDeinitWindow(int nextWindowID)
+ 
+ bool CGUIWindowPVRBase::OnMessage(CGUIMessage& message)
+ {
++  bool bReturn = false;
+   switch (message.GetMessage())
+   {
+     case GUI_MSG_CLICKED:
+@@ -184,9 +178,21 @@ bool CGUIWindowPVRBase::OnMessage(CGUIMessage& message)
+       }
+     }
+     break;
++
++    case GUI_MSG_REFRESH_LIST:
++    {
++      if (IsActive())
++      {
++        // Only the active window must set the selected item path which is shared
++        // between all PVR windows, not the last notified window (observer).
++        UpdateSelectedItemPath();
++      }
++      bReturn = true;
++    }
++    break;
+   }
+ 
+-  return CGUIMediaWindow::OnMessage(message);
++  return bReturn || CGUIMediaWindow::OnMessage(message);
+ }
+ 
+ bool CGUIWindowPVRBase::IsValidMessage(CGUIMessage& message)
+diff --git a/xbmc/pvr/windows/GUIWindowPVRChannels.cpp b/xbmc/pvr/windows/GUIWindowPVRChannels.cpp
+index 85a3b71..0903370 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRChannels.cpp
++++ b/xbmc/pvr/windows/GUIWindowPVRChannels.cpp
+@@ -243,13 +243,11 @@ bool CGUIWindowPVRChannels::OnMessage(CGUIMessage& message)
+         case ObservableMessageCurrentItem:
+         {
+           SetInvalid();
+-          bReturn = true;
+           break;
+         }
+         case ObservableMessageChannelGroupReset:
+         {
+           Refresh(true);
+-          bReturn = true;
+           break;
+         }
+       }
+diff --git a/xbmc/pvr/windows/GUIWindowPVRGuide.cpp b/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
+index c7a0b2f..f38231d 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
++++ b/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
+@@ -110,13 +110,6 @@ void CGUIWindowPVRGuide::Notify(const Observable &obs, const ObservableMessage m
+        msg == ObservableMessageEpgContainer ||
+        msg == ObservableMessageChannelGroup))
+   {
+-    if (IsActive())
+-    {
+-      // Only the active window must set the selected item path which is shared
+-      // between all PVR windows, not the last notified window (observer).
+-      UpdateSelectedItemPath();
+-    }
+-
+     CSingleLock lock(m_critSection);
+     m_bRefreshTimelineItems = true;
+   }
+@@ -398,7 +391,6 @@ bool CGUIWindowPVRGuide::OnMessage(CGUIMessage& message)
+         case ObservableMessageEpgContainer:
+         {
+           Refresh(true);
+-          bReturn = true;
+           break;
+         }
+         case ObservableMessageEpgActiveItem:
+@@ -406,7 +398,6 @@ bool CGUIWindowPVRGuide::OnMessage(CGUIMessage& message)
+           if (m_viewControl.GetCurrentControl() != GUIDE_VIEW_TIMELINE)
+             SetInvalid();
+ 
+-          bReturn = true;
+           break;
+         }
+       }
+diff --git a/xbmc/pvr/windows/GUIWindowPVRRecordings.cpp b/xbmc/pvr/windows/GUIWindowPVRRecordings.cpp
+index 3e98169..5406929 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRRecordings.cpp
++++ b/xbmc/pvr/windows/GUIWindowPVRRecordings.cpp
+@@ -303,14 +303,12 @@ bool CGUIWindowPVRRecordings::OnMessage(CGUIMessage &message)
+         case ObservableMessageCurrentItem:
+         {
+           SetInvalid();
+-          bReturn = true;
+           break;
+         }
+         case ObservableMessageRecordings:
+         case ObservableMessageTimersReset:
+         {
+           Refresh(true);
+-          bReturn = true;
+           break;
+         }
+       }
+diff --git a/xbmc/pvr/windows/GUIWindowPVRTimersBase.cpp b/xbmc/pvr/windows/GUIWindowPVRTimersBase.cpp
+index c7f5e24..7a8071a 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRTimersBase.cpp
++++ b/xbmc/pvr/windows/GUIWindowPVRTimersBase.cpp
+@@ -232,13 +232,11 @@ bool CGUIWindowPVRTimersBase::OnMessage(CGUIMessage &message)
+         case ObservableMessageCurrentItem:
+         {
+           SetInvalid();
+-          bReturn = true;
+           break;
+         }
+         case ObservableMessageTimersReset:
+         {
+           Refresh(true);
+-          bReturn = true;
+           break;
+         }
+       }

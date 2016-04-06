@@ -1,0 +1,27 @@
+diff --git a/xbmc/cores/dvdplayer/DVDFileInfo.cpp b/xbmc/cores/dvdplayer/DVDFileInfo.cpp
+index 83d78a2..e99f069 100644
+--- a/xbmc/cores/dvdplayer/DVDFileInfo.cpp
++++ b/xbmc/cores/dvdplayer/DVDFileInfo.cpp
+@@ -114,7 +114,7 @@ bool CDVDFileInfo::ExtractThumb(const std::string &strPath,
+     return false;
+   }
+ 
+-  if (pInputStream->IsStreamType(DVDSTREAM_TYPE_PVRMANAGER))
++  if (pInputStream->IsStreamType(DVDSTREAM_TYPE_PVRMANAGER) && URIUtils::IsLiveTV(strPath))
+   {
+     delete pInputStream;
+     return false;
+diff --git a/xbmc/pvr/recordings/PVRRecordings.cpp b/xbmc/pvr/recordings/PVRRecordings.cpp
+index 5288a34..73665a4 100644
+--- a/xbmc/pvr/recordings/PVRRecordings.cpp
++++ b/xbmc/pvr/recordings/PVRRecordings.cpp
+@@ -388,9 +388,6 @@ bool CPVRRecordings::GetDirectory(const std::string& strPath, CFileItemList &ite
+       if (!current->m_strFanartPath.empty())
+         pFileItem->SetArt("fanart", current->m_strFanartPath);
+ 
+-      // Use the channel icon as a fallback when a thumbnail is not available
+-      pFileItem->SetArtFallback("thumb", "icon");
+-
+       pFileItem->SetOverlayImage(CGUIListItem::ICON_OVERLAY_UNWATCHED, pFileItem->GetPVRRecordingInfoTag()->m_playCount > 0);
+ 
+       items.Add(pFileItem);

@@ -1,0 +1,62 @@
+diff --git a/xbmc/pvr/dialogs/GUIDialogPVRTimerSettings.cpp b/xbmc/pvr/dialogs/GUIDialogPVRTimerSettings.cpp
+index e49e8bb..6ff7ce4 100644
+--- a/xbmc/pvr/dialogs/GUIDialogPVRTimerSettings.cpp
++++ b/xbmc/pvr/dialogs/GUIDialogPVRTimerSettings.cpp
+@@ -744,6 +744,10 @@ void CGUIDialogPVRTimerSettings::InitializeTypesList()
+       // Drop TimerTypes that forbid EPGInfo, if it is populated
+       if (type->ForbidsEpgTagOnCreate() && m_timerInfoTag->HasEpgInfoTag())
+         continue;
++
++      // Drop TimerTypes that aren't repeating if end time is in the past
++      if (!type->IsRepeating() && m_timerInfoTag->EndAsLocalTime() < CDateTime::GetCurrentDateTime())
++        continue;
+     }
+ 
+     m_typeEntries.insert(std::make_pair(idx++, type));
+diff --git a/xbmc/pvr/timers/PVRTimerInfoTag.cpp b/xbmc/pvr/timers/PVRTimerInfoTag.cpp
+index 576309e..442384c 100644
+--- a/xbmc/pvr/timers/PVRTimerInfoTag.cpp
++++ b/xbmc/pvr/timers/PVRTimerInfoTag.cpp
+@@ -702,7 +702,7 @@ CPVRTimerInfoTagPtr CPVRTimerInfoTag::CreateFromEpg(const CEpgInfoTagPtr &tag, b
+   }
+ 
+   /* check if the epg end date is in the future */
+-  if (tag->EndAsLocalTime() < CDateTime::GetCurrentDateTime())
++  if (tag->EndAsLocalTime() < CDateTime::GetCurrentDateTime() && !bRepeating)
+   {
+     CLog::Log(LOGERROR, "%s - end time is in the past", __FUNCTION__);
+     return CPVRTimerInfoTagPtr();
+diff --git a/xbmc/pvr/windows/GUIWindowPVRGuide.cpp b/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
+index baa75af..05d08d2 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
++++ b/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
+@@ -101,9 +101,10 @@ void CGUIWindowPVRGuide::GetContextButtons(int itemNumber, CContextButtons &butt
+           buttons.Add(CONTEXT_BUTTON_DELETE_TIMER, 19060);  /* Delete timer */
+       }
+     }
+-    else if (g_PVRClients->SupportsTimers() && epg->EndAsLocalTime() > CDateTime::GetCurrentDateTime())
++    else
+     {
+-      buttons.Add(CONTEXT_BUTTON_START_RECORD, 264);      /* Record */
++      if (epg->EndAsLocalTime() > CDateTime::GetCurrentDateTime())
++        buttons.Add(CONTEXT_BUTTON_START_RECORD, 264);      /* Record */
+       buttons.Add(CONTEXT_BUTTON_ADD_TIMER, 19061);       /* Add timer */
+     }
+ 
+diff --git a/xbmc/pvr/windows/GUIWindowPVRSearch.cpp b/xbmc/pvr/windows/GUIWindowPVRSearch.cpp
+index f0786f7..7908c32 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRSearch.cpp
++++ b/xbmc/pvr/windows/GUIWindowPVRSearch.cpp
+@@ -67,9 +67,10 @@ void CGUIWindowPVRSearch::GetContextButtons(int itemNumber, CContextButtons &but
+           buttons.Add(CONTEXT_BUTTON_DELETE_TIMER, 19060);  /* Delete timer */
+       }
+     }
+-    else if (g_PVRClients->SupportsTimers() && epg->EndAsLocalTime() > CDateTime::GetCurrentDateTime())
++    else
+     {
+-      buttons.Add(CONTEXT_BUTTON_START_RECORD, 264);      /* Record */
++      if (epg->EndAsLocalTime() > CDateTime::GetCurrentDateTime())
++        buttons.Add(CONTEXT_BUTTON_START_RECORD, 264);      /* Record */
+       buttons.Add(CONTEXT_BUTTON_ADD_TIMER, 19061);       /* Add timer */
+     }
+ 

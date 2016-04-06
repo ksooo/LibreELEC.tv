@@ -1,0 +1,125 @@
+diff --git a/xbmc/epg/EpgContainer.cpp b/xbmc/epg/EpgContainer.cpp
+index 279d920..c37e43a 100644
+--- a/xbmc/epg/EpgContainer.cpp
++++ b/xbmc/epg/EpgContainer.cpp
+@@ -42,7 +42,8 @@ using namespace EPG;
+ using namespace PVR;
+ 
+ CEpgContainer::CEpgContainer(void) :
+-    CThread("EPGUpdater")
++    CThread("EPGUpdater"),
++    m_bIsRestarting(false)
+ {
+   m_progressHandle = NULL;
+   m_bStop = true;
+@@ -148,7 +149,7 @@ public:
+   }
+ };
+ 
+-void CEpgContainer::Start(bool bAsync)
++void CEpgContainer::Start(bool bAsync, bool bIsRestart /* = false */)
+ {
+   if (bAsync)
+   {
+@@ -166,6 +167,7 @@ void CEpgContainer::Start(bool bAsync)
+       m_database.Open();
+ 
+     m_bIsInitialising = true;
++    m_bIsRestarting = bIsRestart;
+     m_bStop = false;
+     LoadSettings();
+ 
+@@ -183,6 +185,7 @@ void CEpgContainer::Start(bool bAsync)
+     Create();
+     SetPriority(-1);
+ 
++    m_bIsRestarting = false;
+     m_bStarted = true;
+ 
+     g_PVRManager.TriggerEpgsCreate();
+@@ -602,7 +605,7 @@ bool CEpgContainer::UpdateEPG(bool bOnlyPending /* = false */)
+   CDateTime::GetCurrentDateTime().GetAsUTCDateTime().GetAsTime(start);
+   end = start + m_iDisplayTime;
+   start -= g_advancedSettings.m_iEpgLingerTime * 60;
+-  bShowProgress = g_advancedSettings.m_bEpgDisplayUpdatePopup && (m_bIsInitialising || g_advancedSettings.m_bEpgDisplayIncrementalUpdatePopup);
++  bShowProgress = g_advancedSettings.m_bEpgDisplayUpdatePopup && !m_bIsRestarting &&(m_bIsInitialising || g_advancedSettings.m_bEpgDisplayIncrementalUpdatePopup);
+ 
+   {
+     CSingleLock lock(m_critSection);
+diff --git a/xbmc/epg/EpgContainer.h b/xbmc/epg/EpgContainer.h
+index 43dc44d..d23fb73 100644
+--- a/xbmc/epg/EpgContainer.h
++++ b/xbmc/epg/EpgContainer.h
+@@ -75,8 +75,9 @@ namespace EPG
+     /*!
+      * @brief Start the EPG update thread.
+      * @param bAsync Should the EPG container starts asynchronously
++     * @param bIsRestart Is first start or restart (after e.g. resume)
+      */
+-    virtual void Start(bool bAsync);
++    virtual void Start(bool bAsync, bool bIsRestart = false);
+ 
+     /*!
+      * @brief Stop the EPG update thread.
+@@ -312,6 +313,7 @@ namespace EPG
+     //@{
+     bool         m_bIsUpdating;            /*!< true while an update is running */
+     bool         m_bIsInitialising;        /*!< true while the epg manager hasn't loaded all tables */
++    bool         m_bIsRestarting;          /*!< true while the pvr manager is restarting (e.g when resuming after system suspend) */
+     bool         m_bStarted;               /*!< true if EpgContainer has fully started */
+     bool         m_bLoaded;                /*!< true after epg data is initially loaded from the database */
+     bool         m_bPreventUpdates;        /*!< true to prevent EPG updates */
+diff --git a/xbmc/pvr/PVRGUIInfo.cpp b/xbmc/pvr/PVRGUIInfo.cpp
+index 4c4b300..4187277 100644
+--- a/xbmc/pvr/PVRGUIInfo.cpp
++++ b/xbmc/pvr/PVRGUIInfo.cpp
+@@ -191,7 +191,10 @@ bool CPVRGUIInfo::TimerInfoToggle(void)
+ 
+ void CPVRGUIInfo::Process(void)
+ {
+-  unsigned int mLoop(0);
++  unsigned int mLoop(1); /* Delay first backend data cache update. It might last
++                            very long (e.g. GetDriveSpace()) and block parallel
++                            backend operations called by other threads (like
++                            initial EPG and channel sync) */
+   int toggleInterval = g_advancedSettings.m_iPVRInfoToggleInterval / 1000;
+ 
+   /* updated on request */
+diff --git a/xbmc/pvr/PVRManager.cpp b/xbmc/pvr/PVRManager.cpp
+index 2e1ebb3..bdacf07 100644
+--- a/xbmc/pvr/PVRManager.cpp
++++ b/xbmc/pvr/PVRManager.cpp
+@@ -120,6 +120,13 @@ void CPVRManager::Announce(AnnouncementFlag flag, const char *sender, const char
+ 
+   if (strcmp(message, "OnWake") == 0)
+   {
++    /* re-start update threads */
++    if (m_addons)
++      m_addons->Start();
++    if (m_guiInfo)
++      m_guiInfo->Start();
++    g_EpgContainer.Start(false, true);
++
+     /* start job to search for missing channel icons */
+     TriggerSearchMissingChannelIcons();
+ 
+@@ -133,6 +140,19 @@ void CPVRManager::Announce(AnnouncementFlag flag, const char *sender, const char
+     TriggerEpgsCreate();
+     TriggerTimersUpdate();
+   }
++  else if (strcmp(message, "OnSleep") == 0)
++  {
++    for (auto updateJob : m_pendingUpdates)
++      delete updateJob;
++    m_pendingUpdates.clear();
++
++    /* stop update threads */
++    g_EpgContainer.Stop();
++    if (m_guiInfo)
++      m_guiInfo->Stop();
++    if (m_addons)
++      m_addons->Stop();
++  }
+ }
+ 
+ CPVRManager &CPVRManager::GetInstance()
