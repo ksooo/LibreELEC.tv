@@ -43,6 +43,11 @@ if [ -n "$PKG_URL" -a -n "$PKG_SOURCE_NAME" ]; then
   [ "$VERBOSE" != "yes" ] && WGET_OPT=-q
   WGET_CMD="wget --timeout=30 --tries=3 --passive-ftp --no-check-certificate -c $WGET_OPT -O $SOURCES/$1/$PKG_SOURCE_NAME"
 
+  # no download if already present
+  if [ -f "$PACKAGE" ]; then
+    exit 0
+  fi
+
   NBWGET="1"
 
   STAMP="$PACKAGE.url"
