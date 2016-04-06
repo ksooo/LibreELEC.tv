@@ -1,0 +1,1561 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index cb04942..0842682 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -6,10 +6,10 @@ enable_language(CXX)
+ 
+ find_package(kodi REQUIRED)
+ find_package(kodiplatform REQUIRED)
+-find_package(p8-platform REQUIRED)
++find_package(platform REQUIRED)
+ 
+ include_directories(${kodiplatform_INCLUDE_DIRS}
+-                    ${p8-platform_INCLUDE_DIRS}
++                    ${platform_INCLUDE_DIRS}
+                     ${KODI_INCLUDE_DIR}
+                     ${PROJECT_SOURCE_DIR}/lib)
+ 
+@@ -95,7 +95,7 @@ list(APPEND HTS_SOURCES
+ 
+ add_subdirectory(lib/libhts)
+ 
+-set(DEPLIBS ${p8-platform_LIBRARIES} hts)
++set(DEPLIBS ${platform_LIBRARIES} hts)
+ if(WIN32)
+   list(APPEND DEPLIBS ws2_32)
+ endif()
+diff --git a/pvr.hts/addon.xml.in b/pvr.hts/addon.xml.in
+index 913802d..028c861 100644
+--- a/pvr.hts/addon.xml.in
++++ b/pvr.hts/addon.xml.in
+@@ -1,12 +1,12 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+ <addon
+   id="pvr.hts"
+-  version="3.0.2"
++  version="3.1.0"
+   name="Tvheadend HTSP Client"
+   provider-name="Adam Sutton, Sam Stenvall, Lars Op den Kamp, Kai Sommerfeld">
+   <requires>
+     <c-pluff version="0.1"/>
+-    <import addon="xbmc.pvr" version="4.2.0"/>
++    <import addon="xbmc.pvr" version="5.0.0"/>
+     <import addon="xbmc.codec" version="1.0.1"/>
+   </requires>
+   <extension
+diff --git a/pvr.hts/changelog.txt b/pvr.hts/changelog.txt
+index 97b3c94..d57b26c 100644
+--- a/pvr.hts/changelog.txt
++++ b/pvr.hts/changelog.txt
+@@ -1,3 +1,6 @@
++3.1.0
++- Updated to PVR API v5.0.0
++
+ 3.0.2
+ - updated to PVR API v4.2.0 (implemented IsRealTimeStream)
+ 
+diff --git a/src/AutoRecordings.cpp b/src/AutoRecordings.cpp
+index d9e5e1d..a29931f 100644
+--- a/src/AutoRecordings.cpp
++++ b/src/AutoRecordings.cpp
+@@ -26,7 +26,7 @@
+ #include "tvheadend/utilities/Utilities.h"
+ #include "tvheadend/utilities/Logger.h"
+ 
+-using namespace P8PLATFORM;
++using namespace PLATFORM;
+ using namespace tvheadend;
+ using namespace tvheadend::entity;
+ using namespace tvheadend::utilities;
+@@ -69,7 +69,7 @@ void AutoRecordings::GetAutorecTimers(std::vector<PVR_TIMER> &timers)
+     memset(&tmr, 0, sizeof(tmr));
+ 
+     tmr.iClientIndex       = tit->second.GetId();
+-    tmr.iClientChannelUid  = (tit->second.GetChannel() > 0) ? tit->second.GetChannel() : -1;
++    tmr.iClientChannelUid  = (tit->second.GetChannel() > 0) ? tit->second.GetChannel() : PVR_TIMER_ANY_CHANNEL;
+     tmr.startTime          = tit->second.GetStart();
+     tmr.endTime            = tit->second.GetStop();
+     if (tmr.startTime == 0)
+diff --git a/src/HTSPConnection.cpp b/src/HTSPConnection.cpp
+index 920cb02..8ab490f 100644
+--- a/src/HTSPConnection.cpp
++++ b/src/HTSPConnection.cpp
+@@ -19,9 +19,9 @@
+  *
+  */
+ 
+-#include "p8-platform/threads/mutex.h"
+-#include "p8-platform/util/StringUtils.h"
+-#include "p8-platform/sockets/tcp.h"
++#include "platform/threads/mutex.h"
++#include "platform/util/StringUtils.h"
++#include "platform/sockets/tcp.h"
+ 
+ extern "C" {
+ #include "libhts/htsmsg_binary.h"
+@@ -33,7 +33,7 @@ extern "C" {
+ 
+ using namespace std;
+ using namespace ADDON;
+-using namespace P8PLATFORM;
++using namespace PLATFORM;
+ using namespace tvheadend;
+ using namespace tvheadend::utilities;
+ 
+@@ -93,7 +93,8 @@ void *CHTSPRegister::Process ( void )
+ CHTSPConnection::CHTSPConnection ()
+   : m_socket(NULL), m_regThread(this), m_ready(false), m_seq(0),
+     m_serverName(""), m_serverVersion(""), m_htspVersion(0),
+-    m_webRoot(""), m_challenge(NULL), m_challengeLen(0), m_suspended(false)
++    m_webRoot(""), m_challenge(NULL), m_challengeLen(0), m_suspended(false),
++    m_state(PVR_CONNECTION_STATE_UNKNOWN)
+ {
+ }
+ 
+@@ -108,7 +109,7 @@ CHTSPConnection::~CHTSPConnection()
+  * Info
+  */
+ 
+-std::string CHTSPConnection::GetWebURL ( const char *fmt, ... )
++std::string CHTSPConnection::GetWebURL ( const char *fmt, ... ) const
+ {
+   va_list va;
+   const Settings &settings = Settings::GetInstance();
+@@ -133,32 +134,38 @@ std::string CHTSPConnection::GetWebURL ( const char *fmt, ... )
+ 
+ bool CHTSPConnection::WaitForConnection ( void )
+ {
+-  if (!m_ready) {
++  if (!m_ready)
++  {
+     Logger::Log(LogLevel::LEVEL_TRACE, "waiting for registration...");
+     m_regCond.Wait(m_mutex, m_ready, Settings::GetInstance().GetConnectTimeout());
+   }
+   return m_ready;
+ }
+ 
+-std::string CHTSPConnection::GetServerName ( void )
++int  CHTSPConnection::GetProtocol ( void ) const
++{
++  CLockObject lock(m_mutex);
++  return m_htspVersion;
++}
++
++std::string CHTSPConnection::GetServerName ( void ) const
+ {
+   CLockObject lock(m_mutex);
+   return m_serverName;
+ }
+ 
+-std::string CHTSPConnection::GetServerVersion ( void )
++std::string CHTSPConnection::GetServerVersion ( void ) const
+ {
+   CLockObject lock(m_mutex);
+   return StringUtils::Format("%s (HTSP v%d)", m_serverVersion.c_str(), m_htspVersion);
+ }
+ 
+-std::string CHTSPConnection::GetServerString ( void )
++std::string CHTSPConnection::GetServerString ( void ) const
+ {
+   const Settings &settings = Settings::GetInstance();
+ 
+   CLockObject lock(m_mutex);
+-  return StringUtils::Format("%s:%d [%s]", settings.GetHostname().c_str(), settings.GetPortHTSP(),
+-             m_ready ? "connected" : "disconnected");
++  return StringUtils::Format("%s:%d", settings.GetHostname().c_str(), settings.GetPortHTSP());
+ }
+ 
+ bool CHTSPConnection::HasCapability(const std::string &capability) const
+@@ -187,6 +194,32 @@ void CHTSPConnection::OnWake ( void )
+   m_suspended = false;
+ }
+ 
++void CHTSPConnection::SetState ( PVR_CONNECTION_STATE state )
++{
++  PVR_CONNECTION_STATE prevState(PVR_CONNECTION_STATE_UNKNOWN);
++  PVR_CONNECTION_STATE newState(PVR_CONNECTION_STATE_UNKNOWN);
++
++  {
++    CLockObject lock(m_mutex);
++
++    /* No notification if no state change or while suspended. */
++    if (m_state != state && !m_suspended)
++    {
++      prevState = m_state;
++      newState  = state;
++      m_state   = newState;
++
++      Logger::Log(LogLevel::LEVEL_DEBUG, "connection state change (%d -> %d)", prevState, newState);
++    }
++  }
++
++  if (prevState != newState)
++  {
++    /* Notify connection state change (callback!) */
++    PVR->ConnectionStateChange(GetServerString().c_str(), newState, NULL);
++  }
++}
++
+ /*
+  * Close the connection
+  */
+@@ -350,7 +383,6 @@ htsmsg_t *CHTSPConnection::SendAndWait0 ( const char *method, htsmsg_t *msg, int
+   m_messages.erase(seq);
+   if (!msg)
+   {
+-    //XBMC->QueueNotification(QUEUE_ERROR, "Command %s failed: No response received", method);
+     Logger::Log(LogLevel::LEVEL_ERROR, "Command %s failed: No response received", method);
+     if (!m_suspended)
+       Disconnect();
+@@ -362,7 +394,6 @@ htsmsg_t *CHTSPConnection::SendAndWait0 ( const char *method, htsmsg_t *msg, int
+   if (!htsmsg_get_u32(msg, "noaccess", &noaccess) && noaccess)
+   {
+     // access denied
+-    //XBMC->QueueNotification(QUEUE_ERROR, "Command %s failed: Access denied", method);
+     Logger::Log(LogLevel::LEVEL_ERROR, "Command %s failed: Access denied", method);
+     htsmsg_destroy(msg);
+     return NULL;
+@@ -372,7 +403,6 @@ htsmsg_t *CHTSPConnection::SendAndWait0 ( const char *method, htsmsg_t *msg, int
+     const char* strError;
+     if((strError = htsmsg_get_str(msg, "error")) != NULL)
+     {
+-      //XBMC->QueueNotification(QUEUE_ERROR, "Command %s failed: %s", method, strError);
+       Logger::Log(LogLevel::LEVEL_ERROR, "Command %s failed: %s", method, strError);
+       htsmsg_destroy(msg);
+       return NULL;
+@@ -483,8 +513,10 @@ void CHTSPConnection::Register ( void )
+ 
+     /* Send Greeting */
+     Logger::Log(LogLevel::LEVEL_DEBUG, "sending hello");
+-    if (!SendHello()) {
++    if (!SendHello())
++    {
+       Logger::Log(LogLevel::LEVEL_ERROR, "failed to send hello");
++      SetState(PVR_CONNECTION_STATE_SERVER_MISMATCH);
+       goto fail;
+     }
+ 
+@@ -492,17 +524,18 @@ void CHTSPConnection::Register ( void )
+     if (m_htspVersion < HTSP_MIN_SERVER_VERSION)
+     {
+       Logger::Log(LogLevel::LEVEL_ERROR, "server htsp version (v%d) does not match minimum htsp version required by client (v%d)", m_htspVersion, HTSP_MIN_SERVER_VERSION);
+-      Disconnect();
+-      m_ready = false;
+-      m_regCond.Broadcast();
+-      return;
++      SetState(PVR_CONNECTION_STATE_VERSION_MISMATCH);
++      goto fail;
+     }
+ 
+     /* Send Auth */
+     Logger::Log(LogLevel::LEVEL_DEBUG, "sending auth");
+     
+     if (!SendAuth(user, pass))
++    {
++      SetState(PVR_CONNECTION_STATE_ACCESS_DENIED);
+       goto fail;
++    }
+ 
+     /* Rebuild state */
+     Logger::Log(LogLevel::LEVEL_DEBUG, "rebuilding state");
+@@ -510,6 +543,7 @@ void CHTSPConnection::Register ( void )
+       goto fail;
+ 
+     Logger::Log(LogLevel::LEVEL_DEBUG, "registered");
++    SetState(PVR_CONNECTION_STATE_CONNECTED);
+     m_ready = true;
+     m_regCond.Broadcast();
+     return;
+@@ -577,13 +611,14 @@ void* CHTSPConnection::Process ( void )
+     {
+       /* Unable to connect */
+       Logger::Log(LogLevel::LEVEL_ERROR, "unable to connect to %s:%d", host.c_str(), port);
+-      
++      SetState(PVR_CONNECTION_STATE_SERVER_UNREACHABLE);
++
+       // Retry a few times with a short interval, after that with the default timeout
+       if (++retryAttempt <= FAST_RECONNECT_ATTEMPTS)
+         Sleep(FAST_RECONNECT_INTERVAL);
+       else
+         Sleep(timeout);
+-      
++
+       continue;
+     }
+     Logger::Log(LogLevel::LEVEL_DEBUG, "connected");
+diff --git a/src/HTSPDemuxer.cpp b/src/HTSPDemuxer.cpp
+index 40b3e17..c7ab3d2 100644
+--- a/src/HTSPDemuxer.cpp
++++ b/src/HTSPDemuxer.cpp
+@@ -27,7 +27,7 @@
+ 
+ using namespace std;
+ using namespace ADDON;
+-using namespace P8PLATFORM;
++using namespace PLATFORM;
+ using namespace tvheadend;
+ using namespace tvheadend::utilities;
+ 
+diff --git a/src/HTSPTypes.h b/src/HTSPTypes.h
+index 950f45c..c1e49bc 100644
+--- a/src/HTSPTypes.h
++++ b/src/HTSPTypes.h
+@@ -27,6 +27,7 @@
+ #include <map>
+ #include <string>
+ #include "client.h"
++#include "tvheadend/entity/Event.h"
+ 
+ typedef enum {
+   DVR_PRIO_IMPORTANT   = 0,
+@@ -91,17 +92,27 @@ enum eHTSPEventType
+ struct SHTSPEvent
+ {
+   eHTSPEventType m_type;
+-  uint32_t       m_idx;
+ 
+-  SHTSPEvent (eHTSPEventType type = HTSP_EVENT_NONE, uint32_t idx = 0) :
++  // params for HTSP_EVENT_EPG_UPDATE
++  tvheadend::entity::Event m_epg;
++  EPG_EVENT_STATE          m_state;
++
++  SHTSPEvent (eHTSPEventType type = HTSP_EVENT_NONE) :
+     m_type(type),
+-    m_idx (idx)
++    m_state(EPG_EVENT_CREATED)
+   {
+   }
+-  
++
++  SHTSPEvent (eHTSPEventType type, const tvheadend::entity::Event &epg, EPG_EVENT_STATE state) :
++    m_type(type),
++    m_epg(epg),
++    m_state(state)
++  {
++  }
++
+   bool operator==(const SHTSPEvent &right) const
+   {
+-    return m_type == right.m_type && m_idx == right.m_idx;
++    return m_type == right.m_type && m_epg == right.m_epg && m_state && right.m_state;
+   }
+ 
+   bool operator!=(const SHTSPEvent &right) const
+diff --git a/src/HTSPVFS.cpp b/src/HTSPVFS.cpp
+index 0404bab..0463f56 100644
+--- a/src/HTSPVFS.cpp
++++ b/src/HTSPVFS.cpp
+@@ -19,8 +19,8 @@
+  *
+  */
+ 
+-#include "p8-platform/threads/mutex.h"
+-#include "p8-platform/util/StringUtils.h"
++#include "platform/threads/mutex.h"
++#include "platform/util/StringUtils.h"
+ #include "tvheadend/utilities/Logger.h"
+ 
+ extern "C" {
+@@ -30,7 +30,7 @@ extern "C" {
+ #include "Tvheadend.h"
+ 
+ using namespace std;
+-using namespace P8PLATFORM;
++using namespace PLATFORM;
+ using namespace tvheadend::utilities;
+ 
+ /*
+diff --git a/src/TimeRecordings.cpp b/src/TimeRecordings.cpp
+index 97aae09..e880162 100644
+--- a/src/TimeRecordings.cpp
++++ b/src/TimeRecordings.cpp
+@@ -25,7 +25,7 @@
+ #include "tvheadend/utilities/Utilities.h"
+ #include "tvheadend/utilities/Logger.h"
+ 
+-using namespace P8PLATFORM;
++using namespace PLATFORM;
+ using namespace tvheadend;
+ using namespace tvheadend::entity;
+ using namespace tvheadend::utilities;
+@@ -68,7 +68,7 @@ void TimeRecordings::GetTimerecTimers(std::vector<PVR_TIMER> &timers)
+     memset(&tmr, 0, sizeof(tmr));
+ 
+     tmr.iClientIndex       = tit->second.GetId();
+-    tmr.iClientChannelUid  = (tit->second.GetChannel() > 0) ? tit->second.GetChannel() : -1;
++    tmr.iClientChannelUid  = (tit->second.GetChannel() > 0) ? tit->second.GetChannel() : PVR_TIMER_ANY_CHANNEL;
+     tmr.startTime          = tit->second.GetStart();
+     tmr.endTime            = tit->second.GetStop();
+     strncpy(tmr.strTitle,
+diff --git a/src/Tvheadend.cpp b/src/Tvheadend.cpp
+index c65fb22..f30ee75 100644
+--- a/src/Tvheadend.cpp
++++ b/src/Tvheadend.cpp
+@@ -23,7 +23,7 @@
+ #include <ctime>
+ #include <memory>
+ 
+-#include "p8-platform/util/StringUtils.h"
++#include "platform/util/StringUtils.h"
+ 
+ #include "Tvheadend.h"
+ #include "tvheadend/utilities/Utilities.h"
+@@ -31,7 +31,7 @@
+ 
+ using namespace std;
+ using namespace ADDON;
+-using namespace P8PLATFORM;
++using namespace PLATFORM;
+ using namespace tvheadend;
+ using namespace tvheadend::entity;
+ using namespace tvheadend::utilities;
+@@ -471,6 +471,9 @@ PVR_ERROR CTvheadend::GetRecordings ( ADDON_HANDLE handle )
+       /* EPG event id */
+       rec.iEpgEventId = recording.GetEventId();
+ 
++      /* channel id */
++      rec.iChannelUid = recording.GetChannel() > 0 ? recording.GetChannel() : PVR_CHANNEL_INVALID_UID;
++
+       recs.push_back(rec);
+     }
+   }
+@@ -658,26 +661,24 @@ PVR_ERROR CTvheadend::GetTimerTypes ( PVR_TIMER_TYPE types[], int *size )
+   }
+ 
+   /* PVR_Timer.iLifetime values and presentation.*/
+-  static std::vector< std::pair<int, std::string> > lifetimeValues;
+-  if (lifetimeValues.size() == 0)
+-  {
+-    lifetimeValues.push_back(std::make_pair(DVR_RET_1DAY,    XBMC->GetLocalizedString(30365)));
+-    lifetimeValues.push_back(std::make_pair(DVR_RET_3DAY,    StringUtils::Format(XBMC->GetLocalizedString(30366), 3)));
+-    lifetimeValues.push_back(std::make_pair(DVR_RET_5DAY,    StringUtils::Format(XBMC->GetLocalizedString(30366), 5)));
+-    lifetimeValues.push_back(std::make_pair(DVR_RET_1WEEK,   XBMC->GetLocalizedString(30367)));
+-    lifetimeValues.push_back(std::make_pair(DVR_RET_2WEEK,   StringUtils::Format(XBMC->GetLocalizedString(30368), 2)));
+-    lifetimeValues.push_back(std::make_pair(DVR_RET_3WEEK,   StringUtils::Format(XBMC->GetLocalizedString(30368), 3)));
+-    lifetimeValues.push_back(std::make_pair(DVR_RET_1MONTH,  XBMC->GetLocalizedString(30369)));
+-    lifetimeValues.push_back(std::make_pair(DVR_RET_2MONTH,  StringUtils::Format(XBMC->GetLocalizedString(30370), 2)));
+-    lifetimeValues.push_back(std::make_pair(DVR_RET_3MONTH,  StringUtils::Format(XBMC->GetLocalizedString(30370), 3)));
+-    lifetimeValues.push_back(std::make_pair(DVR_RET_6MONTH,  StringUtils::Format(XBMC->GetLocalizedString(30370), 6)));
+-    lifetimeValues.push_back(std::make_pair(DVR_RET_1YEAR,   XBMC->GetLocalizedString(30371)));
+-    lifetimeValues.push_back(std::make_pair(DVR_RET_2YEARS,  StringUtils::Format(XBMC->GetLocalizedString(30372), 2)));
+-    lifetimeValues.push_back(std::make_pair(DVR_RET_3YEARS,  StringUtils::Format(XBMC->GetLocalizedString(30372), 3)));
+-    if (m_conn.GetProtocol() >= 25)
+-      lifetimeValues.push_back(std::make_pair(DVR_RET_SPACE,   XBMC->GetLocalizedString(30373)));
+-    lifetimeValues.push_back(std::make_pair(DVR_RET_FOREVER, XBMC->GetLocalizedString(30374)));
+-  }
++  std::vector< std::pair<int, std::string> > lifetimeValues;
++
++  lifetimeValues.push_back(std::make_pair(DVR_RET_1DAY,    XBMC->GetLocalizedString(30365)));
++  lifetimeValues.push_back(std::make_pair(DVR_RET_3DAY,    StringUtils::Format(XBMC->GetLocalizedString(30366), 3)));
++  lifetimeValues.push_back(std::make_pair(DVR_RET_5DAY,    StringUtils::Format(XBMC->GetLocalizedString(30366), 5)));
++  lifetimeValues.push_back(std::make_pair(DVR_RET_1WEEK,   XBMC->GetLocalizedString(30367)));
++  lifetimeValues.push_back(std::make_pair(DVR_RET_2WEEK,   StringUtils::Format(XBMC->GetLocalizedString(30368), 2)));
++  lifetimeValues.push_back(std::make_pair(DVR_RET_3WEEK,   StringUtils::Format(XBMC->GetLocalizedString(30368), 3)));
++  lifetimeValues.push_back(std::make_pair(DVR_RET_1MONTH,  XBMC->GetLocalizedString(30369)));
++  lifetimeValues.push_back(std::make_pair(DVR_RET_2MONTH,  StringUtils::Format(XBMC->GetLocalizedString(30370), 2)));
++  lifetimeValues.push_back(std::make_pair(DVR_RET_3MONTH,  StringUtils::Format(XBMC->GetLocalizedString(30370), 3)));
++  lifetimeValues.push_back(std::make_pair(DVR_RET_6MONTH,  StringUtils::Format(XBMC->GetLocalizedString(30370), 6)));
++  lifetimeValues.push_back(std::make_pair(DVR_RET_1YEAR,   XBMC->GetLocalizedString(30371)));
++  lifetimeValues.push_back(std::make_pair(DVR_RET_2YEARS,  StringUtils::Format(XBMC->GetLocalizedString(30372), 2)));
++  lifetimeValues.push_back(std::make_pair(DVR_RET_3YEARS,  StringUtils::Format(XBMC->GetLocalizedString(30372), 3)));
++  if (m_conn.GetProtocol() >= 25)
++    lifetimeValues.push_back(std::make_pair(DVR_RET_SPACE,   XBMC->GetLocalizedString(30373)));
++  lifetimeValues.push_back(std::make_pair(DVR_RET_FOREVER, XBMC->GetLocalizedString(30374)));
+ 
+   unsigned int TIMER_ONCE_MANUAL_ATTRIBS
+     = PVR_TIMER_TYPE_IS_MANUAL           |
+@@ -703,134 +704,132 @@ PVR_ERROR CTvheadend::GetTimerTypes ( PVR_TIMER_TYPE types[], int *size )
+   }
+ 
+   /* Timer types definition. */
+-  static std::vector< std::unique_ptr<TimerType> > timerTypes;
+-  if (timerTypes.size() == 0)
+-  {
+-    timerTypes.push_back(
+-      /* One-shot manual (time and channel based) */
+-      std::unique_ptr<TimerType>(new TimerType(
+-        /* Type id. */
+-        TIMER_ONCE_MANUAL,
+-        /* Attributes. */
+-        TIMER_ONCE_MANUAL_ATTRIBS,
+-        /* Let Kodi generate the description. */
+-        "",
+-        /* Values definitions for priorities. */
+-        priorityValues,
+-        /* Values definitions for lifetime. */
+-        lifetimeValues)));
+-
+-    timerTypes.push_back(
+-      /* One-shot epg based */
+-      std::unique_ptr<TimerType>(new TimerType(
+-        /* Type id. */
+-        TIMER_ONCE_EPG,
+-        /* Attributes. */
+-        TIMER_ONCE_EPG_ATTRIBS,
+-        /* Let Kodi generate the description. */
+-        "",
+-        /* Values definitions for priorities. */
+-        priorityValues,
+-        /* Values definitions for lifetime. */
+-        lifetimeValues)));
+-
+-    timerTypes.push_back(
+-      /* Read-only one-shot for timers generated by timerec */
+-      std::unique_ptr<TimerType>(new TimerType(
+-        /* Type id. */
+-        TIMER_ONCE_CREATED_BY_TIMEREC,
+-        /* Attributes. */
+-        TIMER_ONCE_MANUAL_ATTRIBS  |
+-        PVR_TIMER_TYPE_IS_READONLY |
+-        PVR_TIMER_TYPE_FORBIDS_NEW_INSTANCES,
+-        /* Description. */
+-        XBMC->GetLocalizedString(30350), // "One Time (Scheduled by repeating timer)"
+-        /* Values definitions for priorities. */
+-        priorityValues,
+-        /* Values definitions for lifetime. */
+-        lifetimeValues)));
+-
+-    timerTypes.push_back(
+-      /* Read-only one-shot for timers generated by autorec */
+-      std::unique_ptr<TimerType>(new TimerType(
+-        /* Type id. */
+-        TIMER_ONCE_CREATED_BY_AUTOREC,
+-        /* Attributes. */
+-        TIMER_ONCE_EPG_ATTRIBS     |
+-        PVR_TIMER_TYPE_IS_READONLY |
+-        PVR_TIMER_TYPE_FORBIDS_NEW_INSTANCES,
+-        /* Description. */
+-        XBMC->GetLocalizedString(30350), // "One Time (Scheduled by repeating timer)"
+-        /* Values definitions for priorities. */
+-        priorityValues,
+-        /* Values definitions for lifetime. */
+-        lifetimeValues)));
+-
+-    timerTypes.push_back(
+-      /* Repeating manual (time and channel based) - timerec */
+-      std::unique_ptr<TimerType>(new TimerType(
+-        /* Type id. */
+-        TIMER_REPEATING_MANUAL,
+-        /* Attributes. */
+-        PVR_TIMER_TYPE_IS_MANUAL                  |
+-        PVR_TIMER_TYPE_IS_REPEATING               |
+-        PVR_TIMER_TYPE_SUPPORTS_ENABLE_DISABLE    |
+-        PVR_TIMER_TYPE_SUPPORTS_CHANNELS          |
+-        PVR_TIMER_TYPE_SUPPORTS_START_TIME        |
+-        PVR_TIMER_TYPE_SUPPORTS_END_TIME          |
+-        PVR_TIMER_TYPE_SUPPORTS_WEEKDAYS          |
+-        PVR_TIMER_TYPE_SUPPORTS_PRIORITY          |
+-        PVR_TIMER_TYPE_SUPPORTS_LIFETIME          |
+-        PVR_TIMER_TYPE_SUPPORTS_RECORDING_FOLDERS,
+-        /* Let Kodi generate the description. */
+-        "",
+-        /* Values definitions for priorities. */
+-        priorityValues,
+-        /* Values definitions for lifetime. */
+-        lifetimeValues)));
+-
+-    unsigned int TIMER_REPEATING_EPG_ATTRIBS
+-      = PVR_TIMER_TYPE_IS_REPEATING                |
+-        PVR_TIMER_TYPE_SUPPORTS_ENABLE_DISABLE     |
+-        PVR_TIMER_TYPE_SUPPORTS_TITLE_EPG_MATCH    |
+-        PVR_TIMER_TYPE_SUPPORTS_CHANNELS           |
+-        PVR_TIMER_TYPE_SUPPORTS_START_TIME         |
+-        PVR_TIMER_TYPE_SUPPORTS_START_ANYTIME      |
+-        PVR_TIMER_TYPE_SUPPORTS_WEEKDAYS           |
+-        PVR_TIMER_TYPE_SUPPORTS_START_END_MARGIN   |
+-        PVR_TIMER_TYPE_SUPPORTS_PRIORITY           |
+-        PVR_TIMER_TYPE_SUPPORTS_LIFETIME           |
+-        PVR_TIMER_TYPE_SUPPORTS_RECORDING_FOLDERS;
+-
+-    if (m_conn.GetProtocol() >= 20)
+-    {
+-      TIMER_REPEATING_EPG_ATTRIBS |= PVR_TIMER_TYPE_SUPPORTS_FULLTEXT_EPG_MATCH;
+-      TIMER_REPEATING_EPG_ATTRIBS |= PVR_TIMER_TYPE_SUPPORTS_RECORD_ONLY_NEW_EPISODES;
+-    }
+-
+-    if (!Settings::GetInstance().GetAutorecApproxTime())
+-    {
+-      /* We need the end time to represent the end of the tvh starting window */
+-      TIMER_REPEATING_EPG_ATTRIBS |= PVR_TIMER_TYPE_SUPPORTS_END_TIME;
+-      TIMER_REPEATING_EPG_ATTRIBS |= PVR_TIMER_TYPE_SUPPORTS_END_ANYTIME;
+-    }
+-
+-    timerTypes.push_back(
+-      /* Repeating epg based - autorec */
+-      std::unique_ptr<TimerType>(new TimerType(
+-        /* Type id. */
+-        TIMER_REPEATING_EPG,
+-        /* Attributes. */
+-        TIMER_REPEATING_EPG_ATTRIBS,
+-        /* Let Kodi generate the description. */
+-        "",
+-        /* Values definitions for priorities. */
+-        priorityValues,
+-        /* Values definitions for lifetime. */
+-        lifetimeValues,
+-        /* Values definitions for prevent duplicate episodes. */
+-        deDupValues)));
+-  }
++  std::vector< std::unique_ptr<TimerType> > timerTypes;
++
++  timerTypes.push_back(
++    /* One-shot manual (time and channel based) */
++    std::unique_ptr<TimerType>(new TimerType(
++      /* Type id. */
++      TIMER_ONCE_MANUAL,
++      /* Attributes. */
++      TIMER_ONCE_MANUAL_ATTRIBS,
++      /* Let Kodi generate the description. */
++      "",
++      /* Values definitions for priorities. */
++      priorityValues,
++      /* Values definitions for lifetime. */
++      lifetimeValues)));
++
++  timerTypes.push_back(
++    /* One-shot epg based */
++    std::unique_ptr<TimerType>(new TimerType(
++      /* Type id. */
++      TIMER_ONCE_EPG,
++      /* Attributes. */
++      TIMER_ONCE_EPG_ATTRIBS,
++      /* Let Kodi generate the description. */
++      "",
++      /* Values definitions for priorities. */
++      priorityValues,
++      /* Values definitions for lifetime. */
++      lifetimeValues)));
++
++  timerTypes.push_back(
++    /* Read-only one-shot for timers generated by timerec */
++    std::unique_ptr<TimerType>(new TimerType(
++      /* Type id. */
++      TIMER_ONCE_CREATED_BY_TIMEREC,
++      /* Attributes. */
++      TIMER_ONCE_MANUAL_ATTRIBS  |
++      PVR_TIMER_TYPE_IS_READONLY |
++      PVR_TIMER_TYPE_FORBIDS_NEW_INSTANCES,
++      /* Description. */
++      XBMC->GetLocalizedString(30350), // "One Time (Scheduled by repeating timer)"
++      /* Values definitions for priorities. */
++      priorityValues,
++      /* Values definitions for lifetime. */
++      lifetimeValues)));
++
++  timerTypes.push_back(
++    /* Read-only one-shot for timers generated by autorec */
++    std::unique_ptr<TimerType>(new TimerType(
++      /* Type id. */
++      TIMER_ONCE_CREATED_BY_AUTOREC,
++      /* Attributes. */
++      TIMER_ONCE_EPG_ATTRIBS     |
++      PVR_TIMER_TYPE_IS_READONLY |
++      PVR_TIMER_TYPE_FORBIDS_NEW_INSTANCES,
++      /* Description. */
++      XBMC->GetLocalizedString(30350), // "One Time (Scheduled by repeating timer)"
++      /* Values definitions for priorities. */
++      priorityValues,
++      /* Values definitions for lifetime. */
++      lifetimeValues)));
++
++  timerTypes.push_back(
++    /* Repeating manual (time and channel based) - timerec */
++    std::unique_ptr<TimerType>(new TimerType(
++      /* Type id. */
++      TIMER_REPEATING_MANUAL,
++      /* Attributes. */
++      PVR_TIMER_TYPE_IS_MANUAL                  |
++      PVR_TIMER_TYPE_IS_REPEATING               |
++      PVR_TIMER_TYPE_SUPPORTS_ENABLE_DISABLE    |
++      PVR_TIMER_TYPE_SUPPORTS_CHANNELS          |
++      PVR_TIMER_TYPE_SUPPORTS_START_TIME        |
++      PVR_TIMER_TYPE_SUPPORTS_END_TIME          |
++      PVR_TIMER_TYPE_SUPPORTS_WEEKDAYS          |
++      PVR_TIMER_TYPE_SUPPORTS_PRIORITY          |
++      PVR_TIMER_TYPE_SUPPORTS_LIFETIME          |
++      PVR_TIMER_TYPE_SUPPORTS_RECORDING_FOLDERS,
++      /* Let Kodi generate the description. */
++      "",
++      /* Values definitions for priorities. */
++      priorityValues,
++      /* Values definitions for lifetime. */
++      lifetimeValues)));
++
++  unsigned int TIMER_REPEATING_EPG_ATTRIBS
++    = PVR_TIMER_TYPE_IS_REPEATING                |
++      PVR_TIMER_TYPE_SUPPORTS_ENABLE_DISABLE     |
++      PVR_TIMER_TYPE_SUPPORTS_TITLE_EPG_MATCH    |
++      PVR_TIMER_TYPE_SUPPORTS_CHANNELS           |
++      PVR_TIMER_TYPE_SUPPORTS_START_TIME         |
++      PVR_TIMER_TYPE_SUPPORTS_START_ANYTIME      |
++      PVR_TIMER_TYPE_SUPPORTS_WEEKDAYS           |
++      PVR_TIMER_TYPE_SUPPORTS_START_END_MARGIN   |
++      PVR_TIMER_TYPE_SUPPORTS_PRIORITY           |
++      PVR_TIMER_TYPE_SUPPORTS_LIFETIME           |
++      PVR_TIMER_TYPE_SUPPORTS_RECORDING_FOLDERS;
++
++  if (m_conn.GetProtocol() >= 20)
++  {
++    TIMER_REPEATING_EPG_ATTRIBS |= PVR_TIMER_TYPE_SUPPORTS_FULLTEXT_EPG_MATCH;
++    TIMER_REPEATING_EPG_ATTRIBS |= PVR_TIMER_TYPE_SUPPORTS_RECORD_ONLY_NEW_EPISODES;
++  }
++
++  if (!Settings::GetInstance().GetAutorecApproxTime())
++  {
++    /* We need the end time to represent the end of the tvh starting window */
++    TIMER_REPEATING_EPG_ATTRIBS |= PVR_TIMER_TYPE_SUPPORTS_END_TIME;
++    TIMER_REPEATING_EPG_ATTRIBS |= PVR_TIMER_TYPE_SUPPORTS_END_ANYTIME;
++  }
++
++  timerTypes.push_back(
++    /* Repeating epg based - autorec */
++    std::unique_ptr<TimerType>(new TimerType(
++      /* Type id. */
++      TIMER_REPEATING_EPG,
++      /* Attributes. */
++      TIMER_REPEATING_EPG_ATTRIBS,
++      /* Let Kodi generate the description. */
++      "",
++      /* Values definitions for priorities. */
++      priorityValues,
++      /* Values definitions for lifetime. */
++      lifetimeValues,
++      /* Values definitions for prevent duplicate episodes. */
++      deDupValues)));
+ 
+   /* Copy data to target array. */
+   int i = 0;
+@@ -869,7 +868,7 @@ bool CTvheadend::CreateTimer ( const Recording &tvhTmr, PVR_TIMER &tmr )
+   memset(&tmr, 0, sizeof(tmr));
+ 
+   tmr.iClientIndex       = tvhTmr.GetId();
+-  tmr.iClientChannelUid  = (tvhTmr.GetChannel() > 0) ? tvhTmr.GetChannel() : -1;
++  tmr.iClientChannelUid  = (tvhTmr.GetChannel() > 0) ? tvhTmr.GetChannel() : PVR_CHANNEL_INVALID_UID;
+   tmr.startTime          = static_cast<time_t>(tvhTmr.GetStart());
+   tmr.endTime            = static_cast<time_t>(tvhTmr.GetStop());
+   strncpy(tmr.strTitle,
+@@ -1185,12 +1184,9 @@ PVR_ERROR CTvheadend::UpdateTimer ( const PVR_TIMER &timer )
+  * EPG
+  * *************************************************************************/
+ 
+-/* Transfer schedule to XBMC */
+-void CTvheadend::TransferEvent
+-  ( ADDON_HANDLE handle, const Event &event )
++void CTvheadend::CreateEvent
++  ( const Event &event, EPG_TAG &epg )
+ {
+-  /* Build */
+-  EPG_TAG epg;
+   memset(&epg, 0, sizeof(EPG_TAG));
+   epg.iUniqueBroadcastId  = event.GetId();
+   epg.strTitle            = event.GetTitle().c_str();
+@@ -1218,43 +1214,40 @@ void CTvheadend::TransferEvent
+   epg.iEpisodePartNumber  = event.GetPart();
+   epg.strEpisodeName      = event.GetSubtitle().c_str();
+   epg.iFlags              = EPG_TAG_FLAG_UNDEFINED;
++}
+ 
+-  /* Callback. */
+-  PVR->TransferEpgEntry(handle, &epg);
++void CTvheadend::TransferEvent
++  ( const Event &event, EPG_EVENT_STATE state )
++{
++  /* Build */
++  EPG_TAG tag;
++  CreateEvent(event, tag);
++
++  /* Transfer event to Kodi */
++  PVR->EpgEventStateChange(&tag, event.GetChannel(), state);
++}
++
++void CTvheadend::TransferEvent
++  ( ADDON_HANDLE handle, const Event &event )
++{
++  /* Build */
++  EPG_TAG tag;
++  CreateEvent(event, tag);
++
++  /* Transfer event to Kodi */
++  PVR->TransferEpgEntry(handle, &tag);
+ }
+ 
+ PVR_ERROR CTvheadend::GetEpg
+   ( ADDON_HANDLE handle, const PVR_CHANNEL &chn, time_t start, time_t end )
+ {
+   htsmsg_field_t *f;
+-  int n = 0;
+ 
+   Logger::Log(LogLevel::LEVEL_TRACE, "get epg channel %d start %ld stop %ld", chn.iUniqueId,
+            (long long)start, (long long)end);
+ 
+-  /* Async transfer */
+-  if (Settings::GetInstance().GetAsyncEpg())
+-  {
+-    if (!m_asyncState.WaitForState(ASYNC_DONE))
+-      return PVR_ERROR_FAILED;
+-    
+-    // Find the relevant events
+-    Segment segment;
+-    {
+-      CLockObject lock(m_mutex);
+-      auto sit = m_schedules.find(chn.iUniqueId);
+-
+-      if (sit != m_schedules.cend())
+-        segment = sit->second.GetSegment(start, end);
+-    }
+-
+-    // Transfer
+-    for (const auto &event : segment)
+-      TransferEvent(handle, event);
+-
+-  /* Synchronous transfer */
+-  }
+-  else
++  /* Note: Nothing to do if "async epg transfer" is enabled as all changes are pushed live to Kodi, then. */
++  if (!Settings::GetInstance().GetAsyncEpg())
+   {
+     /* Build message */
+     htsmsg_t *msg = htsmsg_create_map();
+@@ -1271,13 +1264,16 @@ PVR_ERROR CTvheadend::GetEpg
+ 
+     /* Process */
+     htsmsg_t *l;
+-    
++
+     if (!(l = htsmsg_get_list(msg, "events")))
+     {
+       htsmsg_destroy(msg);
+       Logger::Log(LogLevel::LEVEL_ERROR, "malformed getEvents response: 'events' missing");
+       return PVR_ERROR_SERVER_ERROR;
+     }
++
++    int n = 0;
++
+     HTSMSG_FOREACH(f, l)
+     {
+       Event event;
+@@ -1292,10 +1288,8 @@ PVR_ERROR CTvheadend::GetEpg
+       }
+     }
+     htsmsg_destroy(msg);
++    Logger::Log(LogLevel::LEVEL_TRACE, "get epg channel %d events %d", chn.iUniqueId, n);
+   }
+-
+-  Logger::Log(LogLevel::LEVEL_TRACE, "get epg channel %d events %d", chn.iUniqueId, n);
+-
+   return PVR_ERROR_NO_ERROR;
+ }
+ 
+@@ -1494,7 +1488,7 @@ void* CTvheadend::Process ( void )
+           PVR->TriggerRecordingUpdate();
+           break;
+         case HTSP_EVENT_EPG_UPDATE:
+-          PVR->TriggerEpgUpdate(it->m_idx);
++          TransferEvent(it->m_epg, it->m_state);
+           break;
+         case HTSP_EVENT_NONE:
+           break;
+@@ -1592,23 +1586,44 @@ void CTvheadend::SyncEpgCompleted ( void )
+     return;
+ 
+   /* Schedules */
+-  utilities::erase_if(m_schedules, [](const ScheduleMapEntry &entry)
++  std::vector<std::pair<uint32_t, uint32_t > > deletedEvents;
++  utilities::erase_if(m_schedules, [&](const ScheduleMapEntry &entry)
+   {
+-    return entry.second.IsDirty();
++    if (entry.second.IsDirty())
++    {
++      // all events are dirty too!
++      for (auto &evt : entry.second.GetEvents())
++        deletedEvents.push_back(
++          std::make_pair(evt.second.GetId() /* event uid */, entry.second.GetId() /* channel uid */));
++
++      return true;
++    }
++    return false;
+   });
+ 
+   /* Events */
+   for (auto &entry : m_schedules)
+   {
+-    utilities::erase_if(entry.second.GetEvents(), [](const EventMapEntry &entry)
++    utilities::erase_if(entry.second.GetEvents(), [&](const EventUidsMapEntry &mapEntry)
+     {
+-      return entry.second.IsDirty();
++      if (mapEntry.second.IsDirty())
++      {
++        deletedEvents.push_back(
++          std::make_pair(mapEntry.second.GetId() /* event uid */, entry.second.GetId() /* channel uid */));
++        return true;
++      }
++      return false;
+     });
+   }
+-  
+-  /* Trigger updates */
+-  for (const auto &entry : m_schedules)
+-    TriggerEpgUpdate(entry.second.GetId());
++
++  Event evt;
++  for (auto &entry : deletedEvents)
++  {
++    /* Transfer event to Kodi (callback) */
++    evt.SetId(entry.first);
++    evt.SetChannel(entry.second);
++    PushEpgEventUpdate(evt, EPG_EVENT_DELETED);
++  }
+ }
+ 
+ void CTvheadend::ParseTagAddOrUpdate ( htsmsg_t *msg, bool bAdd )
+@@ -2087,41 +2102,56 @@ bool CTvheadend::ParseEvent ( htsmsg_t *msg, bool bAdd, Event &evt )
+ 
+ void CTvheadend::ParseEventAddOrUpdate ( htsmsg_t *msg, bool bAdd )
+ {
+-  Event tmp;
++  Event evt;
+ 
+   /* Parse */
+-  if (!ParseEvent(msg, bAdd, tmp))
++  if (!ParseEvent(msg, bAdd, evt))
+     return;
+ 
+-  /* Get event handle */
+-  Schedule &sched  = m_schedules[tmp.GetChannel()];
+-  Events   &events = sched.GetEvents();
+-  Event    &evt    = events[tmp.GetId()];
+-  Event comparison = evt;
+-  sched.SetId(tmp.GetChannel());
++  /* create/update schedule */
++  Schedule &sched = m_schedules[evt.GetChannel()];
++  sched.SetId(evt.GetChannel());
+   sched.SetDirty(false);
+-  evt.SetId(tmp.GetId());
+-  evt.SetDirty(false);
+-  
+-  /* Store */
+-  evt = tmp;
+ 
+-  /* Update */
+-  if (evt != comparison)
++  /* create/update event */
++  EventUids &events = sched.GetEvents();
++
++  bool bUpdated(false);
++  if (bAdd && m_asyncState.GetState() < ASYNC_DONE)
+   {
+-    Logger::Log(LogLevel::LEVEL_TRACE, "event id:%d channel:%d start:%d stop:%d title:%s desc:%s",
+-             evt.GetId(), evt.GetChannel(), (int)evt.GetStart(), (int)evt.GetStop(),
+-             evt.GetTitle().c_str(), evt.GetDesc().c_str());
++    // After a reconnect, during processing of "enableAsyncMetadata" htsp
++    // method, tvheadend sends all events as "added". Check whether we
++    // announced the event already and in case send it as "updated" to Kodi.
++    auto it = events.find(evt.GetId());
++    if (it != events.end())
++    {
++      bUpdated = true;
++
++      Entity &ent = it->second;
++      ent.SetId(evt.GetId());
++      ent.SetDirty(false);
++    }
++  }
+ 
+-    if (m_asyncState.GetState() > ASYNC_EPG)
+-      TriggerEpgUpdate(tmp.GetChannel());
++  if (!bUpdated)
++  {
++    Entity &ent = events[evt.GetId()];
++    ent.SetId(evt.GetId());
++    ent.SetDirty(false);
+   }
++
++  Logger::Log(LogLevel::LEVEL_TRACE, "event id:%d channel:%d start:%d stop:%d title:%s desc:%s",
++              evt.GetId(), evt.GetChannel(), (int)evt.GetStart(), (int)evt.GetStop(),
++              evt.GetTitle().c_str(), evt.GetDesc().c_str());
++
++  /* Transfer event to Kodi (callback) */
++  PushEpgEventUpdate(evt, (!bAdd || bUpdated) ? EPG_EVENT_UPDATED : EPG_EVENT_CREATED);
+ }
+ 
+ void CTvheadend::ParseEventDelete ( htsmsg_t *msg )
+ {
+   uint32_t u32;
+-  
++
+   /* Validate */
+   if (htsmsg_get_u32(msg, "eventId", &u32))
+   {
+@@ -2129,12 +2159,12 @@ void CTvheadend::ParseEventDelete ( htsmsg_t *msg )
+     return;
+   }
+   Logger::Log(LogLevel::LEVEL_TRACE, "delete event %u", u32);
+-  
++
+   /* Erase */
+   for (auto &entry : m_schedules)
+   {
+-    Schedule &schedule = entry.second;
+-    Events &events = schedule.GetEvents();
++    Schedule  &schedule = entry.second;
++    EventUids &events   = schedule.GetEvents();
+ 
+     // Find the event so we can get the channel number
+     auto eit = events.find(u32);
+@@ -2143,7 +2173,12 @@ void CTvheadend::ParseEventDelete ( htsmsg_t *msg )
+     {
+       Logger::Log(LogLevel::LEVEL_TRACE, "deleted event %d from channel %d", u32, schedule.GetId());
+       events.erase(eit);
+-      TriggerEpgUpdate(schedule.GetId());
++
++      /* Transfer event to Kodi (callback) */
++      Event evt;
++      evt.SetId(u32);
++      evt.SetChannel(schedule.GetId());
++      PushEpgEventUpdate(evt, EPG_EVENT_DELETED);
+       return;
+     }
+   }
+diff --git a/src/Tvheadend.h b/src/Tvheadend.h
+index 8ea7374..7e67b4d 100644
+--- a/src/Tvheadend.h
++++ b/src/Tvheadend.h
+@@ -22,10 +22,10 @@
+  */
+ 
+ #include "client.h"
+-#include "p8-platform/sockets/tcp.h"
+-#include "p8-platform/threads/threads.h"
+-#include "p8-platform/threads/mutex.h"
+-#include "p8-platform/util/buffer.h"
++#include "platform/sockets/tcp.h"
++#include "platform/threads/threads.h"
++#include "platform/threads/mutex.h"
++#include "platform/util/buffer.h"
+ #include "kodi/xbmc_codec_types.h"
+ #include "kodi/xbmc_stream_utils.hpp"
+ #include "kodi/libXBMC_addon.h"
+@@ -89,7 +89,7 @@ class CHTSPMessage;
+ 
+ /* Typedefs */
+ typedef std::map<uint32_t,CHTSPResponse*> CHTSPResponseList;
+-typedef P8PLATFORM::SyncedBuffer<CHTSPMessage> CHTSPMessageQueue;
++typedef PLATFORM::SyncedBuffer<CHTSPMessage> CHTSPMessageQueue;
+ 
+ /*
+  * HTSP Response handler
+@@ -99,10 +99,10 @@ class CHTSPResponse
+ public:
+   CHTSPResponse();
+   ~CHTSPResponse();
+-  htsmsg_t *Get ( P8PLATFORM::CMutex &mutex, uint32_t timeout );
++  htsmsg_t *Get ( PLATFORM::CMutex &mutex, uint32_t timeout );
+   void      Set ( htsmsg_t *m );
+ private:
+-  P8PLATFORM::CCondition<volatile bool> m_cond;
++  PLATFORM::CCondition<volatile bool> m_cond;
+   bool                                m_flag;
+   htsmsg_t                           *m_msg;
+ };
+@@ -147,7 +147,7 @@ public:
+  * HTSP Connection registration thread
+  */
+ class CHTSPRegister
+-  : public P8PLATFORM::CThread
++  : public PLATFORM::CThread
+ {
+   friend class CHTSPConnection;
+ 
+@@ -164,7 +164,7 @@ private:
+  * HTSP Connection
+  */
+ class CHTSPConnection
+-  : public P8PLATFORM::CThread
++  : public PLATFORM::CThread
+ {
+   friend class CHTSPRegister;
+ 
+@@ -178,20 +178,17 @@ public:
+   htsmsg_t *SendAndWait0    ( const char *method, htsmsg_t *m, int iResponseTimeout = -1);
+   htsmsg_t *SendAndWait     ( const char *method, htsmsg_t *m, int iResponseTimeout = -1 );
+ 
+-  inline int  GetProtocol      ( void ) const { return m_htspVersion; }
++  int  GetProtocol             ( void ) const;
+ 
+-  std::string GetWebURL        ( const char *fmt, ... );
++  std::string GetWebURL        ( const char *fmt, ... ) const;
+ 
+-  std::string GetServerName    ( void );
+-  std::string GetServerVersion ( void );
+-  std::string GetServerString  ( void );
++  std::string GetServerName    ( void ) const;
++  std::string GetServerVersion ( void ) const;
++  std::string GetServerString  ( void ) const;
+   
+   bool        HasCapability(const std::string &capability) const;
+ 
+-  inline bool IsConnected       ( void ) const { return m_ready; }
+-  bool        WaitForConnection ( void );
+-
+-  inline P8PLATFORM::CMutex& Mutex ( void ) { return m_mutex; }
++  inline PLATFORM::CMutex& Mutex ( void ) { return m_mutex; }
+ 
+   void        OnSleep ( void );
+   void        OnWake  ( void );
+@@ -203,10 +200,13 @@ private:
+   bool        SendHello        ( void );
+   bool        SendAuth         ( const std::string &u, const std::string &p );
+ 
+-  P8PLATFORM::CTcpSocket               *m_socket;
+-  P8PLATFORM::CMutex                    m_mutex;
++  void        SetState         ( PVR_CONNECTION_STATE state );
++  bool        WaitForConnection( void );
++
++  PLATFORM::CTcpSocket               *m_socket;
++  mutable PLATFORM::CMutex            m_mutex;
+   CHTSPRegister                       m_regThread;
+-  P8PLATFORM::CCondition<volatile bool> m_regCond;
++  PLATFORM::CCondition<volatile bool> m_regCond;
+   bool                                m_ready;
+   uint32_t                            m_seq;
+   std::string                         m_serverName;
+@@ -220,6 +220,7 @@ private:
+   std::vector<std::string>            m_capabilities;
+ 
+   bool                                m_suspended;
++  PVR_CONNECTION_STATE                m_state;
+ };
+ 
+ /*
+@@ -251,13 +252,13 @@ public:
+   void SetStreamingProfile(const std::string &profile);
+ 
+ private:
+-  mutable P8PLATFORM::CMutex              m_mutex;
++  mutable PLATFORM::CMutex                m_mutex;
+   CHTSPConnection                        &m_conn;
+-  P8PLATFORM::SyncedBuffer<DemuxPacket*>  m_pktBuffer;
++  PLATFORM::SyncedBuffer<DemuxPacket*>    m_pktBuffer;
+   ADDON::XbmcStreamProperties             m_streams;
+   std::map<int,int>                       m_streamStat;
+   int64_t                                 m_seekTime;
+-  P8PLATFORM::CCondition<volatile int64_t>  m_seekCond;
++  PLATFORM::CCondition<volatile int64_t>  m_seekCond;
+   bool                                    m_seeking;
+   bool                                    m_speedChange;
+   tvheadend::status::SourceInfo           m_sourceInfo;
+@@ -333,7 +334,7 @@ private:
+  * Root object for Tvheadend connection
+  */
+ class CTvheadend
+-  : public P8PLATFORM::CThread
++  : public PLATFORM::CThread
+ {
+ public:
+   CTvheadend();
+@@ -399,7 +400,7 @@ private:
+    */
+   tvheadend::Profiles         m_profiles;
+ 
+-  P8PLATFORM::CMutex            m_mutex;
++  PLATFORM::CMutex            m_mutex;
+ 
+   CHTSPConnection             m_conn;
+ 
+@@ -454,10 +455,10 @@ private:
+   {
+     m_events.push_back(SHTSPEvent(HTSP_EVENT_REC_UPDATE));
+   }
+-  inline void TriggerEpgUpdate ( uint32_t idx )
++  inline void PushEpgEventUpdate ( const tvheadend::entity::Event &epg, EPG_EVENT_STATE state )
+   {
+-    SHTSPEvent event = SHTSPEvent(HTSP_EVENT_EPG_UPDATE, idx);
+-    
++    SHTSPEvent event = SHTSPEvent(HTSP_EVENT_EPG_UPDATE, epg, state);
++
+     if (std::find(m_events.begin(), m_events.end(), event) == m_events.end())
+       m_events.push_back(event);
+   }
+@@ -465,6 +466,8 @@ private:
+   /*
+    * Epg Handling
+    */
++  void        CreateEvent     ( const tvheadend::entity::Event &event, EPG_TAG &epg );
++  void        TransferEvent   ( const tvheadend::entity::Event &event, EPG_EVENT_STATE state );
+   void        TransferEvent   ( ADDON_HANDLE handle, const tvheadend::entity::Event &event );
+ 
+   /*
+@@ -494,20 +497,15 @@ public:
+   /*
+    * Connection (pass-thru)
+    */
+-  bool WaitForConnection ( void )
+-  {
+-    P8PLATFORM::CLockObject lock(m_conn.Mutex());
+-    return m_conn.WaitForConnection();
+-  }
+-  std::string GetServerName    ( void )
++  std::string GetServerName    ( void ) const
+   {
+     return m_conn.GetServerName();
+   }
+-  std::string GetServerVersion ( void )
++  std::string GetServerVersion ( void ) const
+   {
+     return m_conn.GetServerVersion();
+   }
+-  std::string GetServerString  ( void )
++  std::string GetServerString  ( void ) const
+   {
+     return m_conn.GetServerString();
+   }
+@@ -519,10 +517,6 @@ public:
+   {
+     return m_conn.HasCapability(capability);
+   }
+-  inline bool IsConnected ( void ) const
+-  {
+-    return m_conn.IsConnected();
+-  }
+   inline void OnSleep ( void )
+   {
+     m_conn.OnSleep();
+diff --git a/src/client.cpp b/src/client.cpp
+index 8348534..b9fb039 100644
+--- a/src/client.cpp
++++ b/src/client.cpp
+@@ -22,14 +22,14 @@
+ #include "client.h"
+ #include "kodi/xbmc_pvr_dll.h"
+ #include "kodi/libKODI_guilib.h"
+-#include "p8-platform/util/util.h"
++#include "platform/util/util.h"
+ #include "Tvheadend.h"
+ #include "tvheadend/Settings.h"
+ #include "tvheadend/utilities/Logger.h"
+ 
+ using namespace std;
+ using namespace ADDON;
+-using namespace P8PLATFORM;
++using namespace PLATFORM;
+ using namespace tvheadend;
+ using namespace tvheadend::utilities;
+ 
+@@ -41,7 +41,6 @@ using namespace tvheadend::utilities;
+  * Client state
+  */
+ ADDON_STATUS m_CurStatus = ADDON_STATUS_UNKNOWN;
+-bool         m_bAlertHtspVersionMismatch = true;
+ 
+ /*
+  * Globals
+@@ -80,7 +79,8 @@ ADDON_STATUS ADDON_Create(void* hdl, void* _unused(props))
+     SAFE_DELETE(PVR);
+     SAFE_DELETE(CODEC);
+     SAFE_DELETE(XBMC);
+-    return ADDON_STATUS_PERMANENT_FAILURE;
++    m_CurStatus = ADDON_STATUS_PERMANENT_FAILURE;
++    return m_CurStatus;
+   }
+ 
+   /* Configure the logger */
+@@ -117,41 +117,13 @@ ADDON_STATUS ADDON_Create(void* hdl, void* _unused(props))
+   tvh = new CTvheadend();
+   tvh->Start();
+ 
+-  /* Wait for connection */
+-  if (!tvh->WaitForConnection())
+-  {
+-    if (m_bAlertHtspVersionMismatch &&
+-        (tvh->GetProtocol() > 0) && // 0 => tvh server down
+-        (tvh->GetProtocol() < HTSP_MIN_SERVER_VERSION))
+-    {
+-      m_bAlertHtspVersionMismatch = false; // alert max once during addon lifetime
+-
+-      /* client/server API version mismatch */
+-      XBMC->QueueNotification(
+-        QUEUE_ERROR,
+-        XBMC->GetLocalizedString(30300), tvh->GetProtocol(), HTSP_MIN_SERVER_VERSION);
+-    }
+-
+-    SAFE_DELETE(tvh);
+-    SAFE_DELETE(PVR);
+-    SAFE_DELETE(CODEC);
+-    SAFE_DELETE(XBMC);
+-
+-    return ADDON_STATUS_LOST_CONNECTION;
+-  }
+-
+-  m_CurStatus     = ADDON_STATUS_OK;
++  m_CurStatus = ADDON_STATUS_OK;
+   return m_CurStatus;
+ }
+ 
+ ADDON_STATUS ADDON_GetStatus()
+ {
+   CLockObject lock(g_mutex);
+-
+-  // Check that we're still connected
+-  if (m_CurStatus == ADDON_STATUS_OK && !tvh->IsConnected())
+-    m_CurStatus = ADDON_STATUS_LOST_CONNECTION;
+-
+   return m_CurStatus;
+ }
+ 
+@@ -180,7 +152,9 @@ unsigned int ADDON_GetSettings
+ ADDON_STATUS ADDON_SetSetting
+   (const char *settingName, const void *settingValue)
+ {
+-  return Settings::GetInstance().SetSetting(settingName, settingValue);
++  CLockObject lock(g_mutex);
++  m_CurStatus = Settings::GetInstance().SetSetting(settingName, settingValue);
++  return m_CurStatus;
+ }
+ 
+ void ADDON_Stop()
+@@ -245,19 +219,25 @@ PVR_ERROR GetAddonCapabilities(PVR_ADDON_CAPABILITIES* pCapabilities)
+ 
+ const char *GetBackendName(void)
+ {
+-  static std::string serverName = tvh->GetServerName();
++  static std::string serverName;
++
++  serverName = tvh->GetServerName();
+   return serverName.c_str();
+ }
+ 
+ const char *GetBackendVersion(void)
+ {
+-  static std::string serverVersion = tvh->GetServerVersion();
++  static std::string serverVersion;
++
++  serverVersion = tvh->GetServerVersion();
+   return serverVersion.c_str();
+ }
+ 
+ const char *GetConnectionString(void)
+ {
+-  static std::string serverString = tvh->GetServerString();
++  static std::string serverString;
++
++  serverString = tvh->GetServerString();
+   return serverString.c_str();
+ }
+ 
+@@ -348,11 +328,6 @@ void SetSpeed(int speed)
+   tvh->DemuxSpeed(speed);
+ }
+ 
+-int GetCurrentClientChannel(void)
+-{
+-  return -1; // XBMC doesn't even use this
+-}
+-
+ bool SwitchChannel(const PVR_CHANNEL &channel)
+ {
+   return tvh->DemuxOpen(channel);
+@@ -426,6 +401,12 @@ PVR_ERROR GetEPGForChannel
+   return tvh->GetEpg(handle, channel, iStart, iEnd);
+ }
+ 
++PVR_ERROR SetEPGTimeFrame(int iDays)
++{
++  // TODO: implement filter for epg data push according to this value
++  return PVR_ERROR_NO_ERROR;
++}
++
+ /* **************************************************************************
+  * Recording Management
+  * *************************************************************************/
+@@ -609,12 +590,12 @@ const char * GetLiveStreamURL(const PVR_CHANNEL &_unused(channel))
+ 
+ const char* GetGUIAPIVersion(void)
+ {
+-  return KODI_GUILIB_API_VERSION;
++  return ""; // GUI API not used
+ }
+ 
+ const char* GetMininumGUIAPIVersion(void)
+ {
+-  return KODI_GUILIB_MIN_API_VERSION;
++  return ""; // GUI API not used
+ }
+ 
+ } /* extern "C" */
+diff --git a/src/client.h b/src/client.h
+index a10659b..3a5f950 100644
+--- a/src/client.h
++++ b/src/client.h
+@@ -20,8 +20,8 @@
+  *
+  */
+ 
+-#include "p8-platform/os.h"
+-#include "p8-platform/threads/mutex.h"
++#include "platform/os.h"
++#include "platform/threads/mutex.h"
+ #include "kodi/libXBMC_addon.h"
+ #include "kodi/libXBMC_pvr.h"
+ #include "kodi/libXBMC_codec.h"
+diff --git a/src/tvheadend/Subscription.cpp b/src/tvheadend/Subscription.cpp
+index e18af1e..182ca7f 100644
+--- a/src/tvheadend/Subscription.cpp
++++ b/src/tvheadend/Subscription.cpp
+@@ -23,7 +23,7 @@
+ #include "utilities/Logger.h"
+ #include "../Tvheadend.h"
+ 
+-using namespace P8PLATFORM;
++using namespace PLATFORM;
+ using namespace tvheadend;
+ using namespace tvheadend::utilities;
+ 
+diff --git a/src/tvheadend/Subscription.h b/src/tvheadend/Subscription.h
+index 363e5ef..b03bcce 100644
+--- a/src/tvheadend/Subscription.h
++++ b/src/tvheadend/Subscription.h
+@@ -22,7 +22,7 @@
+  */
+ 
+ #include <string>
+-#include "p8-platform/threads/mutex.h"
++#include "platform/threads/mutex.h"
+ 
+ extern "C"
+ {
+@@ -146,6 +146,6 @@ namespace tvheadend
+     std::string       m_profile;
+     CHTSPConnection   &m_conn;
+ 
+-    mutable P8PLATFORM::CMutex  m_mutex;
++    mutable PLATFORM::CMutex  m_mutex;
+   };
+ }
+diff --git a/src/tvheadend/entity/Schedule.cpp b/src/tvheadend/entity/Schedule.cpp
+index 17c7293..410068b 100644
+--- a/src/tvheadend/entity/Schedule.cpp
++++ b/src/tvheadend/entity/Schedule.cpp
+@@ -35,22 +35,12 @@ void Schedule::SetDirty(bool dirty)
+   }
+ }
+ 
+-Segment Schedule::GetSegment(time_t startTime, time_t endTime) const
++EventUids& Schedule::GetEvents()
+ {
+-  Segment segment;
+-
+-  for (const auto &entry : m_events)
+-  {
+-    const Event &event = entry.second;
+-
+-    if (event.GetStart() < endTime && event.GetStop() > startTime)
+-      segment.push_back(event);
+-  }
+-
+-  return segment;
++  return m_events;
+ }
+ 
+-Events& Schedule::GetEvents()
++const EventUids& Schedule::GetEvents() const
+ {
+   return m_events;
+ }
+diff --git a/src/tvheadend/entity/Schedule.h b/src/tvheadend/entity/Schedule.h
+index 533d3a6..b0023b8 100644
+--- a/src/tvheadend/entity/Schedule.h
++++ b/src/tvheadend/entity/Schedule.h
+@@ -21,9 +21,9 @@
+  *
+  */
+ 
++#include <map>
+ #include <vector>
+ #include "Entity.h"
+-#include "Event.h"
+ 
+ namespace tvheadend
+ {
+@@ -32,7 +32,9 @@ namespace tvheadend
+     class Schedule;
+     typedef std::pair<int, Schedule> ScheduleMapEntry;
+     typedef std::map<int, Schedule> Schedules;
+-    typedef std::vector<Event> Segment;
++
++    typedef std::pair<uint32_t, Entity> EventUidsMapEntry;
++    typedef std::map<uint32_t, Entity> EventUids;
+ 
+     /**
+      * Represents a schedule. A schedule has a channel and a bunch of events. 
+@@ -44,18 +46,17 @@ namespace tvheadend
+       virtual void SetDirty(bool dirty);
+ 
+       /**
+-       * @return a segment containing the events that occur within the
+-       * specified times
++       * @return read-write reference to the events in this schedule
+        */
+-      Segment GetSegment(time_t startTime, time_t endTime) const;
++      EventUids& GetEvents();
+ 
+       /**
+-       * @return read-write reference to the events in this schedule
++       * @return read-only reference to the events in this schedule
+        */
+-      Events& GetEvents();
++      const EventUids& GetEvents() const;
+ 
+     private:
+-      Events m_events;
++      EventUids m_events; // event uids
+     };
+   }
+-}
+\ No newline at end of file
++}
+diff --git a/src/tvheadend/utilities/AsyncState.cpp b/src/tvheadend/utilities/AsyncState.cpp
+index 1f4fdf3..0c30a93 100644
+--- a/src/tvheadend/utilities/AsyncState.cpp
++++ b/src/tvheadend/utilities/AsyncState.cpp
+@@ -22,7 +22,7 @@
+ #include "AsyncState.h"
+ 
+ using namespace tvheadend::utilities;
+-using namespace P8PLATFORM;
++using namespace PLATFORM;
+ 
+ struct Param {
+   eAsyncState state;
+@@ -37,7 +37,7 @@ AsyncState::AsyncState(int timeout)
+ 
+ eAsyncState AsyncState::GetState()
+ {
+-  P8PLATFORM::CLockObject lock(m_mutex);
++  PLATFORM::CLockObject lock(m_mutex);
+   return m_state;
+ }
+ 
+diff --git a/src/tvheadend/utilities/AsyncState.h b/src/tvheadend/utilities/AsyncState.h
+index 0819cd8..1d672da 100644
+--- a/src/tvheadend/utilities/AsyncState.h
++++ b/src/tvheadend/utilities/AsyncState.h
+@@ -22,7 +22,7 @@
+ #ifndef ASYNCSTATE_H
+ #define	ASYNCSTATE_H
+ 
+-#include "p8-platform/threads/mutex.h"
++#include "platform/threads/mutex.h"
+ 
+ namespace tvheadend {
+   namespace utilities {
+@@ -75,8 +75,8 @@ namespace tvheadend {
+       static bool PredicateCallback ( void *param );
+ 
+       eAsyncState m_state;
+-      P8PLATFORM::CMutex m_mutex;
+-      P8PLATFORM::CCondition<bool> m_condition;
++      PLATFORM::CMutex m_mutex;
++      PLATFORM::CCondition<bool> m_condition;
+       int m_timeout;
+ 
+     };
