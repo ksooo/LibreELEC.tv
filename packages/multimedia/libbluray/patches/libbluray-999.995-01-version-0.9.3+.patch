@@ -1,0 +1,3883 @@
+diff --git a/src/devtools/hdmv_test.c b/src/devtools/hdmv_test.c
+index 585ed70..7016ee1 100644
+--- a/src/devtools/hdmv_test.c
++++ b/src/devtools/hdmv_test.c
+@@ -24,95 +24,75 @@
+ 
+ #include "util/log_control.h"
+ #include "libbluray/bluray.h"
++#include "libbluray/decoders/overlay.h"
++
++
++#define PRINT_EV0(e)                                \
++  case BD_EVENT_##e:                                \
++      printf(#e "\n");                              \
++      break
++#define PRINT_EV1(e,f)                              \
++  case BD_EVENT_##e:                                \
++    printf("%-25s " f "\n", #e ":", ev->param);     \
++      break
+ 
+ static void _print_event(BD_EVENT *ev)
+ {
+-    switch (ev->event) {
++    switch ((bd_event_e)ev->event) {
++
+         case BD_EVENT_NONE:
+             break;
+-        case BD_EVENT_ERROR:
+-            printf("EVENT_ERROR:\t%d\n", ev->param);
+-            break;
+-        case BD_EVENT_READ_ERROR:
+-            printf("EVENT_READ_ERROR:\t%d\n", ev->param);
+-            break;
+-        case BD_EVENT_ENCRYPTED:
+-            printf("EVENT_ENCRYPTED:\t%d\n", ev->param);
+-            break;
+ 
+-        /* current playback position */
++        /* errors */
+ 
+-        case BD_EVENT_ANGLE:
+-            printf("EVENT_ANGLE:\t%d\n", ev->param);
+-            break;
+-        case BD_EVENT_TITLE:
+-            printf("EVENT_TITLE:\t%d\n", ev->param);
+-            break;
+-        case BD_EVENT_PLAYLIST:
+-            printf("EVENT_PLAYLIST:\t%d\n", ev->param);
+-            break;
+-        case BD_EVENT_PLAYITEM:
+-            printf("EVENT_PLAYITEM:\t%d\n", ev->param);
+-            break;
+-        case BD_EVENT_CHAPTER:
+-            printf("EVENT_CHAPTER:\t%d\n", ev->param);
+-            break;
++        PRINT_EV1(ERROR,      "%u");
++        PRINT_EV1(READ_ERROR, "%u");
++        PRINT_EV1(ENCRYPTED,  "%u");
+ 
+-        /* */
++        /* current playback position */
+ 
+-        case BD_EVENT_STILL:
+-            printf("EVENT_STILL:\t%d\n", ev->param);
+-            break;
++        PRINT_EV1(ANGLE,    "%u");
++        PRINT_EV1(TITLE,    "%u");
++        PRINT_EV1(PLAYLIST, "%05u.mpls");
++        PRINT_EV1(PLAYITEM, "%u");
++        PRINT_EV1(PLAYMARK, "%u");
++        PRINT_EV1(CHAPTER,  "%u");
++        PRINT_EV0(END_OF_TITLE);
+ 
+-        case BD_EVENT_SEEK:
+-            printf("EVENT_SEEK:\t%d\n", ev->param);
+-            break;
++        PRINT_EV1(STEREOSCOPIC_STATUS,  "%u");
+ 
+-        case BD_EVENT_STILL_TIME:
+-            if (ev->param) {
+-                printf("EVENT_STILL_TIME:\t%d\n", ev->param);
+-            } else {
+-                printf("EVENT_STILL_TIME:\tinfinite\n");
+-            }
+-            break;
++        PRINT_EV1(SEEK,     "%u");
++        PRINT_EV0(DISCONTINUITY);
++        PRINT_EV0(PLAYLIST_STOP);
+ 
+-        /* stream selection */
++        /* Interactive */
+ 
+-        case BD_EVENT_AUDIO_STREAM:
+-            printf("EVENT_AUDIO_STREAM:\t%d\n", ev->param);
+-            break;
+-        case BD_EVENT_IG_STREAM:
+-            printf("EVENT_IG_STREAM:\t%d\n", ev->param);
+-            break;
+-        case BD_EVENT_PG_TEXTST_STREAM:
+-            printf("EVENT_PG_TEXTST_STREAM:\t%d\n", ev->param);
+-            break;
+-        case BD_EVENT_SECONDARY_AUDIO_STREAM:
+-            printf("EVENT_SECONDARY_AUDIO_STREAM:\t%d\n", ev->param);
+-            break;
+-        case BD_EVENT_SECONDARY_VIDEO_STREAM:
+-            printf("EVENT_SECONDARY_VIDEO_STREAM:\t%d\n", ev->param);
+-            break;
++        PRINT_EV1(STILL_TIME,           "%u");
++        PRINT_EV1(STILL,                "%u");
++        PRINT_EV1(SOUND_EFFECT,         "%u");
++        PRINT_EV1(IDLE,                 "%u");
++        PRINT_EV1(POPUP,                "%u");
++        PRINT_EV1(MENU,                 "%u");
++        PRINT_EV1(UO_MASK_CHANGED,      "0x%04x");
++        PRINT_EV1(KEY_INTEREST_TABLE,   "0x%04x");
+ 
+-        case BD_EVENT_PG_TEXTST:
+-            printf("EVENT_PG_TEXTST:\t%s\n", ev->param ? "enable" : "disable");
+-            break;
+-        case BD_EVENT_SECONDARY_AUDIO:
+-            printf("EVENT_SECONDARY_AUDIO:\t%s\n", ev->param ? "enable" : "disable");
+-            break;
+-        case BD_EVENT_SECONDARY_VIDEO:
+-            printf("EVENT_SECONDARY_VIDEO:\t%s\n", ev->param ? "enable" : "disable");
+-            break;
+-        case BD_EVENT_SECONDARY_VIDEO_SIZE:
+-            printf("EVENT_SECONDARY_VIDEO_SIZE:\t%s\n", ev->param==0 ? "PIP" : "fullscreen");
+-            break;
++        /* stream selection */
+ 
+-        default:
+-            printf("UNKNOWN EVENT %d:\t%d\n", ev->event, ev->param);
+-            break;
+-      }
++        PRINT_EV1(PG_TEXTST,              "%u");
++        PRINT_EV1(SECONDARY_AUDIO,        "%u");
++        PRINT_EV1(SECONDARY_VIDEO,        "%u");
++        PRINT_EV1(PIP_PG_TEXTST,          "%u");
++
++        PRINT_EV1(AUDIO_STREAM,           "%u");
++        PRINT_EV1(IG_STREAM,              "%u");
++        PRINT_EV1(PG_TEXTST_STREAM,       "%u");
++        PRINT_EV1(SECONDARY_AUDIO_STREAM, "%u");
++        PRINT_EV1(SECONDARY_VIDEO_STREAM, "%u");
++        PRINT_EV1(SECONDARY_VIDEO_SIZE,   "%u");
++        PRINT_EV1(PIP_PG_TEXTST_STREAM,   "%u");
++    }
+ 
+-      fflush(stdout);
++    fflush(stdout);
+ }
+ 
+ static void _read_to_eof(BLURAY *bd)
+@@ -157,6 +137,30 @@ static void _play_pl(BLURAY *bd)
+     printf("\n");
+ }
+ 
++static void _overlay_cb(void *h, const struct bd_overlay_s * const ov)
++{
++    (void)h;
++
++    if (ov) {
++        printf("OVERLAY @%ld p%d %d: %d,%d %dx%d\n", (long)ov->pts, ov->plane, ov->cmd, ov->x, ov->y, ov->w, ov->h);
++
++    } else {
++        printf("OVERLAY CLOSE\n");
++    }
++}
++
++static void _argb_overlay_cb(void *h, const struct bd_argb_overlay_s * const ov)
++{
++    (void)h;
++
++    if (ov) {
++      printf("ARGB OVERLAY @%ld p%d %d: %d,%d %dx%d\n", (long)ov->pts, ov->plane, ov->cmd, ov->x, ov->y, ov->w, ov->h);
++
++    } else {
++        printf("ARGB OVERLAY CLOSE\n");
++    }
++}
++
+ int main(int argc, char *argv[])
+ {
+     int title = -1;
+@@ -208,6 +212,9 @@ int main(int argc, char *argv[])
+     bd_set_player_setting_str(bd, BLURAY_PLAYER_SETTING_MENU_LANG,    "eng");
+     bd_set_player_setting_str(bd, BLURAY_PLAYER_SETTING_COUNTRY_CODE, NULL);
+ 
++    bd_register_overlay_proc(bd, bd, _overlay_cb);
++    bd_register_argb_overlay_proc(bd, bd, _argb_overlay_cb, NULL);
++
+     /*
+      * play
+      */
+diff --git a/src/devtools/mpls_dump.c b/src/devtools/mpls_dump.c
+index de7da0e..147314e 100644
+--- a/src/devtools/mpls_dump.c
++++ b/src/devtools/mpls_dump.c
+@@ -160,10 +160,11 @@ _mk_path(const char *base, const char *sub)
+     size_t n1 = strlen(base);
+     size_t n2 = strlen(sub);
+     char *result = (char*)malloc(n1 + n2 + strlen(DIR_SEP) + 1);
+-    strcpy(result, base);
+-    strcat(result, DIR_SEP);
+-    strcat(result, sub);
+-
++    if (result) {
++        strcpy(result, base);
++        strcat(result, DIR_SEP);
++        strcat(result, sub);
++    }
+     return result;
+ }
+ 
+@@ -762,15 +763,24 @@ main(int argc, char *argv[])
+         }
+         if (dir != NULL) {
+             char **dirlist = (char**)calloc(10001, sizeof(char*));
++            if (!dirlist) {
++                continue;
++            }
+             struct dirent *ent;
+             int jj = 0;
+-            for (ent = readdir(dir); ent != NULL; ent = readdir(dir)) {
+-                dirlist[jj++] = strcpy((char*)malloc(strlen(ent->d_name)), ent->d_name);
++            for (ent = readdir(dir); ent != NULL && jj < 1000; ent = readdir(dir)) {
++                char *s = (char*)malloc(strlen(ent->d_name) + 1);
++                if (s) {
++                    dirlist[jj++] = strcpy(s, ent->d_name);
++                }
+             }
+             qsort(dirlist, jj, sizeof(char*), _qsort_str_cmp);
+             for (jj = 0; dirlist[jj] != NULL && pl_ii < 1000; jj++) {
+                 char *name = NULL;
+                 name = _mk_path(path, dirlist[jj]);
++                if (name == NULL) {
++                    continue;
++                }
+                 free(dirlist[jj]);
+                 if (stat(name, &st)) {
+                     free(name);
+diff --git a/src/file/dir_win32.c b/src/file/dir_win32.c
+index 2690658..5cbc3c8 100644
+--- a/src/file/dir_win32.c
++++ b/src/file/dir_win32.c
+@@ -62,7 +62,9 @@ static int _dir_read_win32(BD_DIR_H *dir, BD_DIRENT *entry)
+     if (!priv->info.name[0]) {
+         return 1;
+     }
+-    WideCharToMultiByte(CP_UTF8, 0, priv->info.name, -1, entry->d_name, sizeof(entry->d_name), NULL, NULL);
++    if (!WideCharToMultiByte(CP_UTF8, 0, priv->info.name, -1, entry->d_name, sizeof(entry->d_name), NULL, NULL)) {
++        return -1;
++    }
+ 
+     priv->info.name[0] = 0;
+     _wfindnext(priv->handle, &priv->info);
+@@ -70,37 +72,58 @@ static int _dir_read_win32(BD_DIR_H *dir, BD_DIRENT *entry)
+     return 0;
+ }
+ 
++static dir_data_t *_open_impl(const char *dirname)
++{
++    dir_data_t *priv;
++    char *filespec;
++    wchar_t wfilespec[MAX_PATH];
++    int result;
++
++    filespec = str_printf("%s" DIR_SEP "*", dirname);
++    if (!filespec) {
++        return NULL;
++    }
++
++    result = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, filespec, -1, wfilespec, MAX_PATH);
++    X_FREE(filespec);
++    if (!result) {
++        return NULL;
++    }
++
++    priv = calloc(1, sizeof(dir_data_t));
++    if (!priv) {
++        return NULL;
++    }
++
++    priv->handle = _wfindfirst(wfilespec, &priv->info);
++    if (priv->handle == -1) {
++        X_FREE(priv);
++    }
++
++    return priv;
++}
++
+ static BD_DIR_H *_dir_open_win32(const char* dirname)
+ {
+     BD_DIR_H *dir = calloc(1, sizeof(BD_DIR_H));
++    dir_data_t *priv = NULL;
+ 
+     BD_DEBUG(DBG_DIR, "Opening WIN32 dir %s... (%p)\n", dirname, (void*)dir);
++
+     if (!dir) {
+         return NULL;
+     }
+-    dir->close = _dir_close_win32;
+-    dir->read = _dir_read_win32;
+ 
+-    char       *filespec = str_printf("%s/*", dirname);
+-    dir_data_t *priv     = calloc(1, sizeof(dir_data_t));
++    priv = _open_impl(dirname);
++    if (priv) {
++        dir->close = _dir_close_win32;
++        dir->read = _dir_read_win32;
++        dir->internal = priv;
+ 
+-    dir->internal = priv;
+-
+-    wchar_t wfilespec[MAX_PATH];
+-    if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, filespec, -1, wfilespec, MAX_PATH))
+-        priv->handle = _wfindfirst(wfilespec, &priv->info);
+-    else
+-        priv->handle = -1;
+-
+-    X_FREE(filespec);
+-
+-    if (priv->handle != -1) {
+         return dir;
+     }
+ 
+-    BD_DEBUG(DBG_DIR, "Error opening dir! (%p)\n", (void*)dir);
+-
+-    X_FREE(dir->internal);
++    BD_DEBUG(DBG_DIR, "Error opening dir %s\n", dirname);
+     X_FREE(dir);
+ 
+     return NULL;
+diff --git a/src/file/dl_win32.c b/src/file/dl_win32.c
+index e4492e1..c73859d 100644
+--- a/src/file/dl_win32.c
++++ b/src/file/dl_win32.c
+@@ -37,12 +37,12 @@ static const char *dlerror(char *buf, int buf_size)
+     DWORD error_code = GetLastError();
+     wchar_t wbuf[256];
+ 
+-    if (FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS |
+-                       FORMAT_MESSAGE_MAX_WIDTH_MASK,
+-                       NULL, error_code, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+-                       wbuf, sizeof(wbuf)/sizeof(wbuf[0]), NULL)) {
+-        WideCharToMultiByte(CP_UTF8, 0, wbuf, -1, buf, buf_size, NULL, NULL);
+-    } else {
++    if (!FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS |
++                        FORMAT_MESSAGE_MAX_WIDTH_MASK,
++                        NULL, error_code, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
++                        wbuf, sizeof(wbuf)/sizeof(wbuf[0]), NULL) ||
++        !WideCharToMultiByte(CP_UTF8, 0, wbuf, -1, buf, buf_size, NULL, NULL)) {
++
+ #ifdef _MSC_VER
+         _snprintf(buf, buf_size, "error %d", (int)error_code);
+ #else
+@@ -60,6 +60,7 @@ void *dl_dlopen(const char *path, const char *version)
+     wchar_t wname[MAX_PATH];
+     char *name;
+     void *result;
++    int iresult;
+ 
+     name = str_printf("%s.dll", path);
+     if (!name) {
+@@ -67,9 +68,14 @@ void *dl_dlopen(const char *path, const char *version)
+         return NULL;
+     }
+ 
+-    MultiByteToWideChar(CP_UTF8, 0, name, -1, wname, MAX_PATH);
++    iresult = MultiByteToWideChar(CP_UTF8, 0, name, -1, wname, MAX_PATH);
+     X_FREE(name);
+ 
++    if (!iresult) {
++        BD_DEBUG(DBG_FILE, "can't convert file name '%s'\n", path);
++        return NULL;
++    }
++
+     result = LoadLibraryW(wname);
+ 
+     if (!result) {
+@@ -113,10 +119,19 @@ const char *dl_get_path(void)
+         HMODULE hModule;
+         wchar_t wpath[MAX_PATH];
+ 
+-        GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, (LPCTSTR)&dl_get_path, &hModule);
+-        GetModuleFileNameW(hModule, wpath, MAX_PATH);
+-        WideCharToMultiByte(CP_UTF8, 0, wpath, -1, path, MAX_PATH, NULL, NULL);
+-        lib_path = path;
++        if (GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
++                              GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
++                              (LPCTSTR)&dl_get_path, &hModule)) {
++
++            DWORD dw = GetModuleFileNameW(hModule, wpath, MAX_PATH);
++            if (dw > 0 && dw < MAX_PATH) {
++
++                if (WideCharToMultiByte(CP_UTF8, 0, wpath, -1, path, MAX_PATH, NULL, NULL)) {
++
++                    lib_path = path;
++                }
++            }
++        }
+ 
+         if (lib_path) {
+             /* cut library name from path */
+@@ -126,7 +141,7 @@ const char *dl_get_path(void)
+             }
+             BD_DEBUG(DBG_FILE, "library file is %s\n", lib_path);
+         } else {
+-            BD_DEBUG(DBG_FILE, "Can't determine libbluray.dll install path\n");
++            BD_DEBUG(DBG_FILE | DBG_CRIT, "Can't determine libbluray.dll install path\n");
+         }
+     }
+ 
+diff --git a/src/file/file.h b/src/file/file.h
+index 54b053e..afa5fa7 100644
+--- a/src/file/file.h
++++ b/src/file/file.h
+@@ -26,6 +26,7 @@
+ #include "util/attributes.h"
+ 
+ #include <stdint.h>
++#include <stddef.h>
+ 
+ #ifdef _WIN32
+ # define DIR_SEP "\\"
+@@ -39,12 +40,29 @@
+  * file access
+  */
+ 
+-#define file_close(X)    X->close(X)
+-#define file_seek(X,Y,Z) X->seek(X,Y,Z)
+-#define file_tell(X)     X->tell(X)
+ //#define file_eof(X) X->eof(X)
+-#define file_read(X,Y,Z) (size_t)X->read(X,Y,Z)
+ //#define file_write(X,Y,Z) (size_t)X->write(X,Y,Z)
++
++static inline void file_close(BD_FILE_H *fp)
++{
++    fp->close(fp);
++}
++
++static inline int64_t file_tell(BD_FILE_H *fp)
++{
++    return fp->tell(fp);
++}
++
++static inline BD_USED int64_t file_seek(BD_FILE_H *fp, int64_t offset, int32_t origin)
++{
++    return fp->seek(fp, offset, origin);
++}
++
++static inline BD_USED size_t file_read(BD_FILE_H *fp, uint8_t *buf, size_t size)
++{
++    return (size_t)fp->read(fp, buf, (int64_t)size);
++}
++
+ BD_PRIVATE int64_t file_size(BD_FILE_H *fp);
+ 
+ BD_PRIVATE extern BD_FILE_H* (*file_open)(const char* filename, const char *mode);
+diff --git a/src/file/file_win32.c b/src/file/file_win32.c
+index d9845fb..11aaf82 100644
+--- a/src/file/file_win32.c
++++ b/src/file/file_win32.c
+@@ -152,7 +152,10 @@ int file_unlink(const char *file)
+ {
+     wchar_t wfile[MAX_PATH];
+ 
+-    MultiByteToWideChar(CP_UTF8, 0, file, -1, wfile, MAX_PATH);
++    if (!MultiByteToWideChar(CP_UTF8, 0, file, -1, wfile, MAX_PATH)) {
++        return -1;
++    }
++
+     return _wremove(wfile);
+ }
+ 
+@@ -160,7 +163,9 @@ int file_path_exists(const char *path)
+ {
+     wchar_t wpath[MAX_PATH];
+ 
+-    MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, MAX_PATH);
++    if (!MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, MAX_PATH)) {
++        return -1;
++    }
+ 
+     DWORD dwAttrib = GetFileAttributesW(wpath);
+     if (dwAttrib != INVALID_FILE_ATTRIBUTES) {
+@@ -173,7 +178,9 @@ int file_mkdir(const char *dir)
+ {
+     wchar_t wdir[MAX_PATH];
+ 
+-    MultiByteToWideChar(CP_UTF8, 0, dir, -1, wdir, MAX_PATH);
++    if (!MultiByteToWideChar(CP_UTF8, 0, dir, -1, wdir, MAX_PATH)) {
++        return -1;
++    }
+     if (!CreateDirectoryW(wdir, NULL))
+         return -1;
+     return 0;
+diff --git a/src/libbluray/bdj/bdj.c b/src/libbluray/bdj/bdj.c
+index ef82ee4..5287a75 100644
+--- a/src/libbluray/bdj/bdj.c
++++ b/src/libbluray/bdj/bdj.c
+@@ -87,7 +87,9 @@ static void *_load_jvm_win32(const char **p_java_home)
+     }
+ 
+     if (debug_mask & DBG_BDJ) {
+-        WideCharToMultiByte(CP_UTF8, 0, buf_vers, -1, strbuf, sizeof(strbuf), NULL, NULL);
++        if (!WideCharToMultiByte(CP_UTF8, 0, buf_vers, -1, strbuf, sizeof(strbuf), NULL, NULL)) {
++            strbuf[0] = 0;
++        }
+         BD_DEBUG(DBG_BDJ, "JRE version: %s\n", strbuf);
+     }
+     wcscat(buf_loc, buf_vers);
+@@ -103,8 +105,9 @@ static void *_load_jvm_win32(const char **p_java_home)
+ 
+     if (r == ERROR_SUCCESS) {
+         /* do not fail even if not found */
+-        WideCharToMultiByte(CP_UTF8, 0, buf_loc, -1, java_home, sizeof(java_home), NULL, NULL);
+-        *p_java_home = java_home;
++        if (WideCharToMultiByte(CP_UTF8, 0, buf_loc, -1, java_home, sizeof(java_home), NULL, NULL)) {
++            *p_java_home = java_home;
++        }
+         BD_DEBUG(DBG_BDJ, "JavaHome: %s\n", java_home);
+ 
+         wcscat(java_path, buf_loc);
+@@ -124,7 +127,9 @@ static void *_load_jvm_win32(const char **p_java_home)
+     void *result = LoadLibraryW(buf_loc);
+     SetDllDirectoryW(NULL);
+ 
+-    WideCharToMultiByte(CP_UTF8, 0, buf_loc, -1, strbuf, sizeof(strbuf), NULL, NULL);
++    if (!WideCharToMultiByte(CP_UTF8, 0, buf_loc, -1, strbuf, sizeof(strbuf), NULL, NULL)) {
++        strbuf[0] = 0;
++    }
+     if (!result) {
+         BD_DEBUG(DBG_BDJ | DBG_CRIT, "can't open library '%s'\n", strbuf);
+     } else {
+@@ -139,7 +144,7 @@ static void *_load_jvm_win32(const char **p_java_home)
+ static inline char *_utf8_to_cp(const char *utf8)
+ {
+     int wlen = MultiByteToWideChar(CP_UTF8, 0, utf8, -1, NULL, 0);
+-    if (wlen == 0) {
++    if (wlen <= 0) {
+         return NULL;
+     }
+ 
+@@ -147,17 +152,22 @@ static inline char *_utf8_to_cp(const char *utf8)
+     if (!wide) {
+         return NULL;
+     }
+-    MultiByteToWideChar(CP_UTF8, 0, utf8, -1, wide, wlen);
++    if (!MultiByteToWideChar(CP_UTF8, 0, utf8, -1, wide, wlen)) {
++        X_FREE(wide);
++        return NULL;
++    }
+ 
+     size_t len = WideCharToMultiByte(CP_ACP, 0, wide, -1, NULL, 0, NULL, NULL);
+-    if (len == 0) {
++    if (len <= 0) {
+         X_FREE(wide);
+         return NULL;
+     }
+ 
+     char *out = (char *)malloc(len);
+     if (out != NULL) {
+-        WideCharToMultiByte(CP_ACP, 0, wide, -1, out, len, NULL, NULL);
++        if (!WideCharToMultiByte(CP_ACP, 0, wide, -1, out, len, NULL, NULL)) {
++            X_FREE(out);
++        }
+     }
+     X_FREE(wide);
+     return out;
+@@ -296,6 +306,11 @@ static const char *_find_libbluray_jar(BDJ_STORAGE *storage)
+             storage->classpath = str_dup(classpath);
+         }
+ 
++        if (!storage->classpath) {
++            BD_DEBUG(DBG_CRIT, "out of memory\n");
++            return NULL;
++        }
++
+         if (_can_read_file(storage->classpath)) {
+             return storage->classpath;
+         }
+@@ -311,6 +326,11 @@ static const char *_find_libbluray_jar(BDJ_STORAGE *storage)
+     const char *lib_path = dl_get_path();
+     if (lib_path) {
+         char *cp = str_printf("%s" BDJ_JARFILE, lib_path);
++        if (!cp) {
++            BD_DEBUG(DBG_CRIT, "out of memory\n");
++            return NULL;
++        }
++
+         BD_DEBUG(DBG_BDJ, "Checking %s ...\n", cp);
+         if (_can_read_file(cp)) {
+             storage->classpath = cp;
+@@ -346,6 +366,10 @@ static const char *_bdj_persistent_root(BDJ_STORAGE *storage)
+     const char *root;
+     char       *data_home;
+ 
++    if (storage->no_persistent_storage) {
++        return NULL;
++    }
++
+     if (!storage->persistent_root) {
+ 
+         root = getenv("LIBBLURAY_PERSISTENT_ROOT");
+@@ -354,10 +378,15 @@ static const char *_bdj_persistent_root(BDJ_STORAGE *storage)
+         }
+ 
+         data_home = file_get_data_home();
+-        storage->persistent_root = str_printf("%s" DIR_SEP "bluray" DIR_SEP "dvb.persistent.root" DIR_SEP, data_home ? data_home : "");
+-        X_FREE(data_home);
++        if (data_home) {
++            storage->persistent_root = str_printf("%s" DIR_SEP "bluray" DIR_SEP "dvb.persistent.root" DIR_SEP, data_home);
++            X_FREE(data_home);
++            BD_DEBUG(DBG_BDJ, "LIBBLURAY_PERSISTENT_ROOT not set, using %s\n", storage->persistent_root);
++        }
+ 
+-        BD_DEBUG(DBG_BDJ, "LIBBLURAY_PERSISTENT_ROOT not set, using %s\n", storage->persistent_root);
++        if (!storage->persistent_root) {
++            BD_DEBUG(DBG_BDJ | DBG_CRIT, "WARNING: BD-J persistent root not set\n");
++        }
+     }
+ 
+     return storage->persistent_root;
+@@ -368,6 +397,10 @@ static const char *_bdj_buda_root(BDJ_STORAGE *storage)
+     const char *root;
+     char       *cache_home;
+ 
++    if (storage->no_persistent_storage) {
++        return NULL;
++    }
++
+     if (!storage->cache_root) {
+ 
+         root = getenv("LIBBLURAY_CACHE_ROOT");
+@@ -376,10 +409,15 @@ static const char *_bdj_buda_root(BDJ_STORAGE *storage)
+         }
+ 
+         cache_home = file_get_cache_home();
+-        storage->cache_root = str_printf("%s" DIR_SEP "bluray" DIR_SEP "bluray.bindingunit.root" DIR_SEP, cache_home ? cache_home : "");
+-        X_FREE(cache_home);
++        if (cache_home) {
++            storage->cache_root = str_printf("%s" DIR_SEP "bluray" DIR_SEP "bluray.bindingunit.root" DIR_SEP, cache_home);
++            X_FREE(cache_home);
++            BD_DEBUG(DBG_BDJ, "LIBBLURAY_CACHE_ROOT not set, using %s\n", storage->cache_root);
++        }
+ 
+-        BD_DEBUG(DBG_BDJ, "LIBBLURAY_CACHE_ROOT not set, using %s\n", storage->cache_root);
++        if (!storage->cache_root) {
++            BD_DEBUG(DBG_BDJ | DBG_CRIT, "WARNING: BD-J cache root not set\n");
++        }
+     }
+ 
+     return storage->cache_root;
+@@ -438,6 +476,12 @@ static int _bdj_init(JNIEnv *env, struct bluray *bd, const char *disc_root, cons
+                                  param_bdjava_ptr, param_disc_id, param_disc_root,
+                                  param_persistent_root, param_buda_root);
+ 
++    (*env)->DeleteLocalRef(env, init_class);
++    (*env)->DeleteLocalRef(env, param_disc_id);
++    (*env)->DeleteLocalRef(env, param_disc_root);
++    (*env)->DeleteLocalRef(env, param_persistent_root);
++    (*env)->DeleteLocalRef(env, param_buda_root);
++
+     if ((*env)->ExceptionOccurred(env)) {
+         (*env)->ExceptionDescribe(env);
+         BD_DEBUG(DBG_BDJ | DBG_CRIT, "Failed to initialize BD-J (uncaught exception)\n");
+@@ -445,10 +489,6 @@ static int _bdj_init(JNIEnv *env, struct bluray *bd, const char *disc_root, cons
+         return 0;
+     }
+ 
+-    (*env)->DeleteLocalRef(env, init_class);
+-    (*env)->DeleteLocalRef(env, param_disc_id);
+-    (*env)->DeleteLocalRef(env, param_disc_root);
+-
+     return 1;
+ }
+ 
+@@ -556,8 +596,12 @@ static int _create_jvm(void *jvm_lib, const char *java_home, const char *jar_fil
+     int ii;
+     for (ii = 0; ii < n; ii++) {
+         char *tmp = _utf8_to_cp(option[ii].optionString);
+-        X_FREE(option[ii].optionString);
+-        option[ii].optionString = tmp;
++        if (tmp) {
++            X_FREE(option[ii].optionString);
++            option[ii].optionString = tmp;
++        } else {
++            BD_DEBUG(DBG_BDJ | DBG_CRIT, "Failed to convert %s\n", option[ii].optionString);
++        }
+     }
+ #endif
+ 
+@@ -680,26 +724,30 @@ void bdj_close(BDJAVA *bdjava)
+ int bdj_process_event(BDJAVA *bdjava, unsigned ev, unsigned param)
+ {
+     static const char * const ev_name[] = {
+-        "NONE",
+-        "CHAPTER",
+-        "PLAYITEM",
+-        "ANGLE",
+-        "SUBTITLE",
+-        "END_OF_PLAYLIST",
+-        "PTS",
+-        "VK_KEY",
+-        "MARK",
+-        "PSR102",
+-        "PLAYLIST",
+-
+-        "START",
+-        "STOP",
+-
+-        "RATE",
+-        "AUDIO_STREAM",
+-        "SECONDARY_STREAM",
+-        "UO_MASKED",
+-        "SEEK",
++        /*  0 */ "NONE",
++
++        /*  1 */ "START",
++        /*  2 */ "STOP",
++        /*  3 */ "PSR102",
++
++        /*  4 */ "PLAYLIST",
++        /*  5 */ "PLAYITEM",
++        /*  6 */ "CHAPTER",
++        /*  7 */ "MARK",
++        /*  8 */ "PTS",
++        /*  9 */ "END_OF_PLAYLIST",
++
++        /* 10 */ "SEEK",
++        /* 11 */ "RATE",
++
++        /* 12 */ "ANGLE",
++        /* 13 */ "AUDIO_STREAM",
++        /* 14 */ "SUBTITLE",
++        /* 15 */ "SECONDARY_STREAM",
++
++        /* 16 */ "VK_KEY",
++        /* 17 */ "UO_MASKED",
++        /* 18 */ "MOUSE",
+     };
+ 
+     JNIEnv* env;
+@@ -712,8 +760,11 @@ int bdj_process_event(BDJAVA *bdjava, unsigned ev, unsigned param)
+         return -1;
+     }
+ 
++    if (ev > BDJ_EVENT_LAST) {
++        BD_DEBUG(DBG_BDJ | DBG_CRIT, "bdj_process_event(%d,%d): unknown event\n", ev, param);
++    }
+     // Disable too verbose logging (PTS)
+-    if (ev != BDJ_EVENT_PTS) {
++    else if (ev != BDJ_EVENT_PTS) {
+         BD_DEBUG(DBG_BDJ, "bdj_process_event(%s,%d)\n", ev_name[ev], param);
+     }
+ 
+diff --git a/src/libbluray/bdj/bdj.h b/src/libbluray/bdj/bdj.h
+index 8c9feaf..789e7fe 100644
+--- a/src/libbluray/bdj/bdj.h
++++ b/src/libbluray/bdj/bdj.h
+@@ -22,27 +22,44 @@
+ 
+ #include "util/attributes.h"
+ 
++#include <stdint.h>
++
+ typedef enum {
+-    BDJ_EVENT_NONE = 0,
+-    BDJ_EVENT_CHAPTER,
+-    BDJ_EVENT_PLAYITEM,
+-    BDJ_EVENT_ANGLE,
+-    BDJ_EVENT_SUBTITLE,
+-    BDJ_EVENT_END_OF_PLAYLIST,
+-    BDJ_EVENT_PTS,
+-    BDJ_EVENT_VK_KEY,
+-    BDJ_EVENT_MARK,
+-    BDJ_EVENT_PSR102,
+-    BDJ_EVENT_PLAYLIST,
+-
+-    BDJ_EVENT_START, /* param: title number */
+-    BDJ_EVENT_STOP,
+-
+-    BDJ_EVENT_RATE,
+-    BDJ_EVENT_AUDIO_STREAM,
+-    BDJ_EVENT_SECONDARY_STREAM,
+-    BDJ_EVENT_UO_MASKED,
+-    BDJ_EVENT_SEEK,
++    /* Note: these must be in sync with Libbluray.java ! */
++
++    BDJ_EVENT_NONE             = 0,
++
++    /* Application control */
++
++    BDJ_EVENT_START            = 1, /* param: title number */
++    BDJ_EVENT_STOP             = 2,
++    BDJ_EVENT_PSR102           = 3,
++
++    /* Playback status */
++
++    BDJ_EVENT_PLAYLIST         = 4,
++    BDJ_EVENT_PLAYITEM         = 5,
++    BDJ_EVENT_CHAPTER          = 6,
++    BDJ_EVENT_MARK             = 7,
++    BDJ_EVENT_PTS              = 8,
++    BDJ_EVENT_END_OF_PLAYLIST  = 9,
++
++    BDJ_EVENT_SEEK             = 10,
++    BDJ_EVENT_RATE             = 11,
++
++    BDJ_EVENT_ANGLE            = 12,
++    BDJ_EVENT_AUDIO_STREAM     = 13,
++    BDJ_EVENT_SUBTITLE         = 14,
++    BDJ_EVENT_SECONDARY_STREAM = 15,
++
++    /* User interaction */
++
++    BDJ_EVENT_VK_KEY           = 16,
++    BDJ_EVENT_UO_MASKED        = 17,
++    BDJ_EVENT_MOUSE            = 18,
++
++    BDJ_EVENT_LAST             = 18,
++
+ } BDJ_EVENT;
+ 
+ typedef struct {
+@@ -50,6 +67,8 @@ typedef struct {
+     char *cache_root;        /* BD-J binding unit data area */
+ 
+     char *classpath;         /* BD-J implementation class path (location of libbluray.jar) */
++
++    uint8_t no_persistent_storage; /* disable persistent storage (remove files at close) */
+ } BDJ_STORAGE;
+ 
+ typedef struct bdjava_s BDJAVA;
+diff --git a/src/libbluray/bdj/bdjo_parse.c b/src/libbluray/bdj/bdjo_parse.c
+index 254b1e1..0d6f48a 100644
+--- a/src/libbluray/bdj/bdjo_parse.c
++++ b/src/libbluray/bdj/bdjo_parse.c
+@@ -178,7 +178,9 @@ static int _count_app_strings(BITSTREAM *bs, uint16_t data_length, uint16_t pref
+ 
+     // seek back
+     if (bytes_read) {
+-        bs_seek_byte(bs, pos);
++        if (bs_seek_byte(bs, pos) < 0) {
++            return -1;
++        }
+     }
+ 
+     if (bytes_read != data_length) {
+@@ -252,9 +254,14 @@ static char *_read_app_string(BITSTREAM *bs)
+ static int _parse_app_names(BITSTREAM *bs, BDJO_APP *p)
+ {
+     unsigned ii;
++    int r;
+ 
+     uint32_t data_length = bs_read(bs, 16);
+-    p->num_name = _count_app_strings(bs, data_length, 3, "names");
++    r = _count_app_strings(bs, data_length, 3, "names");
++    if (r < 0) {
++        return -1;
++    }
++    p->num_name = r;
+ 
+     if (data_length == 0) return 1;
+ 
+@@ -286,9 +293,14 @@ static int _parse_app_names(BITSTREAM *bs, BDJO_APP *p)
+ static int _parse_app_params(BITSTREAM *bs, BDJO_APP *p)
+ {
+     unsigned ii;
++    int r;
+ 
+     uint32_t data_length = bs_read(bs, 8);
+-    p->num_param = _count_app_strings(bs, data_length, 0, "params");
++    r = _count_app_strings(bs, data_length, 0, "params");
++    if (r < 0) {
++        return -1;
++    }
++    p->num_param = r;
+ 
+     if (p->num_param) {
+         p->param = calloc(p->num_param, sizeof(BDJO_APP_PARAM));
+@@ -507,7 +519,10 @@ static BDJO *_bdjo_parse(BD_FILE_H *fp)
+     BITSTREAM   bs;
+     BDJO       *p;
+ 
+-    bs_init(&bs, fp);
++    if (bs_init(&bs, fp) < 0) {
++        BD_DEBUG(DBG_BDJ, "?????.bdjo: read error\n");
++        return NULL;
++    }
+ 
+     p = calloc(1, sizeof(BDJO));
+     if (!p) {
+diff --git a/src/libbluray/bdj/java/java/awt/Area.java b/src/libbluray/bdj/java/java/awt/Area.java
+index 8c3561b..27bde88 100644
+--- a/src/libbluray/bdj/java/java/awt/Area.java
++++ b/src/libbluray/bdj/java/java/awt/Area.java
+@@ -40,21 +40,21 @@ class Area {
+         this.y1 = y1;
+     }
+ 
+-    public void clear() {
++    private void clear() {
+         x0 = Integer.MAX_VALUE;
+         y0 = Integer.MAX_VALUE;
+         x1 = -1;
+         y1 = -1;
+     }
+ 
+-    public void add(int newx, int newy) {
++    public synchronized void add(int newx, int newy) {
+         x0 = Math.min(x0, newx);
+         x1 = Math.max(x1, newx);
+         y0 = Math.min(y0, newy);
+         y1 = Math.max(y1, newy);
+     }
+ 
+-    public void add(Rectangle r) {
++    public synchronized void add(Rectangle r) {
+         if ((r.x | r.width | r.y | r.height) >= 0) {
+             x0 = Math.min(x0, r.x);
+             x1 = Math.max(x1, r.x + r.width - 1);
+@@ -63,11 +63,21 @@ class Area {
+         }
+     }
+ 
+-    public boolean isEmpty() {
++    public synchronized boolean isEmpty() {
+         return (x1 < x0) || (y1 < y0);
+     }
+ 
+-    public Area getBounds() {
++    private synchronized Area getBounds() {
+         return new Area(x0, y0, x1, y1);
+     }
++
++    protected synchronized Area getBoundsAndClear() {
++        Area a = getBounds();
++        clear();
++        return a;
++    }
++
++    public String toString() {
++        return getClass().getName() + "[" + x0 + "," + y0 + "-" + x1 + "," + y1 + "]";
++    }
+ }
+diff --git a/src/libbluray/bdj/java/java/awt/BDFontMetrics.java b/src/libbluray/bdj/java/java/awt/BDFontMetrics.java
+index fdcda44..7b68b70 100644
+--- a/src/libbluray/bdj/java/java/awt/BDFontMetrics.java
++++ b/src/libbluray/bdj/java/java/awt/BDFontMetrics.java
+@@ -130,8 +130,8 @@ public class BDFontMetrics extends sun.font.FontDesignMetrics {
+                 if (fm != null) {
+                     fm.destroy();
+                 }
+-            } catch (Throwable e) {
+-                e.printStackTrace();
++            } catch (Exception e) {
++                logger.error("shutdown() failed: " + e);
+             }
+         }
+         destroyN(BDFontMetrics.ftLib);
+@@ -194,8 +194,10 @@ public class BDFontMetrics extends sun.font.FontDesignMetrics {
+     static synchronized String[] getFontList() {
+         try {
+             init();
++        } catch (ThreadDeath td) {
++            throw td;
+         } catch (Throwable t) {
+-            System.err.println("getFontList() failed: " + t);
++            logger.error("getFontList() failed: " + t);
+             return new String[0];
+         }
+ 
+@@ -220,6 +222,9 @@ public class BDFontMetrics extends sun.font.FontDesignMetrics {
+     /** Cache of first 256 Unicode characters as these map to ASCII characters and are often used. */
+     private int[] widths;
+ 
++    /* synchronize access to ftFace (native functions) */
++    private final Object faceLock = new Object();
++
+     /**
+      * Creates a font metrics for the supplied font. To get a font metrics for a font
+      * use the static method getFontMetrics instead which does caching.
+@@ -228,9 +233,10 @@ public class BDFontMetrics extends sun.font.FontDesignMetrics {
+         super(font);
+ 
+         ftFace = loadFontN(ftLib, nativeName, font.getSize());
+-        if (ftFace == 0)
++        if (ftFace == 0) {
++            logger.error("Error loading font");
+             throw new AWTError("font face:" + nativeName + " not loaded");
+-
++        }
+         widths = null;
+     }
+ 
+@@ -240,20 +246,24 @@ public class BDFontMetrics extends sun.font.FontDesignMetrics {
+     private native int stringWidthN(long ftFace, String string);
+     private native int charsWidthN(long ftFace, char chars[], int offset, int len);
+ 
+-    private synchronized void loadWidths() {
++    private void loadWidths() {
+         /* Cache first 256 char widths for use by the getWidths method and for faster metric
+            calculation as they are commonly used (ASCII) characters. */
+         if (widths == null) {
+-            widths = new int[256];
+-            for (int i = 0; i < 256; i++) {
+-                widths[i] = charWidthN(ftFace, (char)i);
++            int[] widths = new int[256];
++            synchronized (faceLock) {
++                for (int i = 0; i < 256; i++) {
++                    widths[i] = charWidthN(ftFace, (char)i);
++                }
+             }
++            this.widths = widths;
+         }
+     }
+ 
+-
+-    protected synchronized void drawString(BDGraphics g, String string, int x, int y, int rgb) {
+-        g.drawStringN(ftFace, string, x, y, rgb);
++    protected void drawString(BDGraphics g, String string, int x, int y, int rgb) {
++        synchronized (faceLock) {
++            g.drawStringN(ftFace, string, x, y, rgb);
++        }
+     }
+ 
+     public int getAscent() {
+@@ -275,31 +285,37 @@ public class BDFontMetrics extends sun.font.FontDesignMetrics {
+     /**
+      * Fast lookup of first 256 chars as these are always the same eg. ASCII charset.
+      */
+-    public synchronized int charWidth(char c) {
++    public int charWidth(char c) {
+         if (c < 256) {
+             loadWidths();
+             return widths[c];
+         }
+-        return charWidthN(ftFace, c);
++        synchronized (faceLock) {
++            return charWidthN(ftFace, c);
++        }
+     }
+ 
+     /**
+      * Return the width of the specified string in this Font.
+      */
+-    public synchronized int stringWidth(String string) {
++    public int stringWidth(String string) {
+         /* Allow only one call at time.
+          * (calling this function from multiple threads caused crashes in freetype)
+          */
+         synchronized (BDFontMetrics.class) {
+-            return stringWidthN(ftFace, string);
++            synchronized (faceLock) {
++                return stringWidthN(ftFace, string);
++            }
+         }
+     }
+ 
+     /**
+      * Return the width of the specified char[] in this Font.
+      */
+-    public synchronized int charsWidth(char chars[], int offset, int length) {
+-        return charsWidthN(ftFace, chars, offset, length);
++    public int charsWidth(char chars[], int offset, int length) {
++        synchronized (faceLock) {
++            return charsWidthN(ftFace, chars, offset, length);
++        }
+     }
+ 
+     /**
+diff --git a/src/libbluray/bdj/java/java/awt/BDGraphicsBase.java b/src/libbluray/bdj/java/java/awt/BDGraphicsBase.java
+index 0e2fd5f..30f1546 100644
+--- a/src/libbluray/bdj/java/java/awt/BDGraphicsBase.java
++++ b/src/libbluray/bdj/java/java/awt/BDGraphicsBase.java
+@@ -208,6 +208,8 @@ abstract class BDGraphicsBase extends DVBGraphics implements ConstrainableGraphi
+     }
+ 
+     public Font getFont() {
++        if (font == null)
++            return DEFAULT_FONT;
+         return font;
+     }
+ 
+@@ -215,6 +217,9 @@ abstract class BDGraphicsBase extends DVBGraphics implements ConstrainableGraphi
+         if (font != null && fontMetrics == null) {
+             fontMetrics = BDFontMetrics.getFontMetrics(font);
+         }
++        if (fontMetrics == null) {
++            logger.error("getFontMetrics() failed");
++        }
+         return fontMetrics;
+     }
+ 
+@@ -240,6 +245,8 @@ abstract class BDGraphicsBase extends DVBGraphics implements ConstrainableGraphi
+     }
+ 
+     public GraphicsConfiguration getDeviceConfiguration() {
++        if (gc == null)
++            logger.error("getDeviceConfiguration() failed");
+         return gc;
+     }
+ 
+diff --git a/src/libbluray/bdj/java/java/awt/BDJHelper.java b/src/libbluray/bdj/java/java/awt/BDJHelper.java
+index 6d8c4af..59ed300 100644
+--- a/src/libbluray/bdj/java/java/awt/BDJHelper.java
++++ b/src/libbluray/bdj/java/java/awt/BDJHelper.java
+@@ -68,6 +68,14 @@ public class BDJHelper {
+         }
+     }
+ 
++    public static boolean postMouseEvent(int x, int y) {
++        return false;
++    }
++
++    public static boolean postMouseEvent(int button) {
++        return false;
++    }
++
+     public static boolean postKeyEvent(int id, int modifiers, int keyCode) {
+         Component focusOwner = KeyboardFocusManager.getCurrentKeyboardFocusManager().getGlobalFocusOwner();
+         if (focusOwner != null) {
+diff --git a/src/libbluray/bdj/java/java/awt/BDRootWindow.java b/src/libbluray/bdj/java/java/awt/BDRootWindow.java
+index 7a0e533..f34da83 100644
+--- a/src/libbluray/bdj/java/java/awt/BDRootWindow.java
++++ b/src/libbluray/bdj/java/java/awt/BDRootWindow.java
+@@ -82,6 +82,13 @@ public class BDRootWindow extends Frame {
+         return null;
+     }
+ 
++    private boolean isBackBufferClear() {
++        int v = 0;
++        for (int i = 0; i < height * width; i++)
++            v |= backBuffer[i];
++        return v == 0;
++    }
++
+     public void notifyChanged() {
+         if (!isVisible()) {
+             logger.error("sync(): not visible");
+@@ -108,11 +115,26 @@ public class BDRootWindow extends Frame {
+             }
+             changeCount = 0;
+ 
+-            Area a = dirty.getBounds();
+-            dirty.clear();
++            if (!isVisible()) {
++                if (overlay_open) {
++                    logger.info("sync(): close OSD (not visible)");
++                    close();
++                }
++                logger.info("sync() ignored (not visible)");
++                return;
++            }
++
++            Area a = dirty.getBoundsAndClear();
+ 
+             if (!a.isEmpty()) {
+                 if (!overlay_open) {
++
++                    /* delay opening overlay until something has been drawn */
++                    if (isBackBufferClear()) {
++                        logger.info("sync() ignored (overlay not open, empty overlay)");
++                        return;
++                    }
++
+                     Libbluray.updateGraphic(getWidth(), getHeight(), null);
+                     overlay_open = true;
+                     a = new Area(getWidth(), getHeight()); /* force full plane update */
+@@ -165,8 +187,8 @@ public class BDRootWindow extends Frame {
+             if (overlay_open) {
+                 logger.error("clearOverlay() ignored (overlay is visible)");
+             } else {
++                dirty.getBoundsAndClear();
+                 Arrays.fill(backBuffer, 0);
+-                dirty.clear();
+             }
+         }
+     }
+diff --git a/src/libbluray/bdj/java/java/awt/BDToolkitBase.java b/src/libbluray/bdj/java/java/awt/BDToolkitBase.java
+index 0f5e3e0..18f4014 100644
+--- a/src/libbluray/bdj/java/java/awt/BDToolkitBase.java
++++ b/src/libbluray/bdj/java/java/awt/BDToolkitBase.java
+@@ -61,7 +61,7 @@ abstract class BDToolkitBase extends Toolkit {
+             if (toolkit instanceof BDToolkit) {
+                 ((BDToolkit)toolkit).shutdown();
+             }
+-        } catch (Throwable t) {
++        } catch (Exception t) {
+             logger.error("shutdownDisc() failed: " + t + "\n" + Logger.dumpStack(t));
+         }
+     }
+diff --git a/src/libbluray/bdj/java/org/dvb/application/AppsDatabase.java b/src/libbluray/bdj/java/org/dvb/application/AppsDatabase.java
+index daf92c2..e177da5 100644
+--- a/src/libbluray/bdj/java/org/dvb/application/AppsDatabase.java
++++ b/src/libbluray/bdj/java/org/dvb/application/AppsDatabase.java
+@@ -21,6 +21,7 @@ package org.dvb.application;
+ 
+ import java.util.LinkedList;
+ import java.util.Enumeration;
++import java.util.Collections;
+ import org.videolan.BDJAppsDatabase;
+ import org.videolan.BDJListeners;
+ import org.videolan.Logger;
+@@ -37,12 +38,12 @@ public class AppsDatabase {
+ 
+     public Enumeration getAppIDs(AppsDatabaseFilter filter) {
+         logger.unimplemented("getAppIDs");
+-        return null;
++        return Collections.emptyEnumeration();
+     }
+ 
+     public Enumeration getAppAttributes(AppsDatabaseFilter filter) {
+         logger.unimplemented("getAppAttributes");
+-        return null;
++        return Collections.emptyEnumeration();
+     }
+ 
+     public AppAttributes getAppAttributes(AppID key) {
+diff --git a/src/libbluray/bdj/java/org/dvb/event/EventManager.java b/src/libbluray/bdj/java/org/dvb/event/EventManager.java
+index 54ce6ac..6a25fb7 100644
+--- a/src/libbluray/bdj/java/org/dvb/event/EventManager.java
++++ b/src/libbluray/bdj/java/org/dvb/event/EventManager.java
+@@ -274,10 +274,10 @@ public class EventManager implements ResourceServer {
+             }
+         }
+ 
+-        public BDJXletContext context;
+-        public UserEventListener listener;
+-        public ResourceClient client;
+-        public UserEventRepository userEvents;
++        public final BDJXletContext context;
++        public final UserEventListener listener;
++        public final ResourceClient client;
++        public final UserEventRepository userEvents;
+     }
+ 
+     private static class UserEventAction extends BDJAction {
+diff --git a/src/libbluray/bdj/java/org/dvb/user/UserPreferenceManager.java b/src/libbluray/bdj/java/org/dvb/user/UserPreferenceManager.java
+index 1367d1d..5406e3c 100644
+--- a/src/libbluray/bdj/java/org/dvb/user/UserPreferenceManager.java
++++ b/src/libbluray/bdj/java/org/dvb/user/UserPreferenceManager.java
+@@ -25,6 +25,7 @@ import java.util.LinkedList;
+ 
+ public class UserPreferenceManager {
+     private UserPreferenceManager() {
++        org.videolan.Logger.getLogger("UserPreferenceManager").unimplemented("UserPreferenceManager");
+     }
+ 
+     private static final Object instanceLock = new Object();
+diff --git a/src/libbluray/bdj/java/org/videolan/BDJSecurityManager.java b/src/libbluray/bdj/java/org/videolan/BDJSecurityManager.java
+index 8a337ee..522022f 100644
+--- a/src/libbluray/bdj/java/org/videolan/BDJSecurityManager.java
++++ b/src/libbluray/bdj/java/org/videolan/BDJSecurityManager.java
+@@ -35,6 +35,15 @@ final class BDJSecurityManager extends SecurityManager {
+     private String persistentRoot;
+     private boolean usingUdf = false;
+ 
++    private static Class urlPermission = null;
++    static {
++        try {
++            /* Java 8 */
++            urlPermission = Class.forName("java.net.URLPermission");
++        } catch (Exception e) {
++        }
++    }
++
+     BDJSecurityManager(String discRoot, String persistentRoot, String budaRoot) {
+         this.discRoot  = discRoot;
+         this.cacheRoot = null;
+@@ -68,6 +77,12 @@ final class BDJSecurityManager extends SecurityManager {
+     public void checkPermission(Permission perm) {
+         if (perm instanceof RuntimePermission) {
+             if (perm.implies(new RuntimePermission("createSecurityManager"))) {
++
++                // allow initializing of javax.crypto.JceSecurityManager
++                if (classDepth("javax.crypto.JceSecurityManager") < 3) {
++                    return;
++                }
++
+                 deny(perm);
+             }
+             if (perm.implies(new RuntimePermission("setSecurityManager"))) {
+@@ -139,6 +154,11 @@ final class BDJSecurityManager extends SecurityManager {
+                 return;
+             }
+         }
++        else if (urlPermission != null &&
++                 urlPermission.isInstance(perm)) {
++            logger.info("grant " + perm);
++            return;
++        }
+ 
+         /* Java TV */
+         else if (perm instanceof javax.tv.service.ReadPermission) {
+diff --git a/src/libbluray/bdj/java/org/videolan/BDJXletContext.java b/src/libbluray/bdj/java/org/videolan/BDJXletContext.java
+index 4f3e725..d076d1a 100644
+--- a/src/libbluray/bdj/java/org/videolan/BDJXletContext.java
++++ b/src/libbluray/bdj/java/org/videolan/BDJXletContext.java
+@@ -468,9 +468,11 @@ public class BDJXletContext implements javax.tv.xlet.XletContext, javax.microedi
+ 
+         exitXlet();
+ 
+-        callbackQueue.shutdown();
+-        userEventQueue.shutdown();
+-        mediaQueue.shutdown();
++        synchronized (cbLock) {
++            callbackQueue.shutdown();
++            userEventQueue.shutdown();
++            mediaQueue.shutdown();
++        }
+ 
+         EventQueue eq = eventQueue;
+         eventQueue = null;
+diff --git a/src/libbluray/bdj/java/org/videolan/GUIManager.java b/src/libbluray/bdj/java/org/videolan/GUIManager.java
+index 27c2826..88a464b 100644
+--- a/src/libbluray/bdj/java/org/videolan/GUIManager.java
++++ b/src/libbluray/bdj/java/org/videolan/GUIManager.java
+@@ -44,12 +44,14 @@ public class GUIManager extends BDRootWindow {
+         }
+     }
+ 
+-    public static synchronized GUIManager getInstance() {
+-        if (instance == null) {
+-            Logger.getLogger("GUIManager").error("getInstance(): no instance !");
+-            throw new Error("no GUIManager instance");
++    public static GUIManager getInstance() {
++        synchronized (instanceLock) {
++            if (instance == null) {
++                Logger.getLogger("GUIManager").error("getInstance(): no instance !");
++                throw new Error("no GUIManager instance");
++            }
++            return instance;
+         }
+-        return instance;
+     }
+ 
+     public BufferedImage createBufferedImage(int width, int height)
+diff --git a/src/libbluray/bdj/java/org/videolan/Libbluray.java b/src/libbluray/bdj/java/org/videolan/Libbluray.java
+index 80b275d..3bc0143 100644
+--- a/src/libbluray/bdj/java/org/videolan/Libbluray.java
++++ b/src/libbluray/bdj/java/org/videolan/Libbluray.java
+@@ -110,8 +110,26 @@ public class Libbluray {
+         initOnce();
+ 
+         /* set up directories */
+-        persistentRoot = canonicalize(persistentRoot, true);
+-        budaRoot       = canonicalize(budaRoot, true);
++
++        try {
++            if (persistentRoot == null) {
++                /* no persistent storage */
++                persistentRoot = CacheDir.create("dvb.persistent.root").getPath() + File.separator;
++            }
++            if (budaRoot == null) {
++                /* no persistent storage for BUDA */
++                budaRoot = CacheDir.create("bluray.bindingunit.root").getPath() + File.separator;
++            }
++        } catch (java.io.IOException e) {
++            System.err.println("Cache creation failed: " + e);
++            /* not fatal with most discs */
++        }
++        if (persistentRoot != null) {
++            persistentRoot = canonicalize(persistentRoot, true);
++        }
++        if (budaRoot != null) {
++            budaRoot       = canonicalize(budaRoot, true);
++        }
+ 
+         System.setProperty("dvb.persistent.root", persistentRoot);
+         System.setProperty("bluray.bindingunit.root", budaRoot);
+@@ -123,6 +141,8 @@ public class Libbluray {
+             System.getProperties().remove("bluray.vfs.root");
+         }
+ 
++        /* */
++
+         Libbluray.nativePointer = nativePointer;
+         DiscManager.getDiscManager().setCurrentDisc(discID);
+ 
+@@ -258,7 +278,9 @@ public class Libbluray {
+         }
+         nativePointer = 0;
+         titleInfos = null;
+-        bdjoFiles = null;
++        synchronized (bdjoFilesLock) {
++            bdjoFiles = null;
++        }
+     }
+ 
+     /*
+@@ -548,14 +570,8 @@ public class Libbluray {
+         case BDJ_EVENT_PTS:
+         case BDJ_EVENT_UO_MASKED:
+         case BDJ_EVENT_SEEK:
+-            PlayerManager.getInstance().onEvent(event, param);
+-            break;
+         case BDJ_EVENT_RATE:
+-            float rate = (float)param / 90000.0f;
+-            if (rate < 0.0f) rate = -rate;
+-            if (rate < 0.01f) rate = 0.0f;
+-            if (rate > 0.99f && rate < 1.01f) rate = 1.0f;
+-            PlayerManager.getInstance().onRateChange(rate);
++            result = PlayerManager.getInstance().onEvent(event, param);
+             break;
+ 
+         case BDJ_EVENT_PSR102:
+@@ -584,6 +600,10 @@ public class Libbluray {
+             case 404: key = HRcEvent.VK_COLORED_KEY_1; break;
+             case 405: key = HRcEvent.VK_COLORED_KEY_2; break;
+             case 406: key = HRcEvent.VK_COLORED_KEY_3; break;
++            case 17:
++                result = java.awt.BDJHelper.postMouseEvent(0);
++                key = -1;
++                break;
+             default:
+                 key = -1;
+                 result = false;
+@@ -596,6 +616,9 @@ public class Libbluray {
+                 result = r1 || r2 || r3;
+             }
+             break;
++        case BDJ_EVENT_MOUSE:
++            result = java.awt.BDJHelper.postMouseEvent(param >> 16, param & 0xffff);
++            break;
+         default:
+             System.err.println("Unknown event " + event + "." + param);
+             result = false;
+@@ -613,25 +636,28 @@ public class Libbluray {
+         }
+     }
+ 
+-    public  static final int BDJ_EVENT_CHAPTER                  = 1;
+-    public  static final int BDJ_EVENT_PLAYITEM                 = 2;
+-    public  static final int BDJ_EVENT_ANGLE                    = 3;
+-    public  static final int BDJ_EVENT_SUBTITLE                 = 4;
+-    public  static final int BDJ_EVENT_END_OF_PLAYLIST          = 5;
+-    public  static final int BDJ_EVENT_PTS                      = 6;
+-    private static final int BDJ_EVENT_VK_KEY                   = 7;
+-    public  static final int BDJ_EVENT_MARK                     = 8;
+-    private static final int BDJ_EVENT_PSR102                   = 9;
+-    public  static final int BDJ_EVENT_PLAYLIST                 = 10;
++    private static final int BDJ_EVENT_START                    = 1;
++    private static final int BDJ_EVENT_STOP                     = 2;
++    private static final int BDJ_EVENT_PSR102                   = 3;
+ 
+-    private static final int BDJ_EVENT_START                    = 11;
+-    private static final int BDJ_EVENT_STOP                     = 12;
++    public  static final int BDJ_EVENT_PLAYLIST                 = 4;
++    public  static final int BDJ_EVENT_PLAYITEM                 = 5;
++    public  static final int BDJ_EVENT_CHAPTER                  = 6;
++    public  static final int BDJ_EVENT_MARK                     = 7;
++    public  static final int BDJ_EVENT_PTS                      = 8;
++    public  static final int BDJ_EVENT_END_OF_PLAYLIST          = 9;
+ 
+-    public  static final int BDJ_EVENT_RATE                     = 13;
+-    public  static final int BDJ_EVENT_AUDIO_STREAM             = 14;
++    public  static final int BDJ_EVENT_SEEK                     = 10;
++    public  static final int BDJ_EVENT_RATE                     = 11;
++
++    public  static final int BDJ_EVENT_ANGLE                    = 12;
++    public  static final int BDJ_EVENT_AUDIO_STREAM             = 13;
++    public  static final int BDJ_EVENT_SUBTITLE                 = 14;
+     public  static final int BDJ_EVENT_SECONDARY_STREAM         = 15;
+-    public  static final int BDJ_EVENT_UO_MASKED                = 16;
+-    public  static final int BDJ_EVENT_SEEK                     = 17;
++
++    private static final int BDJ_EVENT_VK_KEY                   = 16;
++    public  static final int BDJ_EVENT_UO_MASKED                = 17;
++    private static final int BDJ_EVENT_MOUSE                    = 18;
+ 
+     /* TODO: use org/bluray/system/RegisterAccess instead */
+     public static final int PSR_IG_STREAM_ID     = 0;
+diff --git a/src/libbluray/bdj/java/org/videolan/bdjo/AppEntry.java b/src/libbluray/bdj/java/org/videolan/bdjo/AppEntry.java
+index 996eef5..798b299 100644
+--- a/src/libbluray/bdj/java/org/videolan/bdjo/AppEntry.java
++++ b/src/libbluray/bdj/java/org/videolan/bdjo/AppEntry.java
+@@ -140,7 +140,8 @@ public class AppEntry implements AppAttributes {
+     }
+ 
+     public boolean isVisible() {
+-        return ((visibility & VISIBLE_TO_USERS) != 0);
++        // Annex S
++        return false;
+     }
+ 
+     public boolean isDiscBound() {
+diff --git a/src/libbluray/bdj/java/org/videolan/media/content/BDHandler.java b/src/libbluray/bdj/java/org/videolan/media/content/BDHandler.java
+index a9e25e8..4e4cfb6 100644
+--- a/src/libbluray/bdj/java/org/videolan/media/content/BDHandler.java
++++ b/src/libbluray/bdj/java/org/videolan/media/content/BDHandler.java
+@@ -340,15 +340,10 @@ public abstract class BDHandler implements Player, ServiceContentHandler {
+      * notifications from app
+      */
+ 
+-    protected void statusEvent(int event, int param) {
+-        if (isClosed) return;
++    protected boolean statusEvent(int event, int param) {
++        if (isClosed) return false;
+         commandQueue.put(new PlayerAction(this, PlayerAction.ACTION_STATUS, new Integer(event), param));
+-    }
+-
+-    protected void rateChanged(float rate) {
+-        if (isClosed) return;
+-        PlayerAction action = new PlayerAction(this, PlayerAction.ACTION_RATE_CHANGED, new Float(rate));
+-        commandQueue.put(action);
++        return true;
+     }
+ 
+     /*
+@@ -461,6 +456,7 @@ public abstract class BDHandler implements Player, ServiceContentHandler {
+         case Unrealized:
+             state = Realizing;
+             notifyListeners(new TransitionEvent(this, Unrealized, Realizing, Realized));
++            /* fall thru */
+         case Realizing:
+             ControllerErrorEvent error = doRealize();
+             if (error == null) {
+@@ -484,9 +480,11 @@ public abstract class BDHandler implements Player, ServiceContentHandler {
+         case Realizing:
+             if (!doRealizeAction())
+                 return false;
++            /* fall thru */
+         case Realized:
+             state = Prefetching;
+             notifyListeners(new TransitionEvent(this, Realized, Prefetching, Prefetched));
++            /* fall thru */
+         case Prefetching:
+ 
+             if (!PlayerManager.getInstance().allocateResource(this)) {
+@@ -515,10 +513,12 @@ public abstract class BDHandler implements Player, ServiceContentHandler {
+         case Realizing:
+             if (!doRealizeAction())
+                 return false;
++            /* fall thru */
+         case Realized:
+         case Prefetching:
+             if (!doPrefetchAction())
+                 return false;
++            /* fall thru */
+         case Prefetched:
+             ControllerErrorEvent error = doStart(at);
+             if (error == null) {
+@@ -635,9 +635,6 @@ public abstract class BDHandler implements Player, ServiceContentHandler {
+                 player.doSetRate((Float)param);
+                 break;
+ 
+-            case ACTION_RATE_CHANGED:
+-                player.doRateChanged(((Float)param).floatValue());
+-                break;
+             case ACTION_STATUS:
+                 switch (((Integer)param).intValue()) {
+                 case Libbluray.BDJ_EVENT_CHAPTER:
+@@ -676,6 +673,13 @@ public abstract class BDHandler implements Player, ServiceContentHandler {
+                 case Libbluray.BDJ_EVENT_SEEK:
+                     player.doSeekNotify(param2 * 2 /* 45kHz -> 90kHz */);
+                     break;
++                case Libbluray.BDJ_EVENT_RATE:
++                    float rate = (float)param2 / 90000.0f;
++                    if (rate < 0.0f) rate = -rate;
++                    if (rate < 0.01f) rate = 0.0f;
++                    if (rate > 0.99f && rate < 1.01f) rate = 1.0f;
++                    player.doRateChanged(rate);
++                    break;
+                 default:
+                     System.err.println("Unknown ACTION_STATUS: id " + param + ", value " + param2);
+                     break;
+@@ -704,7 +708,6 @@ public abstract class BDHandler implements Player, ServiceContentHandler {
+         public static final int ACTION_SET_RATE = 9;
+ 
+         public static final int ACTION_STATUS = 10;
+-        public static final int ACTION_RATE_CHANGED = 11;
+     }
+ 
+     protected int state = Unrealized;
+diff --git a/src/libbluray/bdj/java/org/videolan/media/content/PlayerManager.java b/src/libbluray/bdj/java/org/videolan/media/content/PlayerManager.java
+index d45358b..abc5ced 100644
+--- a/src/libbluray/bdj/java/org/videolan/media/content/PlayerManager.java
++++ b/src/libbluray/bdj/java/org/videolan/media/content/PlayerManager.java
+@@ -138,24 +138,15 @@ public class PlayerManager {
+      *
+      */
+ 
+-    public void onEvent(int event, int param) {
++    public boolean onEvent(int event, int param) {
+         synchronized (stoppingLock) {
+-            if (stopping) return;
++            if (stopping) return false;
+             synchronized (playlistPlayerLock) {
+                 if (playlistPlayer != null)
+-                    playlistPlayer.statusEvent(event, param);
++                    return playlistPlayer.statusEvent(event, param);
+             }
+         }
+-    }
+-
+-    public void onRateChange(float rate) {
+-        synchronized (stoppingLock) {
+-            if (stopping) return;
+-        synchronized (playlistPlayerLock) {
+-            if (playlistPlayer != null)
+-                playlistPlayer.rateChanged(rate);
+-        }
+-        }
++        return false;
+     }
+ 
+     private static final Logger logger = Logger.getLogger(PlayerManager.class.getName());
+diff --git a/src/libbluray/bdj/native/bdjo.c b/src/libbluray/bdj/native/bdjo.c
+index fdb7a09..0a0410a 100644
+--- a/src/libbluray/bdj/native/bdjo.c
++++ b/src/libbluray/bdj/native/bdjo.c
+@@ -17,6 +17,12 @@
+  * <http://www.gnu.org/licenses/>.
+  */
+ 
++/*
++ * Note:
++ * This module should be called only from Java side.
++ * If it is called from native C thread, lot of references are leaked !
++ */
++
+ #if HAVE_CONFIG_H
+ #include "config.h"
+ #endif
+@@ -35,10 +41,16 @@
+  * https://hdcookbook.dev.java.net/
+  */
+ 
+-#define JNICHK(a) if((*env)->ExceptionOccurred(env)) { \
+-    BD_DEBUG(DBG_BDJ, "Exception occured\n"); \
+-    (*env)->ExceptionDescribe(env); \
+-    } if (!a) return NULL;
++#define JNICHK(a) \
++  do {                                                              \
++      if ((*env)->ExceptionOccurred(env)) {                         \
++          BD_DEBUG(DBG_BDJ | DBG_CRIT, "Exception occured\n");      \
++          (*env)->ExceptionDescribe(env);                           \
++      }                                                             \
++      if (!(a)) {                                                   \
++          return NULL;                                              \
++      } \
++  } while (0)
+ 
+ /*
+  *
+diff --git a/src/libbluray/bdj/native/bdjo.h b/src/libbluray/bdj/native/bdjo.h
+index 4f35a60..997347f 100644
+--- a/src/libbluray/bdj/native/bdjo.h
++++ b/src/libbluray/bdj/native/bdjo.h
+@@ -26,6 +26,12 @@
+ 
+ struct bdjo_data;
+ 
++/*
++ * Note:
++ * This function should be called only from Java side.
++ * If it is called from native C thread, lot of references are leaked !
++ */
++
+ BD_PRIVATE jobject bdjo_make_jobj(JNIEnv* env, const struct bdjo_data *bdjo);
+ 
+ #endif /* BDJO_H_ */
+diff --git a/src/libbluray/bdj/native/java_awt_BDFontMetrics.c b/src/libbluray/bdj/native/java_awt_BDFontMetrics.c
+index f84a382..f0cd090 100644
+--- a/src/libbluray/bdj/native/java_awt_BDFontMetrics.c
++++ b/src/libbluray/bdj/native/java_awt_BDFontMetrics.c
+@@ -117,8 +117,12 @@ static int CALLBACK EnumFontCallbackW(const ENUMLOGFONTEXW *lpelfe, const NEWTEX
+             size_t len = WideCharToMultiByte(CP_UTF8, 0, wdata, -1, NULL, 0, NULL, NULL);
+             if (len != 0) {
+                 data->filename = (char *)malloc(len);
+-                WideCharToMultiByte(CP_UTF8, 0, wdata, -1, data->filename, len, NULL, NULL);
+-                break;
++                if (data->filename) {
++                    if (!WideCharToMultiByte(CP_UTF8, 0, wdata, -1, data->filename, len, NULL, NULL)) {
++                        data->filename[0] = 0;
++                    }
++                    break;
++                }
+             }
+         }
+     }
+@@ -484,7 +488,7 @@ Java_java_awt_BDFontMetrics_charsWidthN(JNIEnv * env, jobject obj, jlong ftFace,
+         return 0;
+     (*env)->GetCharArrayRegion(env, charArray, offset, length, chars);
+     if ((*env)->ExceptionCheck(env)) {
+-        free(chars);
++        X_FREE(chars);
+         return 0;
+     }
+ 
+@@ -494,7 +498,7 @@ Java_java_awt_BDFontMetrics_charsWidthN(JNIEnv * env, jobject obj, jlong ftFace,
+         }
+     }
+ 
+-    free(chars);
++    X_FREE(chars);
+ 
+     return width;
+ 
+diff --git a/src/libbluray/bdj/native/java_awt_BDGraphics.c b/src/libbluray/bdj/native/java_awt_BDGraphics.c
+index e228b5d..7fb9e0c 100644
+--- a/src/libbluray/bdj/native/java_awt_BDGraphics.c
++++ b/src/libbluray/bdj/native/java_awt_BDGraphics.c
+@@ -57,6 +57,9 @@ Java_java_awt_BDGraphics_drawStringN(JNIEnv * env, jobject obj, jlong ftFace, js
+     unsigned j, k;
+     FT_Face face = (FT_Face)(intptr_t)ftFace;
+ 
++    if (!face)
++        return;
++
+     length = (*env)->GetStringLength(env, string);
+     if (length <= 0)
+       return;
+diff --git a/src/libbluray/bdnav/bdid_parse.c b/src/libbluray/bdnav/bdid_parse.c
+index 512cd8e..50d18f2 100644
+--- a/src/libbluray/bdnav/bdid_parse.c
++++ b/src/libbluray/bdnav/bdid_parse.c
+@@ -41,7 +41,9 @@ static int _parse_header(BITSTREAM *bs, uint32_t *data_start, uint32_t *extensio
+ {
+     uint32_t sig1, sig2;
+ 
+-    bs_seek_byte(bs, 0);
++    if (bs_seek_byte(bs, 0) < 0) {
++        return 0;
++    }
+ 
+     sig1 = bs_read(bs, 32);
+     sig2 = bs_read(bs, 32);
+@@ -67,16 +69,26 @@ static BDID_DATA *_bdid_parse(BD_FILE_H *fp)
+     uint32_t   data_start, extension_data_start;
+     uint8_t    tmp[16];
+ 
+-    bs_init(&bs, fp);
++    if (bs_init(&bs, fp) < 0) {
++        BD_DEBUG(DBG_NAV, "id.bdmv: read error\n");
++        return NULL;
++    }
+ 
+     if (!_parse_header(&bs, &data_start, &extension_data_start)) {
+         BD_DEBUG(DBG_NAV | DBG_CRIT, "id.bdmv: invalid header\n");
+         return NULL;
+     }
+ 
+-    bdid = calloc(1, sizeof(BDID_DATA));
++    if (bs_seek_byte(&bs, 40) < 0) {
++        BD_DEBUG(DBG_NAV, "id.bdmv: read error\n");
++        return NULL;
++    }
+ 
+-    bs_seek_byte(&bs, 40);
++    bdid = calloc(1, sizeof(BDID_DATA));
++    if (!bdid) {
++        BD_DEBUG(DBG_CRIT, "out of memory\n");
++        return NULL;
++    }
+ 
+     bs_read_bytes(&bs, tmp, 4);
+     str_print_hex(bdid->org_id, tmp, 4);
+diff --git a/src/libbluray/bdnav/clpi_parse.c b/src/libbluray/bdnav/clpi_parse.c
+index 394347e..6541938 100644
+--- a/src/libbluray/bdnav/clpi_parse.c
++++ b/src/libbluray/bdnav/clpi_parse.c
+@@ -117,14 +117,19 @@ _parse_stream_attr(BITSTREAM *bits, CLPI_PROG_STREAM *ss)
+     ss->lang[3] = '\0';
+ 
+     // Skip over any padding
+-    bs_seek_byte(bits, pos + len);
++    if (bs_seek_byte(bits, pos + len) < 0) {
++        return 0;
++    }
+     return 1;
+ }
+ 
+ static int
+ _parse_header(BITSTREAM *bits, CLPI_CL *cl)
+ {
+-    bs_seek_byte(bits, 0);
++    if (bs_seek_byte(bits, 0) < 0) {
++        return 0;
++    }
++
+     cl->type_indicator  = bs_read(bits, 32);
+     cl->type_indicator2 = bs_read(bits, 32);
+     if (cl->type_indicator != CLPI_SIG1 || 
+@@ -155,7 +160,10 @@ _parse_clipinfo(BITSTREAM *bits, CLPI_CL *cl)
+     int len;
+     int ii;
+ 
+-    bs_seek_byte(bits, 40);
++    if (bs_seek_byte(bits, 40) < 0) {
++        return 0;
++    }
++
+     // ClipInfo len
+     bs_skip(bits, 32);
+     // reserved
+@@ -178,7 +186,9 @@ _parse_clipinfo(BITSTREAM *bits, CLPI_CL *cl)
+         cl->clip.ts_type_info.validity = bs_read(bits, 8);
+         bs_read_string(bits, cl->clip.ts_type_info.format_id, 4);
+         // Seek past the stuff we don't know anything about
+-        bs_seek_byte(bits, pos + len);
++        if (bs_seek_byte(bits, pos + len) < 0) {
++            return 0;
++        }
+     }
+     if (cl->clip.is_atc_delta) {
+         // Skip reserved bytes
+@@ -215,7 +225,9 @@ _parse_sequence(BITSTREAM *bits, CLPI_CL *cl)
+ {
+     int ii, jj;
+ 
+-    bs_seek_byte(bits, cl->sequence_info_start_addr);
++    if (bs_seek_byte(bits, cl->sequence_info_start_addr) < 0) {
++        return 0;
++    }
+ 
+     // Skip the length field, and a reserved byte
+     bs_skip(bits, 5 * 8);
+@@ -278,7 +290,9 @@ _parse_program(BITSTREAM *bits, CLPI_PROG_INFO *program)
+ static int
+ _parse_program_info(BITSTREAM *bits, CLPI_CL *cl)
+ {
+-    bs_seek_byte(bits, cl->program_info_start_addr);
++    if (bs_seek_byte(bits, cl->program_info_start_addr) < 0) {
++        return 0;
++    }
+ 
+     return _parse_program(bits, &cl->program);
+ }
+@@ -291,7 +305,9 @@ _parse_ep_map_stream(BITSTREAM *bits, CLPI_EP_MAP_ENTRY *ee)
+     CLPI_EP_COARSE   * coarse;
+     CLPI_EP_FINE     * fine;
+ 
+-    bs_seek_byte(bits, ee->ep_map_stream_start_addr);
++    if (bs_seek_byte(bits, ee->ep_map_stream_start_addr) < 0) {
++        return 0;
++    }
+     fine_start = bs_read(bits, 32);
+ 
+     coarse = malloc(ee->num_ep_coarse * sizeof(CLPI_EP_COARSE));
+@@ -302,7 +318,9 @@ _parse_ep_map_stream(BITSTREAM *bits, CLPI_EP_MAP_ENTRY *ee)
+         coarse[ii].spn_ep         = bs_read(bits, 32);
+     }
+ 
+-    bs_seek_byte(bits, ee->ep_map_stream_start_addr+fine_start);
++    if (bs_seek_byte(bits, ee->ep_map_stream_start_addr+fine_start) < 0) {
++        return 0;
++    }
+ 
+     fine = malloc(ee->num_ep_fine * sizeof(CLPI_EP_FINE));
+     ee->fine = fine;
+@@ -346,7 +364,9 @@ _parse_cpi(BITSTREAM *bits, CLPI_CPI *cpi)
+         entry[ii].ep_map_stream_start_addr = bs_read(bits, 32) + ep_map_pos;
+     }
+     for (ii = 0; ii < cpi->num_stream_pid; ii++) {
+-        _parse_ep_map_stream(bits, &cpi->entry[ii]);
++        if (!_parse_ep_map_stream(bits, &cpi->entry[ii])) {
++            return 0;
++        }
+     }
+     return 1;
+ }
+@@ -354,7 +374,9 @@ _parse_cpi(BITSTREAM *bits, CLPI_CPI *cpi)
+ static int
+ _parse_cpi_info(BITSTREAM *bits, CLPI_CL *cl)
+ {
+-    bs_seek_byte(bits, cl->cpi_start_addr);
++    if (bs_seek_byte(bits, cl->cpi_start_addr) < 0) {
++        return 0;
++    }
+ 
+     return _parse_cpi(bits, &cl->cpi);
+ }
+@@ -680,13 +702,17 @@ _clpi_parse(BD_FILE_H *fp)
+     BITSTREAM  bits;
+     CLPI_CL   *cl;
+ 
++    if (bs_init(&bits, fp) < 0) {
++        BD_DEBUG(DBG_NAV, "?????.clpi: read error\n");
++        return NULL;
++    }
++
+     cl = calloc(1, sizeof(CLPI_CL));
+     if (cl == NULL) {
+         BD_DEBUG(DBG_CRIT, "out of memory\n");
+         return NULL;
+     }
+ 
+-    bs_init(&bits, fp);
+     if (!_parse_header(&bits, cl)) {
+         clpi_free(cl);
+         return NULL;
+diff --git a/src/libbluray/bdnav/extdata_parse.c b/src/libbluray/bdnav/extdata_parse.c
+index 377a1c4..1ffbb1e 100644
+--- a/src/libbluray/bdnav/extdata_parse.c
++++ b/src/libbluray/bdnav/extdata_parse.c
+@@ -37,7 +37,9 @@ int bdmv_parse_extension_data(BITSTREAM *bits,
+     if (start_address < 1) return 0;
+     if (start_address > bits->end - 12) return 0;
+ 
+-    bs_seek_byte(bits, start_address);
++    if (bs_seek_byte(bits, start_address) < 0) {
++        return 0;
++    }
+ 
+     length      = bs_read(bits, 32); /* length of extension data block */
+     if (length < 1) return 0;
+@@ -57,11 +59,13 @@ int bdmv_parse_extension_data(BITSTREAM *bits,
+ 
+         if (ext_start + start_address + ext_len > bits->end) return 0;
+ 
+-        bs_seek_byte(bits, start_address + ext_start);
+-
+-        (handler)(bits, id1, id2, handle);
++        if (bs_seek_byte(bits, start_address + ext_start) >= 0) {
++            (handler)(bits, id1, id2, handle);
++        }
+ 
+-        bs_seek_byte(bits, saved_pos);
++        if (bs_seek_byte(bits, saved_pos) < 0) {
++            return 0;
++        }
+     }
+ 
+     return 1;
+diff --git a/src/libbluray/bdnav/index_parse.c b/src/libbluray/bdnav/index_parse.c
+index 64dc5e3..6a0f5a0 100644
+--- a/src/libbluray/bdnav/index_parse.c
++++ b/src/libbluray/bdnav/index_parse.c
+@@ -144,7 +144,9 @@ static int _parse_app_info(BITSTREAM *bs, INDX_APP_INFO *app_info)
+ {
+     uint32_t len;
+ 
+-    bs_seek_byte(bs, 40);
++    if (bs_seek_byte(bs, 40) < 0) {
++        return 0;
++    }
+ 
+     len = bs_read(bs, 32);
+ 
+@@ -173,7 +175,9 @@ static int _parse_header(BITSTREAM *bs, int *index_start, int *extension_data_st
+ {
+     uint32_t sig1, sig2;
+ 
+-    bs_seek_byte(bs, 0);
++    if (bs_seek_byte(bs, 0) < 0) {
++        return 0;
++    }
+ 
+     sig1 = bs_read(bs, 32);
+     sig2 = bs_read(bs, 32);
+@@ -194,16 +198,20 @@ static int _parse_header(BITSTREAM *bs, int *index_start, int *extension_data_st
+ static INDX_ROOT *_indx_parse(BD_FILE_H *fp)
+ {
+     BITSTREAM  bs;
+-    INDX_ROOT *index = calloc(1, sizeof(INDX_ROOT));
++    INDX_ROOT *index;
+     int        indexes_start, extension_data_start;
+ 
++    if (bs_init(&bs, fp) < 0) {
++        BD_DEBUG(DBG_NAV, "index.bdmv: read error\n");
++        return NULL;
++    }
++
++    index = calloc(1, sizeof(INDX_ROOT));
+     if (!index) {
+         BD_DEBUG(DBG_CRIT, "out of memory\n");
+         return NULL;
+     }
+ 
+-    bs_init(&bs, fp);
+-
+     if (!_parse_header(&bs, &indexes_start, &extension_data_start) ||
+         !_parse_app_info(&bs, &index->app_info)) {
+ 
+@@ -211,7 +219,11 @@ static INDX_ROOT *_indx_parse(BD_FILE_H *fp)
+         return NULL;
+     }
+ 
+-    bs_seek_byte(&bs, indexes_start);
++    if (bs_seek_byte(&bs, indexes_start) < 0) {
++        indx_free(&index);
++        return NULL;
++    }
++
+     if (!_parse_index(&bs, index)) {
+         indx_free(&index);
+         return NULL;
+diff --git a/src/libbluray/bdnav/mpls_parse.c b/src/libbluray/bdnav/mpls_parse.c
+index e196118..177f04c 100644
+--- a/src/libbluray/bdnav/mpls_parse.c
++++ b/src/libbluray/bdnav/mpls_parse.c
+@@ -111,12 +111,12 @@ _parse_uo(BITSTREAM *bits, BD_UO_MASK *uo)
+ static int
+ _parse_appinfo(BITSTREAM *bits, MPLS_AI *ai)
+ {
+-    int64_t pos, len;
++    int64_t /*pos,*/ len;
+ 
+     if (!bs_is_align(bits, 0x07)) {
+         BD_DEBUG(DBG_NAV | DBG_CRIT, "_parse_appinfo: alignment error\n");
+     }
+-    pos = bs_pos(bits) >> 3;
++    //pos = bs_pos(bits) >> 3;
+     len = bs_read(bits, 32);
+ 
+     if (bs_avail(bits) < len * 8) {
+@@ -137,9 +137,11 @@ _parse_appinfo(BITSTREAM *bits, MPLS_AI *ai)
+     ai->random_access_flag = bs_read(bits, 1);
+     ai->audio_mix_flag = bs_read(bits, 1);
+     ai->lossless_bypass_flag = bs_read(bits, 1);
++#if 0
+     // Reserved
+     bs_skip(bits, 13);
+     bs_seek_byte(bits, pos + len);
++#endif
+     return 1;
+ }
+ 
+@@ -212,7 +214,9 @@ _parse_stream(BITSTREAM *bits, MPLS_STREAM *s)
+             break;
+     };
+ 
+-    bs_seek_byte(bits, pos + len);
++    if (bs_seek_byte(bits, pos + len) < 0) {
++        return 0;
++    }
+ 
+     len = bs_read(bits, 8);
+     pos = bs_pos(bits) >> 3;
+@@ -260,7 +264,10 @@ _parse_stream(BITSTREAM *bits, MPLS_STREAM *s)
+     };
+     s->lang[3] = '\0';
+ 
+-    bs_seek_byte(bits, pos + len);
++    if (bs_seek_byte(bits, pos + len) < 0) {
++        return 0;
++    }
++
+     return 1;
+ }
+ 
+@@ -414,7 +421,10 @@ _parse_stn(BITSTREAM *bits, MPLS_STN *stn)
+     }
+     stn->secondary_video = ss;
+ 
+-    bs_seek_byte(bits, pos + len);
++    if (bs_seek_byte(bits, pos + len) < 0) {
++        return 0;
++    }
++
+     return 1;
+ }
+ 
+@@ -515,8 +525,12 @@ _parse_playitem(BITSTREAM *bits, MPLS_PI *pi)
+     if (!_parse_stn(bits, &pi->stn)) {
+         return 0;
+     }
++
+     // Seek past any unused items
+-    bs_seek_byte(bits, pos + len);
++    if (bs_seek_byte(bits, pos + len) < 0) {
++        return 0;
++    }
++
+     return 1;
+ }
+ 
+@@ -592,7 +606,10 @@ _parse_subplayitem(BITSTREAM *bits, MPLS_SUB_PI *spi)
+ 
+ 
+     // Seek to end of subpath
+-    bs_seek_byte(bits, pos + len);
++    if (bs_seek_byte(bits, pos + len) < 0) {
++        return 0;
++    }
++
+     return 1;
+ }
+ 
+@@ -635,7 +652,10 @@ _parse_subpath(BITSTREAM *bits, MPLS_SUB *sp)
+     sp->sub_play_item = spi;
+ 
+     // Seek to end of subpath
+-    bs_seek_byte(bits, pos + len);
++    if (bs_seek_byte(bits, pos + len) < 0) {
++        return 0;
++    }
++
+     return 1;
+ }
+ 
+@@ -657,7 +677,10 @@ _parse_playlistmark(BITSTREAM *bits, MPLS_PL *pl)
+     int ii;
+     MPLS_PLM *plm = NULL;
+ 
+-    bs_seek_byte(bits, pl->mark_pos);
++    if (bs_seek_byte(bits, pl->mark_pos) < 0) {
++        return 0;
++    }
++
+     // length field
+     len = bs_read(bits, 32);
+ 
+@@ -690,7 +713,10 @@ _parse_playlist(BITSTREAM *bits, MPLS_PL *pl)
+     MPLS_PI *pi = NULL;
+     MPLS_SUB *sub_path = NULL;
+ 
+-    bs_seek_byte(bits, pl->list_pos);
++    if (bs_seek_byte(bits, pl->list_pos) < 0) {
++        return 0;
++    }
++
+     // playlist length
+     len = bs_read(bits, 32);
+ 
+@@ -730,6 +756,11 @@ _parse_playlist(BITSTREAM *bits, MPLS_PL *pl)
+     return 1;
+ }
+ 
++static void _clean_pip_data(MPLS_PIP_METADATA *p)
++{
++    X_FREE(p->data);
++}
++
+ static void
+ _clean_playlist(MPLS_PL *pl)
+ {
+@@ -756,6 +787,13 @@ _clean_playlist(MPLS_PL *pl)
+         }
+         X_FREE(pl->ext_sub_path);
+     }
++    if (pl->ext_pip_data != NULL) {
++        for (ii = 0; ii < pl->ext_pip_data_count; ii++) {
++            _clean_pip_data(&pl->ext_pip_data[ii]);
++        }
++        X_FREE(pl->ext_pip_data);
++    }
++
+     X_FREE(pl->play_mark);
+     X_FREE(pl);
+ }
+@@ -778,6 +816,11 @@ _parse_pip_data(BITSTREAM *bits, MPLS_PIP_METADATA *block)
+     }
+ 
+     data = calloc(entries, sizeof(MPLS_PIP_DATA));
++    if (!data) {
++        BD_DEBUG(DBG_CRIT, "out of memory\n");
++        return 0;
++    }
++
+     for (ii = 0; ii < entries; ii++) {
+ 
+         data[ii].time = bs_read(bits, 32);
+@@ -818,9 +861,13 @@ _parse_pip_metadata_block(BITSTREAM *bits, uint32_t start_address, MPLS_PIP_META
+     data_address = bs_read(bits, 32);
+ 
+     pos = bs_pos(bits) / 8;
+-    bs_seek_byte(bits, start_address + data_address);
++    if (bs_seek_byte(bits, start_address + data_address) < 0) {
++        return 0;
++    }
+     result = _parse_pip_data(bits, data);
+-    bs_seek_byte(bits, pos);
++    if (bs_seek_byte(bits, pos) < 0) {
++        return 0;
++    }
+ 
+     return result;
+ }
+@@ -840,11 +887,14 @@ _parse_pip_metadata_extension(BITSTREAM *bits, MPLS_PL *pl)
+     }
+ 
+     data = calloc(entries, sizeof(MPLS_PIP_METADATA));
++    if (!data) {
++        BD_DEBUG(DBG_CRIT, "out of memory\n");
++        return 0;
++    }
++
+     for (ii = 0; ii < entries; ii++) {
+-      if (!_parse_pip_metadata_block(bits, start_address, data)) {
+-            X_FREE(data);
+-            BD_DEBUG(DBG_NAV | DBG_CRIT, "error parsing pip metadata extension\n");
+-            return 0;
++        if (!_parse_pip_metadata_block(bits, start_address, &data[ii])) {
++            goto error;
+         }
+     }
+ 
+@@ -852,6 +902,15 @@ _parse_pip_metadata_extension(BITSTREAM *bits, MPLS_PL *pl)
+     pl->ext_pip_data       = data;
+ 
+     return 1;
++
++ error:
++    BD_DEBUG(DBG_NAV | DBG_CRIT, "error parsing pip metadata extension\n");
++    for (ii = 0; ii < entries; ii++) {
++        _clean_pip_data(&data[ii]);
++    }
++    X_FREE(data);
++    return 0;
++
+ }
+ 
+ static int
+@@ -868,17 +927,28 @@ _parse_subpath_extension(BITSTREAM *bits, MPLS_PL *pl)
+     }
+ 
+     sub_path = calloc(sub_count,  sizeof(MPLS_SUB));
++    if (!sub_path) {
++        BD_DEBUG(DBG_CRIT, "out of memory\n");
++        return 0;
++    }
++
+     for (ii = 0; ii < sub_count; ii++) {
+         if (!_parse_subpath(bits, &sub_path[ii])) {
+-            X_FREE(sub_path);
+-            BD_DEBUG(DBG_NAV | DBG_CRIT, "error parsing extension subpath\n");
+-            return 0;
++            goto error;
+         }
+     }
+     pl->ext_sub_path  = sub_path;
+     pl->ext_sub_count = sub_count;
+ 
+     return 1;
++
++ error:
++    BD_DEBUG(DBG_NAV | DBG_CRIT, "error parsing extension subpath\n");
++    for (ii = 0; ii < sub_count; ii++) {
++        _clean_subpath(&sub_path[ii]);
++    }
++    X_FREE(sub_path);
++    return 0;
+ }
+ 
+ static int
+@@ -914,14 +984,17 @@ _mpls_parse(BD_FILE_H *fp)
+     BITSTREAM  bits;
+     MPLS_PL   *pl = NULL;
+ 
++    if (bs_init(&bits, fp) < 0) {
++        BD_DEBUG(DBG_NAV, "?????.mpls: read error\n");
++        return NULL;
++    }
++
+     pl = calloc(1, sizeof(MPLS_PL));
+     if (pl == NULL) {
+         BD_DEBUG(DBG_CRIT, "out of memory\n");
+         return NULL;
+     }
+ 
+-    bs_init(&bits, fp);
+-
+     if (!_parse_header(&bits, pl)) {
+         _clean_playlist(pl);
+         return NULL;
+diff --git a/src/libbluray/bdnav/mpls_parse.h b/src/libbluray/bdnav/mpls_parse.h
+index 94bfa67..e0e57a0 100644
+--- a/src/libbluray/bdnav/mpls_parse.h
++++ b/src/libbluray/bdnav/mpls_parse.h
+@@ -1,7 +1,7 @@
+ /*
+  * This file is part of libbluray
+  * Copyright (C) 2009-2010  John Stebbins
+- * Copyright (C) 2012       Petri Hintukainen <phintuka@users.sourceforge.net>
++ * Copyright (C) 2012-2016  Petri Hintukainen <phintuka@users.sourceforge.net>
+  *
+  * This library is free software; you can redistribute it and/or
+  * modify it under the terms of the GNU Lesser General Public
+@@ -131,20 +131,34 @@ typedef struct
+     MPLS_SUB_PI     *sub_play_item;
+ } MPLS_SUB;
+ 
++typedef enum {
++    pip_scaling_none = 1,       /* unscaled */
++    pip_scaling_half = 2,       /* 1:2 */
++    pip_scaling_quarter = 3,    /* 1:4 */
++    pip_scaling_one_half = 4,   /* 3:2 */
++    pip_scaling_fullscreen = 5, /* scale to main video size */
++} mpls_pip_scaling;
++
+ typedef struct {
+-    uint32_t        time;
++    uint32_t        time;          /* start timestamp (clip time) when the block is valid */
+     uint16_t        xpos;
+     uint16_t        ypos;
+-    uint8_t         scale_factor;
++    uint8_t         scale_factor;  /* mpls_pip_scaling. Note: PSR14 may override this ! */
+ } MPLS_PIP_DATA;
+ 
++typedef enum {
++    pip_timeline_sync_mainpath = 1,  /* timeline refers to main path */
++    pip_timeline_async_subpath = 2,  /* timeline refers to sub-path time */
++    pip_timeline_async_mainpath = 3, /* timeline refers to main path */
++} mpls_pip_timeline;
++
+ typedef struct {
+-    uint16_t        clip_ref;
+-    uint8_t         secondary_video_ref;
+-    uint8_t         timeline_type;
+-    uint8_t         luma_key_flag;
+-    uint8_t         upper_limit_luma_key;
+-    uint8_t         trick_play_flag;
++    uint16_t        clip_ref;             /* clip id for secondary_video_ref (STN) */
++    uint8_t         secondary_video_ref;  /* secondary video stream id (STN) */
++    uint8_t         timeline_type;        /* mpls_pip_timeline */
++    uint8_t         luma_key_flag;        /* use luma keying */
++    uint8_t         upper_limit_luma_key; /* luma key (secondary video pixels with Y <= this value are transparent) */
++    uint8_t         trick_play_flag;      /* show synchronous PiP when playing trick speed */
+ 
+     uint16_t        data_count;
+     MPLS_PIP_DATA   *data;
+diff --git a/src/libbluray/bdnav/navigation.c b/src/libbluray/bdnav/navigation.c
+index 7c91f0b..77ed1fb 100644
+--- a/src/libbluray/bdnav/navigation.c
++++ b/src/libbluray/bdnav/navigation.c
+@@ -154,6 +154,12 @@ static int _pl_cmp(MPLS_PL *pl1, MPLS_PL *pl2)
+     if (pl1->mark_count != pl2->mark_count) {
+         return 1;
+     }
++    if (pl1->sub_count != pl2->sub_count) {
++        return 1;
++    }
++    if (pl1->ext_sub_count != pl2->ext_sub_count) {
++        return 1;
++    }
+ 
+     for (ii = 0; ii < pl1->mark_count; ii++) {
+         if (_pm_cmp(&pl1->play_mark[ii], &pl2->play_mark[ii])) {
+@@ -340,7 +346,7 @@ NAV_TITLE_LIST* nav_get_title_list(BD_DISC *disc, uint32_t flags, uint32_t min_t
+     MPLS_PL *pl = NULL;
+     unsigned int ii, pl_list_size = 0;
+     int res;
+-    NAV_TITLE_LIST *title_list;
++    NAV_TITLE_LIST *title_list = NULL;
+     unsigned int title_info_alloc = 100;
+ 
+     dir = disc_open_dir(disc, "BDMV" DIR_SEP "PLAYLIST");
+@@ -349,7 +355,16 @@ NAV_TITLE_LIST* nav_get_title_list(BD_DISC *disc, uint32_t flags, uint32_t min_t
+     }
+ 
+     title_list = calloc(1, sizeof(NAV_TITLE_LIST));
++    if (!title_list) {
++        dir_close(dir);
++        return NULL;
++    }
+     title_list->title_info = calloc(title_info_alloc, sizeof(NAV_TITLE_INFO));
++    if (!title_list->title_info) {
++        X_FREE(title_list);
++        dir_close(dir);
++        return NULL;
++    }
+ 
+     ii = 0;
+     for (res = dir_read(dir, &ent); !res; res = dir_read(dir, &ent)) {
+@@ -776,6 +791,24 @@ NAV_CLIP* nav_mark_search(NAV_TITLE *title, unsigned mark, uint32_t *clip_pkt, u
+     return clip;
+ }
+ 
++void nav_clip_packet_search(NAV_CLIP *clip, uint32_t pkt, uint32_t *clip_pkt, uint32_t *clip_time)
++{
++    *clip_time = clip->in_time;
++    if (clip->cl != NULL) {
++        *clip_pkt = clpi_access_point(clip->cl, pkt, 0, 0, clip_time);
++        if (*clip_pkt < clip->start_pkt) {
++            *clip_pkt = clip->start_pkt;
++        }
++        if (*clip_time && *clip_time < clip->in_time) {
++            /* EP map does not store lowest 8 bits of timestamp */
++            *clip_time = clip->in_time;
++        }
++
++    } else {
++        *clip_pkt = clip->start_pkt;
++    }
++}
++
+ // Search for random access point closest to the requested packet
+ // Packets are 192 byte TS packets
+ // pkt is relative to the beginning of the title
+@@ -801,14 +834,7 @@ NAV_CLIP* nav_packet_search(NAV_TITLE *title, uint32_t pkt, uint32_t *clip_pkt,
+         *clip_pkt = clip->end_pkt;
+     } else {
+         clip = &title->clip_list.clip[ii];
+-        if (clip->cl != NULL) {
+-            *clip_pkt = clpi_access_point(clip->cl, pkt - pos + clip->start_pkt, 0, 0, out_time);
+-            if (*clip_pkt < clip->start_pkt) {
+-                *clip_pkt = clip->start_pkt;
+-            }
+-        } else {
+-            *clip_pkt = clip->start_pkt;
+-        }
++        nav_clip_packet_search(clip, pkt - pos + clip->start_pkt, clip_pkt, out_time);
+     }
+     if(*out_time < clip->in_time)
+         *out_time = 0;
+@@ -878,22 +904,14 @@ NAV_CLIP* nav_time_search(NAV_TITLE *title, uint32_t tick, uint32_t *clip_pkt, u
+         *clip_pkt = clip->end_pkt;
+     } else {
+         clip = &title->clip_list.clip[ii];
+-        if (clip->cl != NULL) {
+-            *clip_pkt = clpi_lookup_spn(clip->cl, tick - pos + pi->in_time, 1,
+-                      title->pl->play_item[clip->ref].clip[clip->angle].stc_id);
+-            if (*clip_pkt < clip->start_pkt) {
+-                *clip_pkt = clip->start_pkt;
+-            }
+-        } else {
+-            *clip_pkt = clip->start_pkt;
+-        }
++        nav_clip_time_search(clip, tick - pos + pi->in_time, clip_pkt, out_pkt);
+     }
+     *out_pkt = clip->title_pkt + *clip_pkt - clip->start_pkt;
+     return clip;
+ }
+ 
+ // Search for random access point closest to the requested time
+-// Time is in 45khz ticks relative to the beginning of a specific clip
++// Time is in 45khz ticks, between clip in_time and out_time.
+ void nav_clip_time_search(NAV_CLIP *clip, uint32_t tick, uint32_t *clip_pkt, uint32_t *out_pkt)
+ {
+     if (tick >= clip->out_time) {
+@@ -902,6 +920,10 @@ void nav_clip_time_search(NAV_CLIP *clip, uint32_t tick, uint32_t *clip_pkt, uin
+         if (clip->cl != NULL) {
+             *clip_pkt = clpi_lookup_spn(clip->cl, tick, 1,
+                clip->title->pl->play_item[clip->ref].clip[clip->angle].stc_id);
++            if (*clip_pkt < clip->start_pkt) {
++                *clip_pkt = clip->start_pkt;
++            }
++
+         } else {
+             *clip_pkt = clip->start_pkt;
+         }
+diff --git a/src/libbluray/bdnav/navigation.h b/src/libbluray/bdnav/navigation.h
+index 7d2d325..8f683dd 100644
+--- a/src/libbluray/bdnav/navigation.h
++++ b/src/libbluray/bdnav/navigation.h
+@@ -145,6 +145,7 @@ BD_PRIVATE void nav_title_close(NAV_TITLE *title);
+ BD_PRIVATE NAV_CLIP* nav_next_clip(NAV_TITLE *title, NAV_CLIP *clip);
+ BD_PRIVATE NAV_CLIP* nav_packet_search(NAV_TITLE *title, uint32_t pkt, uint32_t *clip_pkt,
+                                        uint32_t *out_pkt, uint32_t *out_time);
++BD_PRIVATE void nav_clip_packet_search(NAV_CLIP *clip, uint32_t pkt, uint32_t *clip_pkt, uint32_t *clip_time);
+ BD_PRIVATE NAV_CLIP* nav_time_search(NAV_TITLE *title, uint32_t tick, uint32_t *clip_pkt, uint32_t *out_pkt);
+ BD_PRIVATE void nav_clip_time_search(NAV_CLIP *clip, uint32_t tick, uint32_t *clip_pkt, uint32_t *out_pkt);
+ BD_PRIVATE NAV_CLIP* nav_chapter_search(NAV_TITLE *title, unsigned chapter, uint32_t *clip_pkt, uint32_t *out_pkt);
+diff --git a/src/libbluray/bdnav/sound_parse.c b/src/libbluray/bdnav/sound_parse.c
+index 7c267da..031774e 100644
+--- a/src/libbluray/bdnav/sound_parse.c
++++ b/src/libbluray/bdnav/sound_parse.c
+@@ -41,7 +41,9 @@ static int _bclk_parse_header(BITSTREAM *bs, uint32_t *data_start, uint32_t *ext
+ {
+     uint32_t sig1, sig2;
+ 
+-    bs_seek_byte(bs, 0);
++    if (bs_seek_byte(bs, 0) < 0) {
++        return 0;
++    }
+ 
+     sig1 = bs_read(bs, 32);
+     sig2 = bs_read(bs, 32);
+@@ -149,14 +151,19 @@ static SOUND_DATA *_sound_parse(BD_FILE_H *fp)
+     uint32_t      data_start, extension_data_start;
+     uint32_t     *data_offsets = NULL;
+ 
+-    bs_init(&bs, fp);
++    if (bs_init(&bs, fp) < 0) {
++        BD_DEBUG(DBG_NAV, "sound.bdmv: read error\n");
++        goto error;
++    }
+ 
+     if (!_bclk_parse_header(&bs, &data_start, &extension_data_start)) {
+         BD_DEBUG(DBG_NAV | DBG_CRIT, "invalid header\n");
+         goto error;
+     }
+ 
+-    bs_seek_byte(&bs, 40);
++    if (bs_seek_byte(&bs, 40) < 0) {
++        goto error;
++    }
+ 
+     data_len = bs_read(&bs, 32);
+     bs_skip(&bs, 8); /* reserved */
+@@ -193,7 +200,11 @@ static SOUND_DATA *_sound_parse(BD_FILE_H *fp)
+ 
+     for (i = 0; i < data->num_sounds; i++) {
+ 
+-        bs_seek_byte(&bs, data_start + data_offsets[i]);
++        if (bs_seek_byte(&bs, data_start + data_offsets[i]) < 0) {
++            BD_DEBUG(DBG_NAV | DBG_CRIT, "error reading samples for sound %d\n", i);
++            data->sounds[i].num_frames = 0;
++            continue;
++        }
+ 
+         if (!_sound_read_samples(&bs, &data->sounds[i])) {
+             BD_DEBUG(DBG_NAV | DBG_CRIT, "error reading samples for sound %d\n", i);
+diff --git a/src/libbluray/bluray.c b/src/libbluray/bluray.c
+index 0e60b68..fdaadc5 100644
+--- a/src/libbluray/bluray.c
++++ b/src/libbluray/bluray.c
+@@ -26,6 +26,7 @@
+ #include "bluray-version.h"
+ #include "bluray.h"
+ #include "bluray_internal.h"
++#include "keys.h"
+ #include "register.h"
+ #include "util/array.h"
+ #include "util/event_queue.h"
+@@ -143,6 +144,7 @@ struct bluray {
+      *       1 - message pending. 3 - message sent.
+      */
+     uint8_t         end_of_playlist; /* 1 - reached. 3 - processed . */
++    uint8_t         app_scr;         /* 1 if application provides presentation timetamps */
+ 
+     /* HDMV */
+     HDMV_VM        *hdmv_vm;
+@@ -242,6 +244,26 @@ static void _update_time_psr(BLURAY *bd, uint32_t time)
+     bd_psr_write(bd->regs, PSR_TIME, time);
+ }
+ 
++static uint32_t _update_time_psr_from_stream(BLURAY *bd)
++{
++    /* update PSR_TIME from stream. Not real presentation time (except when seeking), but near enough. */
++    NAV_CLIP *clip = bd->st0.clip;
++
++    if (bd->title && clip) {
++
++        uint32_t clip_pkt, clip_time;
++        nav_clip_packet_search(bd->st0.clip, SPN(bd->st0.clip_pos), &clip_pkt, &clip_time);
++        if (clip_time >= clip->in_time && clip_time <= clip->out_time) {
++            _update_time_psr(bd, clip_time);
++            return clip_time;
++        } else {
++            BD_DEBUG(DBG_BLURAY|DBG_CRIT, "%s: no timestamp for SPN %u (got %u). clip %u-%u.\n",
++                     clip->name, SPN(bd->st0.clip_pos), clip_time, clip->in_time, clip->out_time);
++        }
++    }
++
++    return 0;
++}
+ 
+ static void _update_stream_psr_by_lang(BD_REGISTERS *regs,
+                                        uint32_t psr_lang, uint32_t psr_stream,
+@@ -1366,6 +1388,8 @@ static void _storage_free(BLURAY *bd)
+ 
+ BLURAY *bd_init(void)
+ {
++    char *env;
++
+     BD_DEBUG(DBG_BLURAY, "libbluray version "BLURAY_VERSION_STRING"\n");
+ 
+     BLURAY *bd = calloc(1, sizeof(BLURAY));
+@@ -1385,6 +1409,12 @@ BLURAY *bd_init(void)
+     bd_mutex_init(&bd->mutex);
+ #ifdef USING_BDJAVA
+     bd_mutex_init(&bd->argb_buffer_mutex);
++
++    env = getenv("LIBBLURAY_PERSISTENT_STORAGE");
++    if (env) {
++        int v = (!strcmp(env, "yes")) ? 1 : (!strcmp(env, "no")) ? 0 : atoi(env);
++        bd->bdjstorage.no_persistent_storage = !v;
++    }
+ #endif
+ 
+     BD_DEBUG(DBG_BLURAY, "BLURAY initialized!\n");
+@@ -1473,6 +1503,10 @@ BLURAY *bd_open(const char *device_path, const char *keyfile_path)
+ 
+ void bd_close(BLURAY *bd)
+ {
++    if (!bd) {
++        return;
++    }
++
+     _close_bdj(bd);
+ 
+     _close_m2ts(&bd->st0);
+@@ -1559,12 +1593,20 @@ static void _seek_internal(BLURAY *bd,
+                            NAV_CLIP *clip, uint32_t title_pkt, uint32_t clip_pkt)
+ {
+     if (_seek_stream(bd, &bd->st0, clip, clip_pkt) >= 0) {
++        uint32_t media_time;
+ 
+         /* update title position */
+         bd->s_pos = (uint64_t)title_pkt * 192;
+ 
+-        _queue_event(bd, BD_EVENT_SEEK, 0);
+-        _bdj_event(bd, BDJ_EVENT_SEEK, 0);
++        /* Update PSR_TIME */
++        media_time = _update_time_psr_from_stream(bd);
++
++        /* emit notification events */
++        if (media_time >= clip->in_time) {
++            media_time = media_time - clip->in_time + clip->title_time;
++        }
++        _queue_event(bd, BD_EVENT_SEEK, media_time);
++        _bdj_event(bd, BDJ_EVENT_SEEK, media_time);
+ 
+         /* playmark tracking */
+         _find_next_playmark(bd);
+@@ -2547,10 +2589,19 @@ int bd_get_main_title(BLURAY *bd)
+     return bd->title_list->main_title_idx;
+ }
+ 
+-static void _copy_streams(NAV_CLIP *clip, BLURAY_STREAM_INFO *streams, MPLS_STREAM *si, int count)
++static int _copy_streams(NAV_CLIP *clip, BLURAY_STREAM_INFO **pstreams, MPLS_STREAM *si, int count)
+ {
++    BLURAY_STREAM_INFO *streams;
+     int ii;
+ 
++    if (!count) {
++        return 1;
++    }
++    streams = *pstreams = calloc(count, sizeof(BLURAY_STREAM_INFO));
++    if (!streams) {
++        return 0;
++    }
++
+     for (ii = 0; ii < count; ii++) {
+         streams[ii].coding_type = si[ii].coding_type;
+         streams[ii].format = si[ii].format;
+@@ -2564,6 +2615,8 @@ static void _copy_streams(NAV_CLIP *clip, BLURAY_STREAM_INFO *streams, MPLS_STRE
+         else
+             streams[ii].subpath_id = -1;
+     }
++
++    return 1;
+ }
+ 
+ static BLURAY_TITLE_INFO* _fill_title_info(NAV_TITLE* title, uint32_t title_idx, uint32_t playlist)
+@@ -2572,63 +2625,83 @@ static BLURAY_TITLE_INFO* _fill_title_info(NAV_TITLE* title, uint32_t title_idx,
+     unsigned int ii;
+ 
+     title_info = calloc(1, sizeof(BLURAY_TITLE_INFO));
++    if (!title_info) {
++        goto error;
++    }
+     title_info->idx = title_idx;
+     title_info->playlist = playlist;
+     title_info->duration = (uint64_t)title->duration * 2;
+     title_info->angle_count = title->angle_count;
+     title_info->chapter_count = title->chap_list.count;
+-    title_info->chapters = calloc(title_info->chapter_count, sizeof(BLURAY_TITLE_CHAPTER));
+-    for (ii = 0; ii < title_info->chapter_count; ii++) {
+-        title_info->chapters[ii].idx = ii;
+-        title_info->chapters[ii].start = (uint64_t)title->chap_list.mark[ii].title_time * 2;
+-        title_info->chapters[ii].duration = (uint64_t)title->chap_list.mark[ii].duration * 2;
+-        title_info->chapters[ii].offset = (uint64_t)title->chap_list.mark[ii].title_pkt * 192L;
+-        title_info->chapters[ii].clip_ref = title->chap_list.mark[ii].clip_ref;
++    if (title_info->chapter_count) {
++        title_info->chapters = calloc(title_info->chapter_count, sizeof(BLURAY_TITLE_CHAPTER));
++        if (!title_info->chapters) {
++            goto error;
++        }
++        for (ii = 0; ii < title_info->chapter_count; ii++) {
++            title_info->chapters[ii].idx = ii;
++            title_info->chapters[ii].start = (uint64_t)title->chap_list.mark[ii].title_time * 2;
++            title_info->chapters[ii].duration = (uint64_t)title->chap_list.mark[ii].duration * 2;
++            title_info->chapters[ii].offset = (uint64_t)title->chap_list.mark[ii].title_pkt * 192L;
++            title_info->chapters[ii].clip_ref = title->chap_list.mark[ii].clip_ref;
++        }
+     }
+     title_info->mark_count = title->mark_list.count;
+-    title_info->marks = calloc(title_info->mark_count, sizeof(BLURAY_TITLE_MARK));
+-    for (ii = 0; ii < title_info->mark_count; ii++) {
+-        title_info->marks[ii].idx = ii;
+-        title_info->marks[ii].type = title->mark_list.mark[ii].mark_type;
+-        title_info->marks[ii].start = (uint64_t)title->mark_list.mark[ii].title_time * 2;
+-        title_info->marks[ii].duration = (uint64_t)title->mark_list.mark[ii].duration * 2;
+-        title_info->marks[ii].offset = (uint64_t)title->mark_list.mark[ii].title_pkt * 192L;
+-        title_info->marks[ii].clip_ref = title->mark_list.mark[ii].clip_ref;
++    if (title_info->mark_count) {
++        title_info->marks = calloc(title_info->mark_count, sizeof(BLURAY_TITLE_MARK));
++        if (!title_info->marks) {
++            goto error;
++        }
++        for (ii = 0; ii < title_info->mark_count; ii++) {
++            title_info->marks[ii].idx = ii;
++            title_info->marks[ii].type = title->mark_list.mark[ii].mark_type;
++            title_info->marks[ii].start = (uint64_t)title->mark_list.mark[ii].title_time * 2;
++            title_info->marks[ii].duration = (uint64_t)title->mark_list.mark[ii].duration * 2;
++            title_info->marks[ii].offset = (uint64_t)title->mark_list.mark[ii].title_pkt * 192L;
++            title_info->marks[ii].clip_ref = title->mark_list.mark[ii].clip_ref;
++        }
+     }
+     title_info->clip_count = title->clip_list.count;
+-    title_info->clips = calloc(title_info->clip_count, sizeof(BLURAY_CLIP_INFO));
+-    for (ii = 0; ii < title_info->clip_count; ii++) {
+-        MPLS_PI *pi = &title->pl->play_item[ii];
+-        BLURAY_CLIP_INFO *ci = &title_info->clips[ii];
+-        NAV_CLIP *nc = &title->clip_list.clip[ii];
+-
+-        ci->pkt_count = nc->end_pkt - nc->start_pkt;
+-        ci->start_time = (uint64_t)nc->title_time * 2;
+-        ci->in_time = (uint64_t)pi->in_time * 2;
+-        ci->out_time = (uint64_t)pi->out_time * 2;
+-        ci->still_mode = pi->still_mode;
+-        ci->still_time = pi->still_time;
+-        ci->video_stream_count = pi->stn.num_video;
+-        ci->audio_stream_count = pi->stn.num_audio;
+-        ci->pg_stream_count = pi->stn.num_pg + pi->stn.num_pip_pg;
+-        ci->ig_stream_count = pi->stn.num_ig;
+-        ci->sec_video_stream_count = pi->stn.num_secondary_video;
+-        ci->sec_audio_stream_count = pi->stn.num_secondary_audio;
+-        ci->video_streams = calloc(ci->video_stream_count, sizeof(BLURAY_STREAM_INFO));
+-        ci->audio_streams = calloc(ci->audio_stream_count, sizeof(BLURAY_STREAM_INFO));
+-        ci->pg_streams = calloc(ci->pg_stream_count, sizeof(BLURAY_STREAM_INFO));
+-        ci->ig_streams = calloc(ci->ig_stream_count, sizeof(BLURAY_STREAM_INFO));
+-        ci->sec_video_streams = calloc(ci->sec_video_stream_count, sizeof(BLURAY_STREAM_INFO));
+-        ci->sec_audio_streams = calloc(ci->sec_audio_stream_count, sizeof(BLURAY_STREAM_INFO));
+-        _copy_streams(nc, ci->video_streams, pi->stn.video, ci->video_stream_count);
+-        _copy_streams(nc, ci->audio_streams, pi->stn.audio, ci->audio_stream_count);
+-        _copy_streams(nc, ci->pg_streams, pi->stn.pg, ci->pg_stream_count);
+-        _copy_streams(nc, ci->ig_streams, pi->stn.ig, ci->ig_stream_count);
+-        _copy_streams(nc, ci->sec_video_streams, pi->stn.secondary_video, ci->sec_video_stream_count);
+-        _copy_streams(nc, ci->sec_audio_streams, pi->stn.secondary_audio, ci->sec_audio_stream_count);
++    if (title_info->clip_count) {
++        title_info->clips = calloc(title_info->clip_count, sizeof(BLURAY_CLIP_INFO));
++        if (!title_info->clips) {
++            goto error;
++        }
++        for (ii = 0; ii < title_info->clip_count; ii++) {
++            MPLS_PI *pi = &title->pl->play_item[ii];
++            BLURAY_CLIP_INFO *ci = &title_info->clips[ii];
++            NAV_CLIP *nc = &title->clip_list.clip[ii];
++
++            ci->pkt_count = nc->end_pkt - nc->start_pkt;
++            ci->start_time = (uint64_t)nc->title_time * 2;
++            ci->in_time = (uint64_t)pi->in_time * 2;
++            ci->out_time = (uint64_t)pi->out_time * 2;
++            ci->still_mode = pi->still_mode;
++            ci->still_time = pi->still_time;
++            ci->video_stream_count = pi->stn.num_video;
++            ci->audio_stream_count = pi->stn.num_audio;
++            ci->pg_stream_count = pi->stn.num_pg + pi->stn.num_pip_pg;
++            ci->ig_stream_count = pi->stn.num_ig;
++            ci->sec_video_stream_count = pi->stn.num_secondary_video;
++            ci->sec_audio_stream_count = pi->stn.num_secondary_audio;
++            if (!_copy_streams(nc, &ci->video_streams, pi->stn.video, ci->video_stream_count) ||
++                !_copy_streams(nc, &ci->audio_streams, pi->stn.audio, ci->audio_stream_count) ||
++                !_copy_streams(nc, &ci->pg_streams, pi->stn.pg, ci->pg_stream_count) ||
++                !_copy_streams(nc, &ci->ig_streams, pi->stn.ig, ci->ig_stream_count) ||
++                !_copy_streams(nc, &ci->sec_video_streams, pi->stn.secondary_video, ci->sec_video_stream_count) ||
++                !_copy_streams(nc, &ci->sec_audio_streams, pi->stn.secondary_audio, ci->sec_audio_stream_count)) {
++
++                goto error;
++            }
++        }
+     }
+ 
+     return title_info;
++
++ error:
++    BD_DEBUG(DBG_CRIT, "Out of memory\n");
++    bd_free_title_info(title_info);
++    return NULL;
+ }
+ 
+ static BLURAY_TITLE_INFO *_get_title_info(BLURAY *bd, uint32_t title_idx, uint32_t playlist, const char *mpls_name,
+@@ -2687,18 +2760,22 @@ void bd_free_title_info(BLURAY_TITLE_INFO *title_info)
+ {
+     unsigned int ii;
+ 
+-    X_FREE(title_info->chapters);
+-    X_FREE(title_info->marks);
+-    for (ii = 0; ii < title_info->clip_count; ii++) {
+-        X_FREE(title_info->clips[ii].video_streams);
+-        X_FREE(title_info->clips[ii].audio_streams);
+-        X_FREE(title_info->clips[ii].pg_streams);
+-        X_FREE(title_info->clips[ii].ig_streams);
+-        X_FREE(title_info->clips[ii].sec_video_streams);
+-        X_FREE(title_info->clips[ii].sec_audio_streams);
++    if (title_info) {
++        X_FREE(title_info->chapters);
++        X_FREE(title_info->marks);
++        if (title_info->clips) {
++            for (ii = 0; ii < title_info->clip_count; ii++) {
++                X_FREE(title_info->clips[ii].video_streams);
++                X_FREE(title_info->clips[ii].audio_streams);
++                X_FREE(title_info->clips[ii].pg_streams);
++                X_FREE(title_info->clips[ii].ig_streams);
++                X_FREE(title_info->clips[ii].sec_video_streams);
++                X_FREE(title_info->clips[ii].sec_audio_streams);
++            }
++            X_FREE(title_info->clips);
++        }
++        X_FREE(title_info);
+     }
+-    X_FREE(title_info->clips);
+-    X_FREE(title_info);
+ }
+ 
+ /*
+@@ -2737,6 +2814,16 @@ int bd_set_player_setting(BLURAY *bd, uint32_t idx, uint32_t value)
+         bd_mutex_unlock(&bd->mutex);
+         return result;
+     }
++#ifdef USING_BDJAVA
++    if (idx == BLURAY_PLAYER_SETTING_PERSISTENT_STORAGE) {
++        if (bd->title_type != title_undef) {
++            BD_DEBUG(DBG_BLURAY | DBG_CRIT, "Can't disable persistent storage during playback\n");
++            return 0;
++        }
++        bd->bdjstorage.no_persistent_storage = !value;
++        return 1;
++    }
++#endif
+ 
+     for (i = 0; i < sizeof(map) / sizeof(map[0]); i++) {
+         if (idx == map[i].idx) {
+@@ -2863,6 +2950,9 @@ static void _set_scr(BLURAY *bd, int64_t pts)
+     if (pts >= 0) {
+         uint32_t tick = (uint32_t)(((uint64_t)pts) >> 1);
+         _update_time_psr(bd, tick);
++
++    } else if (!bd->app_scr) {
++        _update_time_psr_from_stream(bd);
+     }
+ }
+ 
+@@ -3504,12 +3594,40 @@ int bd_get_event(BLURAY *bd, BD_EVENT *event)
+ void bd_set_scr(BLURAY *bd, int64_t pts)
+ {
+     bd_mutex_lock(&bd->mutex);
++    bd->app_scr = 1;
+     _set_scr(bd, pts);
+     bd_mutex_unlock(&bd->mutex);
+ }
+ 
++static int _set_rate(BLURAY *bd, uint32_t rate)
++{
++    if (!bd->title) {
++        return -1;
++    }
++
++#ifdef USING_BDJAVA
++    if (bd->title_type == title_bdj) {
++        return _bdj_event(bd, BDJ_EVENT_RATE, rate);
++    }
++#endif
++
++    return 0;
++}
++
++int bd_set_rate(BLURAY *bd, uint32_t rate)
++{
++    int result;
++
++    bd_mutex_lock(&bd->mutex);
++    result = _set_rate(bd, rate);
++    bd_mutex_unlock(&bd->mutex);
++
++    return result;
++}
++
+ int bd_mouse_select(BLURAY *bd, int64_t pts, uint16_t x, uint16_t y)
+ {
++    uint32_t param = (x << 16) | y;
+     int result = -1;
+ 
+     bd_mutex_lock(&bd->mutex);
+@@ -3517,7 +3635,11 @@ int bd_mouse_select(BLURAY *bd, int64_t pts, uint16_t x, uint16_t y)
+     _set_scr(bd, pts);
+ 
+     if (bd->title_type == title_hdmv) {
+-        result = _run_gc(bd, GC_CTRL_MOUSE_MOVE, (x << 16) | y);
++        result = _run_gc(bd, GC_CTRL_MOUSE_MOVE, param);
++#ifdef USING_BDJAVA
++    } else if (bd->title_type == title_bdj) {
++        result = _bdj_event(bd, BDJ_EVENT_MOUSE, param);
++#endif
+     }
+ 
+     bd_mutex_unlock(&bd->mutex);
+@@ -3529,6 +3651,10 @@ int bd_user_input(BLURAY *bd, int64_t pts, uint32_t key)
+ {
+     int result = -1;
+ 
++    if (key == BD_VK_ROOT_MENU) {
++        return bd_menu_call(bd, pts);
++    }
++
+     bd_mutex_lock(&bd->mutex);
+ 
+     _set_scr(bd, pts);
+diff --git a/src/libbluray/bluray.h b/src/libbluray/bluray.h
+index cbf16fc..997f59d 100644
+--- a/src/libbluray/bluray.h
++++ b/src/libbluray/bluray.h
+@@ -665,7 +665,9 @@ typedef enum {
+     BLURAY_PLAYER_SETTING_TEXT_CAP       = 30,    /* Text Subtitle capability.    Bit mask. */
+     BLURAY_PLAYER_SETTING_PLAYER_PROFILE = 31,    /* Player profile and version. */
+ 
+-    BLURAY_PLAYER_SETTING_DECODE_PG      = 0x100, /* Enable/disable PG (subtitle) decoder. Integer. */
++    BLURAY_PLAYER_SETTING_DECODE_PG          = 0x100, /* Enable/disable PG (subtitle) decoder. Integer. Default: disabled. */
++    BLURAY_PLAYER_SETTING_PERSISTENT_STORAGE = 0x101, /* Enable/disable BD-J persistent storage. Integer. Default: enabled. */
++
+     BLURAY_PLAYER_PERSISTENT_ROOT        = 400,   /* Root path to the BD_J persistent storage location. String. */
+     BLURAY_PLAYER_CACHE_ROOT             = 401,   /* Root path to the BD_J cache storage location. String. */
+ } bd_player_setting;
+@@ -742,7 +744,7 @@ typedef enum {
+     BD_EVENT_DISCONTINUITY          = 28,  /* new timestamp (45 kHz) */
+ 
+     /* HDMV VM or JVM seeked the stream. Next read() will return data from new position. Flush all buffers. */
+-    BD_EVENT_SEEK                   = 21,
++    BD_EVENT_SEEK                   = 21,  /* new media time (45 kHz) */
+ 
+     /* still playback (pause) */
+     BD_EVENT_STILL                  = 22,  /* 0 - off, 1 - on */
+@@ -977,6 +979,23 @@ void bd_set_scr(BLURAY *bd, int64_t pts);
+ 
+ /**
+  *
++ *  Set current playback rate.
++ *
++ *  Notify BD-J media player when user changes playback rate
++ *  (ex. pauses playback).
++ *  Changing rate may fail if corresponding UO is masked or
++ *  playlist is not playing.
++ *
++ * @param bd  BLURAY object
++ * @param rate current playback rate * 90000 (0 = paused, 90000 = normal)
++ * @return <0 on error, 0 on success
++ */
++#define BLURAY_RATE_PAUSED  0
++#define BLURAY_RATE_NORMAL  90000
++int bd_set_rate(BLURAY *bd, uint32_t rate);
++
++/**
++ *
+  *  Pass user input to graphics controller.
+  *  Keys are defined in libbluray/keys.h.
+  *  Current pts can be updated by using BD_VK_NONE key. This is required for animated menus.
+diff --git a/src/libbluray/decoders/graphics_controller.c b/src/libbluray/decoders/graphics_controller.c
+index 98f3239..f4fc5bf 100644
+--- a/src/libbluray/decoders/graphics_controller.c
++++ b/src/libbluray/decoders/graphics_controller.c
+@@ -628,8 +628,13 @@ static void _render_composition_object(GRAPHICS_CONTROLLER *gc,
+ 
+         if (cobj->crop_flag) {
+             if (cobj->crop_x || cobj->crop_y || cobj->crop_w != object->width) {
+-                ov.img = cropped_img = rle_crop_object(object->img, object->width,
+-                                                       cobj->crop_x, cobj->crop_y, cobj->crop_w, cobj->crop_h);
++                cropped_img = rle_crop_object(object->img, object->width,
++                                              cobj->crop_x, cobj->crop_y, cobj->crop_w, cobj->crop_h);
++                if (!cropped_img) {
++                    BD_DEBUG(DBG_DECODE | DBG_CRIT, "Error cropping PG object\n");
++                    return;
++                }
++                ov.img = cropped_img;
+             }
+             ov.w  = cobj->crop_w;
+             ov.h  = cobj->crop_h;
+@@ -971,26 +976,38 @@ static int _render_textst_region(GRAPHICS_CONTROLLER *p, int64_t pts, BD_TEXTST_
+     uint16_t y;
+     RLE_ENC  rle;
+ 
+-    rle_begin(&rle);
++    if (rle_begin(&rle) < 0) {
++        return -1;
++    }
+ 
+     for (y = 0, bmp_y = 0; y < style->region_info.region.height; y++) {
+         if (y < style->text_box.ypos || y >= style->text_box.ypos + style->text_box.height) {
+-            rle_add_bite(&rle, style->region_info.background_color, style->region_info.region.width);
++            if (rle_add_bite(&rle, style->region_info.background_color, style->region_info.region.width) < 0)
++                break;
+         } else {
+-            rle_add_bite(&rle, style->region_info.background_color, style->text_box.xpos);
+-            rle_compress_chunk(&rle, bmp->mem + bmp->stride * bmp_y, bmp->width);
++            if (rle_add_bite(&rle, style->region_info.background_color, style->text_box.xpos) < 0)
++                break;
++            if (rle_compress_chunk(&rle, bmp->mem + bmp->stride * bmp_y, bmp->width) < 0)
++                break;
+             bmp_y++;
+-            rle_add_bite(&rle, style->region_info.background_color,
+-                         style->region_info.region.width - style->text_box.width - style->text_box.xpos);
++            if (rle_add_bite(&rle, style->region_info.background_color,
++                             style->region_info.region.width - style->text_box.width - style->text_box.xpos) < 0)
++                break;
+         }
+ 
+-        rle_add_eol(&rle);
++        if (rle_add_eol(&rle) < 0)
++            break;
+     }
+ 
+-    _render_rle(p, pts, rle_get(&rle),
+-                style->region_info.region.xpos, style->region_info.region.ypos,
+-                style->region_info.region.width, style->region_info.region.height,
+-                palette);
++    BD_PG_RLE_ELEM *img = rle_get(&rle);
++    if (img) {
++        _render_rle(p, pts, img,
++                    style->region_info.region.xpos, style->region_info.region.ypos,
++                    style->region_info.region.width, style->region_info.region.height,
++                    palette);
++    } else {
++        BD_DEBUG(DBG_DECODE | DBG_CRIT, "Error encoding Text Subtitle region\n");
++    }
+ 
+     rle_end(&rle);
+ 
+diff --git a/src/libbluray/decoders/hdmv_pids.h b/src/libbluray/decoders/hdmv_pids.h
+index 45a55f3..81162d0 100644
+--- a/src/libbluray/decoders/hdmv_pids.h
++++ b/src/libbluray/decoders/hdmv_pids.h
+@@ -40,6 +40,11 @@
+ #define HDMV_PID_PG_FIRST         0x1200
+ #define HDMV_PID_PG_LAST          0x121f
+ 
++#define HDMV_PID_PG_B_FIRST       0x1220  /* base view */
++#define HDMV_PID_PG_B_LAST        0x123f
++#define HDMV_PID_PG_E_FIRST       0x1240  /* enhanced view */
++#define HDMV_PID_PG_E_LAST        0x125f
++
+ #define HDMV_PID_IG_FIRST         0x1400
+ #define HDMV_PID_IG_LAST          0x141f
+ 
+diff --git a/src/libbluray/decoders/m2ts_demux.c b/src/libbluray/decoders/m2ts_demux.c
+index 9d166df..8739ef6 100644
+--- a/src/libbluray/decoders/m2ts_demux.c
++++ b/src/libbluray/decoders/m2ts_demux.c
+@@ -243,7 +243,7 @@ PES_BUFFER *m2ts_demux(M2TS_DEMUX *p, uint8_t *buf)
+                 pes_buffer_free(&p->buf);
+             }
+             p->buf = pes_buffer_alloc();
+-            if (!buf) {
++            if (!p->buf) {
+                 continue;
+             }
+             int r = _parse_pes(p->buf, buf + 4 + payload_offset, 188 - payload_offset);
+diff --git a/src/libbluray/decoders/rle.c b/src/libbluray/decoders/rle.c
+index 22183f8..185072e 100644
+--- a/src/libbluray/decoders/rle.c
++++ b/src/libbluray/decoders/rle.c
+@@ -29,47 +29,63 @@
+  * util
+  */
+ 
+-static void _rle_ensure_size(RLE_ENC *p)
++static int _rle_ensure_size(RLE_ENC *p)
+ {
+     if (BD_UNLIKELY(!p->free_elem)) {
+         BD_PG_RLE_ELEM *start = rle_get(p);
++        if (p->error) {
++            return -1;
++        }
+         /* realloc to 2x */
+-        p->free_elem = p->num_elem;
+-        start = refcnt_realloc(start, p->num_elem * 2 * sizeof(BD_PG_RLE_ELEM));
++        void *tmp = refcnt_realloc(start, p->num_elem * 2 * sizeof(BD_PG_RLE_ELEM));
++        if (!tmp) {
++            p->error = 1;
++            return -1;
++        }
++        start = tmp;
+         p->elem = start + p->num_elem;
++        p->free_elem = p->num_elem;
+         p->num_elem *= 2;
+     }
++
++    return 0;
+ }
+ 
+ /*
+- * encoding
++ * crop encoded image
+  */
+ 
+-static void _enc_elem(RLE_ENC *p, uint16_t color, uint16_t len)
++static int _enc_elem(RLE_ENC *p, uint16_t color, uint16_t len)
+ {
+-    _rle_ensure_size(p);
++    if (BD_UNLIKELY(_rle_ensure_size(p) < 0)) {
++        return -1;
++    }
+ 
+     p->elem->color = color;
+     p->elem->len = len;
+ 
+     p->free_elem--;
+     p->elem++;
++
++    return 0;
+ }
+ 
+-static void _enc_eol(RLE_ENC *p)
++static int _enc_eol(RLE_ENC *p)
+ {
+-    _enc_elem(p, 0, 0);
++    return _enc_elem(p, 0, 0);
+ }
+ 
+ BD_PG_RLE_ELEM *rle_crop_object(const BD_PG_RLE_ELEM *orig, int width,
+-                                       int crop_x, int crop_y, int crop_w, int crop_h)
++                                int crop_x, int crop_y, int crop_w, int crop_h)
+ {
+     RLE_ENC  rle;
+     int      x0 = crop_x;
+     int      x1 = crop_x + crop_w; /* first pixel outside of cropped region */
+     int      x, y;
+ 
+-    rle_begin(&rle);
++    if (rle_begin(&rle) < 0) {
++        return NULL;
++    }
+ 
+     /* skip crop_y */
+     for (y = 0; y < crop_y; y++) {
+@@ -106,7 +122,9 @@ BD_PG_RLE_ELEM *rle_crop_object(const BD_PG_RLE_ELEM *orig, int width,
+                 bite.len -= x - x1;
+             }
+ 
+-            _enc_elem(&rle, bite.color, bite.len);
++            if (BD_UNLIKELY(_enc_elem(&rle, bite.color, bite.len) < 0)) {
++                goto out;
++            }
+         }
+ 
+         if (BD_LIKELY(!orig->len)) {
+@@ -116,9 +134,12 @@ BD_PG_RLE_ELEM *rle_crop_object(const BD_PG_RLE_ELEM *orig, int width,
+             BD_DEBUG(DBG_GC | DBG_CRIT, "rle eol marker missing\n");
+         }
+ 
+-        _enc_eol(&rle);
++        if (BD_UNLIKELY(_enc_eol(&rle) < 0)) {
++            goto out;
++        }
+     }
+ 
++ out:
+     return rle_get(&rle);
+ }
+ 
+@@ -126,44 +147,61 @@ BD_PG_RLE_ELEM *rle_crop_object(const BD_PG_RLE_ELEM *orig, int width,
+  * compression
+  */
+ 
+-static void _rle_grow(RLE_ENC *p)
++static int _rle_grow(RLE_ENC *p)
+ {
+     p->free_elem--;
+     p->elem++;
+ 
+-    _rle_ensure_size(p);
++    if (BD_UNLIKELY(_rle_ensure_size(p) < 0)) {
++        return -1;
++    }
+ 
+     p->elem->len = 0;
++
++    return 0;
+ }
+ 
+-void rle_add_eol(RLE_ENC *p)
++int rle_add_eol(RLE_ENC *p)
+ {
+     if (BD_LIKELY(p->elem->len)) {
+-        _rle_grow(p);
++        if (BD_UNLIKELY(_rle_grow(p) < 0)) {
++            return -1;
++        }
+     }
+     p->elem->color = 0;
+ 
+-    _rle_grow(p);
++    if (BD_UNLIKELY(_rle_grow(p) < 0)) {
++        return -1;
++    }
+     p->elem->color = 0xffff;
++
++    return 0;
+ }
+ 
+-void rle_add_bite(RLE_ENC *p, uint8_t color, int len)
++int rle_add_bite(RLE_ENC *p, uint8_t color, int len)
+ {
+     if (BD_LIKELY(color == p->elem->color)) {
+         p->elem->len += len;
+     } else {
+         if (BD_LIKELY(p->elem->len)) {
+-            _rle_grow(p);
++            if (BD_UNLIKELY(_rle_grow(p) < 0)) {
++                return -1;
++            }
+         }
+         p->elem->color = color;
+         p->elem->len = len;
+     }
++
++    return 0;
+ }
+ 
+-void rle_compress_chunk(RLE_ENC *p, const uint8_t *mem, unsigned width)
++int rle_compress_chunk(RLE_ENC *p, const uint8_t *mem, unsigned width)
+ {
+     unsigned ii;
+     for (ii = 0; ii < width; ii++) {
+-        rle_add_bite(p, mem[ii], 1);
++        if (BD_UNLIKELY(rle_add_bite(p, mem[ii], 1) < 0)) {
++              return -1;
++        }
+     }
++    return 0;
+ }
+diff --git a/src/libbluray/decoders/rle.h b/src/libbluray/decoders/rle.h
+index a8e121e..2dba817 100644
+--- a/src/libbluray/decoders/rle.h
++++ b/src/libbluray/decoders/rle.h
+@@ -34,6 +34,8 @@ typedef struct {
+     BD_PG_RLE_ELEM *elem;     /* current element */
+     unsigned int    free_elem;/* unused element count */
+     unsigned int    num_elem; /* allocated element count */
++
++    int error;
+ } RLE_ENC;
+ 
+ /*
+@@ -46,26 +48,41 @@ typedef struct {
+ BD_PRIVATE BD_PG_RLE_ELEM *rle_crop_object(const BD_PG_RLE_ELEM *orig, int width,
+                                            int crop_x, int crop_y, int crop_w, int crop_h);
+ 
+-static inline void rle_begin(RLE_ENC *p)
++static inline int rle_begin(RLE_ENC *p)
+ {
+     p->num_elem = 1024;
+     p->free_elem = 1024;
+     p->elem = refcnt_realloc(NULL, p->num_elem * sizeof(BD_PG_RLE_ELEM));
+-
++    if (!p->elem) {
++        return -1;
++    }
+     p->elem->len = 0;
+     p->elem->color = 0xffff;
++
++    p->error = 0;
++
++    return 0;
+ }
+ 
+ static inline BD_PG_RLE_ELEM *rle_get(RLE_ENC *p)
+ {
+     BD_PG_RLE_ELEM *start = (p->elem ? p->elem - (p->num_elem - p->free_elem) : NULL);
++    if (p->error) {
++        if (start) {
++            bd_refcnt_dec(start);
++            p->elem = NULL;
++        }
++        return NULL;
++    }
+     return start;
+ }
+ 
+ static inline void rle_end(RLE_ENC *p)
+ {
+     BD_PG_RLE_ELEM *start = rle_get(p);
+-    bd_refcnt_dec(start);
++    if (start) {
++        bd_refcnt_dec(start);
++    }
+     p->elem = NULL;
+ }
+ 
+@@ -73,8 +90,8 @@ static inline void rle_end(RLE_ENC *p)
+  * compression
+  */
+ 
+-BD_PRIVATE void rle_add_eol(RLE_ENC *p);
+-BD_PRIVATE void rle_add_bite(RLE_ENC *p, uint8_t color, int len);
+-BD_PRIVATE void rle_compress_chunk(RLE_ENC *p, const uint8_t *mem, unsigned width);
++BD_PRIVATE int rle_add_eol(RLE_ENC *p);
++BD_PRIVATE int rle_add_bite(RLE_ENC *p, uint8_t color, int len);
++BD_PRIVATE int rle_compress_chunk(RLE_ENC *p, const uint8_t *mem, unsigned width);
+ 
+ #endif /* _BD_RLE_H_ */
+diff --git a/src/libbluray/decoders/textst_render.c b/src/libbluray/decoders/textst_render.c
+index 0e87d4b..967964a 100644
+--- a/src/libbluray/decoders/textst_render.c
++++ b/src/libbluray/decoders/textst_render.c
+@@ -105,6 +105,7 @@ void textst_render_free(TEXTST_RENDER **pp)
+                 }
+                 X_FREE(p->font[ii].mem);
+             }
++            X_FREE(p->font);
+ 
+             FT_Done_FreeType(p->ft_lib);
+         }
+diff --git a/src/libbluray/disc/aacs.c b/src/libbluray/disc/aacs.c
+index e44b5a7..1c8984d 100644
+--- a/src/libbluray/disc/aacs.c
++++ b/src/libbluray/disc/aacs.c
+@@ -30,6 +30,7 @@
+ #include "util/strutl.h"
+ 
+ #include <stdlib.h>
++#include <string.h>
+ 
+ 
+ struct bd_aacs {
+@@ -181,6 +182,15 @@ int libaacs_open(BD_AACS *p, const char *device,
+     } else if (open2) {
+         BD_DEBUG(DBG_BLURAY, "Using old aacs_open2(), no UDF support available\n");
+         p->aacs = open2(device, keyfile_path, &error_code);
++
++        /* libmmbd needs dev: for devices */
++        if (!p->aacs && p->impl_id == IMPL_LIBMMBD && !strncmp(device, "/dev/", 5)) {
++            char *tmp_device = str_printf("dev:%s", device);
++            if (tmp_device) {
++                p->aacs = open2(tmp_device, keyfile_path, &error_code);
++                X_FREE(tmp_device);
++            }
++        }
+     } else if (open) {
+         BD_DEBUG(DBG_BLURAY, "Using old aacs_open(), no verbose error reporting available\n");
+         p->aacs = open(device, keyfile_path);
+diff --git a/src/libbluray/disc/bdplus.c b/src/libbluray/disc/bdplus.c
+index 44fee89..8afe980 100644
+--- a/src/libbluray/disc/bdplus.c
++++ b/src/libbluray/disc/bdplus.c
+@@ -30,6 +30,7 @@
+ #include "util/strutl.h"
+ 
+ #include <stdlib.h>
++#include <string.h>
+ 
+ 
+ struct bd_bdplus {
+@@ -166,7 +167,7 @@ BD_BDPLUS *libbdplus_load()
+     return _load(0);
+ }
+ 
+-int libbdplus_init(BD_BDPLUS *p, const char *root,
++int libbdplus_init(BD_BDPLUS *p, const char *root, const char *device,
+                    void *file_open_handle, void *file_open_fp,
+                    const uint8_t *vid, const uint8_t *mk)
+ {
+@@ -183,7 +184,7 @@ int libbdplus_init(BD_BDPLUS *p, const char *root,
+     if (mk == NULL && p->impl_id == IMPL_LIBBDPLUS) {
+         BD_BDPLUS *p2 = _load(IMPL_LIBMMBD);
+         if (p2) {
+-            if (!libbdplus_init(p2, root, file_open_handle, file_open_fp, vid, mk)) {
++            if (!libbdplus_init(p2, root, device, file_open_handle, file_open_fp, vid, mk)) {
+                 /* succeed - swap implementations */
+                 _unload(p);
+                 *p = *p2;
+@@ -206,10 +207,23 @@ int libbdplus_init(BD_BDPLUS *p, const char *root,
+     }
+ 
+     if (set_fopen) {
++        /* New libbdplus. Use libbluray for file I/O */
+         p->bdplus = bdplus_init(NULL, NULL, vid);
+         set_fopen(p->bdplus, file_open_handle, file_open_fp);
+-    } else {
++    } else if (root) {
++        /* Old libbdplus or libmmbd. Disc is mounted. */
+         p->bdplus = bdplus_init(root, NULL, vid);
++    } else if (device) {
++        /* Unmounted device */
++        if (p->impl_id == IMPL_LIBMMBD && !strncmp(device, "/dev/", 5)) {
++            char *tmp = str_printf("dev:%s", device);
++            if (tmp) {
++                p->bdplus = bdplus_init(tmp, NULL, vid);
++                X_FREE(tmp);
++            }
++        } else {
++            BD_DEBUG(DBG_BLURAY | DBG_CRIT, "Too old libbdplus detected. Disc must be mounted first.\n");
++        }
+     }
+ 
+     if (!p->bdplus) {
+diff --git a/src/libbluray/disc/bdplus.h b/src/libbluray/disc/bdplus.h
+index 6589d88..88e940c 100644
+--- a/src/libbluray/disc/bdplus.h
++++ b/src/libbluray/disc/bdplus.h
+@@ -30,7 +30,7 @@ typedef struct bd_bdplus BD_BDPLUS;
+ BD_PRIVATE int  libbdplus_required(void *have_file_handle, int (*have_file)(void *, const char *, const char *));
+ BD_PRIVATE BD_BDPLUS *libbdplus_load(void);
+ BD_PRIVATE int  libbdplus_is_mmbd(BD_BDPLUS *);
+-BD_PRIVATE int  libbdplus_init(BD_BDPLUS *p, const char *root,
++BD_PRIVATE int  libbdplus_init(BD_BDPLUS *p, const char *root, const char *device,
+                                void *open_file_handle, void *open_file_fp,
+                                const uint8_t *vid, const uint8_t *mk);
+ BD_PRIVATE void libbdplus_unload(BD_BDPLUS **p);
+diff --git a/src/libbluray/disc/dec.c b/src/libbluray/disc/dec.c
+index ebe2c39..e2d9ef9 100644
+--- a/src/libbluray/disc/dec.c
++++ b/src/libbluray/disc/dec.c
+@@ -219,7 +219,7 @@ static int _libbdplus_init(BD_DEC *dec, struct dec_dev *dev,
+         return 0;
+     }
+ 
+-    if (libbdplus_init(dec->bdplus, dev->root, dev->file_open_bdrom_handle, (void*)dev->pf_file_open_bdrom, vid, mk)) {
++    if (libbdplus_init(dec->bdplus, dev->root, dev->device, dev->file_open_bdrom_handle, (void*)dev->pf_file_open_bdrom, vid, mk)) {
+         BD_DEBUG(DBG_BLURAY | DBG_CRIT, "bdplus_init() failed\n");
+ 
+         i->bdplus_handled = 0;
+diff --git a/src/libbluray/disc/disc.c b/src/libbluray/disc/disc.c
+index defa084..42414d5 100644
+--- a/src/libbluray/disc/disc.c
++++ b/src/libbluray/disc/disc.c
+@@ -32,6 +32,7 @@
+ #include "file/file.h"
+ #include "file/mount.h"
+ 
++#include <ctype.h>
+ #include <string.h>
+ 
+ #ifdef ENABLE_UDF
+@@ -52,6 +53,8 @@ struct bd_disc {
+     void        (*pf_fs_close)(void *);
+ 
+     const char   *udf_volid;
++
++    int8_t        avchd;  /* -1 - unknown. 0 - no. 1 - yes */
+ };
+ 
+ /*
+@@ -93,6 +96,44 @@ static BD_DIR_H *_bdrom_open_dir(void *p, const char *dir)
+ }
+ 
+ /*
++ * AVCHD 8.3 filenames
++ */
++
++static char *_avchd_file_name(const char *rel_path)
++{
++    static const char map[][2][6] = {
++        { ".mpls", ".MPL" },
++        { ".clpi", ".CPI" },
++        { ".m2ts", ".MTS" },
++        { ".bdmv", ".BDM" },
++    };
++    char *avchd_path = str_dup(rel_path);
++    char *name = avchd_path ? strrchr(avchd_path, DIR_SEP_CHAR) : NULL;
++    char *dot = name ? strrchr(name, '.') : NULL;
++    size_t i;
++
++    if (dot) {
++
++        /* take up to 8 chars from file name */
++        for (i = 0; *name && name < dot && i < 9; i++, name++) {
++            *name = toupper(*name);
++        }
++
++        /* convert extension */
++        for (i = 0; i < sizeof(map) / sizeof(map[0]); i++) {
++            if (!strcmp(dot, map[i][0])) {
++                strcpy(name, map[i][1]);
++                return avchd_path;
++            }
++        }
++    }
++
++    /* failed */
++    X_FREE(avchd_path);
++    return NULL;
++}
++
++/*
+  * overlay filesystem
+  */
+ 
+@@ -229,6 +270,8 @@ static BD_DISC *_disc_init()
+         p->fs_handle          = (void*)p;
+         p->pf_file_open_bdrom = _bdrom_open_path;
+         p->pf_dir_open_bdrom  = _bdrom_open_dir;
++
++        p->avchd = -1;
+     }
+     return p;
+ }
+@@ -341,6 +384,18 @@ BD_FILE_H *disc_open_path(BD_DISC *p, const char *rel_path)
+ {
+     BD_FILE_H *fp;
+ 
++    if (p->avchd > 0) {
++        char *avchd_path = _avchd_file_name(rel_path);
++        if (avchd_path) {
++            BD_DEBUG(DBG_FILE, "AVCHD: %s -> %s\n", rel_path, avchd_path);
++            fp = p->pf_file_open_bdrom(p->fs_handle, avchd_path);
++            X_FREE(avchd_path);
++            if (fp) {
++                return fp;
++            }
++        }
++    }
++
+     /* search file from overlay */
+     fp = _overlay_open_path(p, rel_path);
+ 
+@@ -349,7 +404,19 @@ BD_FILE_H *disc_open_path(BD_DISC *p, const char *rel_path)
+         fp = p->pf_file_open_bdrom(p->fs_handle, rel_path);
+ 
+         if (!fp) {
+-            BD_DEBUG(DBG_FILE | DBG_CRIT, "error opening file %s\n", rel_path);
++
++            /* AVCHD short filenames detection */
++            if (p->avchd < 0 && !strcmp(rel_path, "BDMV" DIR_SEP "index.bdmv")) {
++                fp = p->pf_file_open_bdrom(p->fs_handle, "BDMV" DIR_SEP "INDEX.BDM");
++                if (fp) {
++                    BD_DEBUG(DBG_FILE | DBG_CRIT, "detected AVCHD 8.3 filenames\n");
++                }
++                p->avchd = !!fp;
++            }
++
++            if (!fp) {
++                BD_DEBUG(DBG_FILE | DBG_CRIT, "error opening file %s\n", rel_path);
++            }
+         }
+     }
+ 
+@@ -453,9 +520,20 @@ int disc_cache_bdrom_file(BD_DISC *p, const char *rel_path, const char *cache_pa
+     BD_FILE_H *fp_in;
+     BD_FILE_H *fp_out;
+     int64_t    got;
++    size_t     size;
++
++    if (!cache_path || !cache_path[0]) {
++        return -1;
++    }
+ 
+-    if (rel_path[strlen(rel_path) - 1] == '/') {
+-        file_mkdirs(cache_path);
++    /* make sure cache directory exists */
++    if (file_mkdirs(cache_path) < 0) {
++        return -1;
++    }
++
++    /* plain directory ? */
++    size = strlen(rel_path);
++    if (rel_path[size - 1] == '/' || rel_path[size - 1] == '\\') {
+         return 0;
+     }
+ 
+@@ -466,9 +544,6 @@ int disc_cache_bdrom_file(BD_DISC *p, const char *rel_path, const char *cache_pa
+         return -1;
+     }
+ 
+-    /* make sure path exists */
+-    file_mkdirs(cache_path);
+-
+     /* output file in local filesystem */
+     fp_out = file_open(cache_path, "wb");
+     if (!fp_out) {
+diff --git a/src/libbluray/disc/udf_fs.c b/src/libbluray/disc/udf_fs.c
+index 3e438ca..bcb624c 100644
+--- a/src/libbluray/disc/udf_fs.c
++++ b/src/libbluray/disc/udf_fs.c
+@@ -159,7 +159,11 @@ static int _bi_close(struct udfread_block_input *bi_gen)
+ static uint32_t _bi_size(struct udfread_block_input *bi_gen)
+ {
+     UDF_BI *bi = (UDF_BI *)bi_gen;
+-    return file_size(bi->fp) / UDF_BLOCK_SIZE;
++    int64_t size = file_size(bi->fp);
++    if (size >= 0) {
++        return size / UDF_BLOCK_SIZE;
++    }
++    return 0;
+ }
+ 
+ static int _bi_read(struct udfread_block_input *bi_gen, uint32_t lba, void *buf, uint32_t nblocks, int flags)
+@@ -167,11 +171,12 @@ static int _bi_read(struct udfread_block_input *bi_gen, uint32_t lba, void *buf,
+     (void)flags;
+     UDF_BI *bi = (UDF_BI *)bi_gen;
+     int got = -1;
++    int64_t pos = (int64_t)lba * UDF_BLOCK_SIZE;
+ 
+     /* seek + read must be atomic */
+     bd_mutex_lock(&bi->mutex);
+ 
+-    if (file_seek(bi->fp, SEEK_SET, (int64_t)lba * UDF_BLOCK_SIZE) >= 0) {
++    if (file_seek(bi->fp, SEEK_SET, pos) == pos) {
+         int64_t bytes = file_read(bi->fp, (uint8_t*)buf, (int64_t)nblocks * UDF_BLOCK_SIZE);
+         if (bytes > 0) {
+             got = bytes / UDF_BLOCK_SIZE;
+@@ -210,7 +215,7 @@ typedef struct {
+ 
+ static int _si_close(struct udfread_block_input *bi_gen)
+ {
+-    free(bi_gen);
++    X_FREE(bi_gen);
+     return 0;
+ }
+ 
+diff --git a/src/libbluray/hdmv/mobj_parse.c b/src/libbluray/hdmv/mobj_parse.c
+index 97bc3ff..a4c2516 100644
+--- a/src/libbluray/hdmv/mobj_parse.c
++++ b/src/libbluray/hdmv/mobj_parse.c
+@@ -44,7 +44,9 @@ static int _mobj_parse_header(BITSTREAM *bs, int *extension_data_start)
+ {
+     uint32_t sig1, sig2;
+ 
+-    bs_seek_byte(bs, 0);
++    if (bs_seek_byte(bs, 0) < 0) {
++        return 0;
++    }
+ 
+     sig1 = bs_read(bs, 32);
+     sig2 = bs_read(bs, 32);
+@@ -136,7 +138,10 @@ static MOBJ_OBJECTS *_mobj_parse(BD_FILE_H *fp)
+     uint32_t      data_len;
+     int           extension_data_start, i;
+ 
+-    bs_init(&bs, fp);
++    if (bs_init(&bs, fp) < 0) {
++        BD_DEBUG(DBG_NAV, "MovieObject.bdmv: read error\n");
++        goto error;
++    }
+ 
+     if (!_mobj_parse_header(&bs, &extension_data_start)) {
+         BD_DEBUG(DBG_NAV | DBG_CRIT, "MovieObject.bdmv: invalid header\n");
+@@ -147,7 +152,10 @@ static MOBJ_OBJECTS *_mobj_parse(BD_FILE_H *fp)
+         BD_DEBUG(DBG_NAV | DBG_CRIT, "MovieObject.bdmv: unknown extension data at %d\n", extension_data_start);
+     }
+ 
+-    bs_seek_byte(&bs, 40);
++    if (bs_seek_byte(&bs, 40) < 0) {
++        BD_DEBUG(DBG_NAV, "MovieObject.bdmv: read error\n");
++        goto error;
++    }
+ 
+     data_len = bs_read(&bs, 32);
+ 
+diff --git a/src/libbluray/player_settings.h b/src/libbluray/player_settings.h
+index 6709303..3a5f207 100644
+--- a/src/libbluray/player_settings.h
++++ b/src/libbluray/player_settings.h
+@@ -158,4 +158,22 @@ enum {
+     BLURAY_PG_TEXTST_DECODER_ENABLE   = 1,  /* enable both decoders */
+ };
+ 
++
++/*
++ * BLURAY_PLAYER_SETTING_PERSISTENT_STORAGE
++ *
++ * Enable / disable BD-J persistent storage.
++ *
++ * If persistent storage is disabled, BD-J Xlets can't access any data
++ * stored during earlier playback sessions. Persistent data stored during
++ * current playback session will be removed and can't be accessed later.
++ *
++ * This setting can't be changed after bd_play() has been called.
++ */
++
++enum {
++    BLURAY_PERSISTENT_STORAGE_DISABLE = 0,  /* disable persistent storage between playback sessions */
++    BLURAY_PERSISTENT_STORAGE_ENABLE  = 1,  /* enable persistent storage */
++};
++
+ #endif /* BD_PLAYER_SETTINGS_H_ */
+diff --git a/src/libbluray/register.h b/src/libbluray/register.h
+index 18e5bf5..e263855 100644
+--- a/src/libbluray/register.h
++++ b/src/libbluray/register.h
+@@ -159,7 +159,7 @@ int bd_psr_write(BD_REGISTERS *, int reg, uint32_t val);
+  * @param mask  bit mask. bits to be written are set to 1.
+  * @return 0 on success, -1 on error (invalid register number)
+  */
+-int bd_psr_write_bits(BD_REGISTERS *, int reg, uint32_t val, uint32_t mask);
++BD_PRIVATE int bd_psr_write_bits(BD_REGISTERS *, int reg, uint32_t val, uint32_t mask);
+ 
+ /**
+  *
+@@ -172,7 +172,7 @@ int bd_psr_write_bits(BD_REGISTERS *, int reg, uint32_t val, uint32_t mask);
+  * @param val  new value for register
+  * @return 0 on success, -1 on error (invalid register number)
+  */
+-int bd_psr_setting_write(BD_REGISTERS *, int reg, uint32_t val);
++BD_PRIVATE int bd_psr_setting_write(BD_REGISTERS *, int reg, uint32_t val);
+ 
+ /**
+  *
+@@ -180,7 +180,7 @@ int bd_psr_setting_write(BD_REGISTERS *, int reg, uint32_t val);
+  *
+  * @param registers  BD_REGISTERS object
+  */
+-void bd_psr_lock(BD_REGISTERS *);
++BD_PRIVATE void bd_psr_lock(BD_REGISTERS *);
+ 
+ /**
+  *
+@@ -188,7 +188,7 @@ void bd_psr_lock(BD_REGISTERS *);
+  *
+  * @param registers  BD_REGISTERS object
+  */
+-void bd_psr_unlock(BD_REGISTERS *);
++BD_PRIVATE void bd_psr_unlock(BD_REGISTERS *);
+ 
+ /**
+  *
+@@ -198,7 +198,7 @@ void bd_psr_unlock(BD_REGISTERS *);
+  *
+  * @param registers  BD_REGISTERS object
+  */
+-void bd_psr_save_state(BD_REGISTERS *);
++BD_PRIVATE void bd_psr_save_state(BD_REGISTERS *);
+ 
+ /**
+  *
+@@ -209,7 +209,7 @@ void bd_psr_save_state(BD_REGISTERS *);
+  *
+  * @param registers  BD_REGISTERS object
+  */
+-void bd_psr_restore_state(BD_REGISTERS *);
++BD_PRIVATE void bd_psr_restore_state(BD_REGISTERS *);
+ 
+ /**
+  *
+@@ -219,7 +219,7 @@ void bd_psr_restore_state(BD_REGISTERS *);
+  *
+  * @param registers  BD_REGISTERS object
+  */
+-void bd_psr_reset_backup_registers(BD_REGISTERS *);
++BD_PRIVATE void bd_psr_reset_backup_registers(BD_REGISTERS *);
+ 
+ 
+ /*
+diff --git a/src/util/attributes.h b/src/util/attributes.h
+index 9aa84d8..1cc611c 100644
+--- a/src/util/attributes.h
++++ b/src/util/attributes.h
+@@ -58,4 +58,10 @@
+ #  define BD_UNLIKELY(x) __builtin_expect((x),0)
+ #endif
+ 
++#if defined(__GNUC__) && __GNUC__ > 3
++#  define BD_USED  __attribute__((warn_unused_result))
++#else
++#  define BD_USED
++#endif
++
+ #endif /* LIBBLURAY_ATTRIBUTES_H_ */
+diff --git a/src/util/bits.c b/src/util/bits.c
+index 850031f..d2db534 100644
+--- a/src/util/bits.c
++++ b/src/util/bits.c
+@@ -40,19 +40,43 @@ void bb_init( BITBUFFER *bb, const uint8_t *p_data, size_t i_data )
+     bb->i_left  = 8;
+ }
+ 
+-void bs_init( BITSTREAM *bs, BD_FILE_H *fp )
++static int _bs_read( BITSTREAM *bs)
++{
++    int result = 0;
++    int64_t got;
++
++    got = file_read(bs->fp, bs->buf, BF_BUF_SIZE);
++    if (got <= 0 || got > BF_BUF_SIZE) {
++        BD_DEBUG(DBG_FILE, "_bs_read(): read error\n");
++        got = 0;
++        result = -1;
++    }
++
++    bs->size = (size_t)got;
++    bb_init(&bs->bb, bs->buf, bs->size);
++
++    return result;
++}
++
++static int _bs_read_at( BITSTREAM *bs, int64_t off )
++{
++    if (file_seek(bs->fp, off, SEEK_SET) < 0) {
++        BD_DEBUG(DBG_FILE | DBG_CRIT, "bs_read(): seek failed\n");
++        /* no change in state. Caller _must_ check return value. */
++        return -1;
++    }
++    bs->pos = off;
++    return _bs_read(bs);
++}
++
++int bs_init( BITSTREAM *bs, BD_FILE_H *fp )
+ {
+     int64_t size = file_size(fp);;
+     bs->fp = fp;
+     bs->pos = 0;
+     bs->end = (size < 0) ? 0 : size;
+-    bs->size = file_read(bs->fp, bs->buf, BF_BUF_SIZE);
+-    if (bs->size == 0 || bs->size > BF_BUF_SIZE) {
+-        bs->size = 0;
+-        bs->end = 0;
+-        BD_DEBUG(DBG_FILE|DBG_CRIT, "bs_init(): read error!\n");
+-    }
+-    bb_init(&bs->bb, bs->buf, bs->size);
++
++    return _bs_read(bs);
+ }
+ 
+ void bb_seek( BITBUFFER *bb, int64_t off, int whence)
+@@ -82,8 +106,9 @@ void bb_seek( BITBUFFER *bb, int64_t off, int whence)
+     }
+ }
+ 
+-void bs_seek( BITSTREAM *bs, int64_t off, int whence)
++static int _bs_seek( BITSTREAM *bs, int64_t off, int whence)
+ {
++    int result = 0;
+     int64_t b;
+ 
+     switch (whence) {
+@@ -97,29 +122,31 @@ void bs_seek( BITSTREAM *bs, int64_t off, int whence)
+         default:
+             break;
+     }
++    if (off < 0) {
++        BD_DEBUG(DBG_FILE | DBG_CRIT, "bs_seek(): seek failed (negative offset)\n");
++        return -1;
++    }
++
+     b = off >> 3;
+     if (b >= bs->end)
+     {
++        int64_t pos;
+         if (BF_BUF_SIZE < bs->end) {
+-            bs->pos = bs->end - BF_BUF_SIZE;
+-            file_seek(bs->fp, BF_BUF_SIZE, SEEK_END);
++            pos = bs->end - BF_BUF_SIZE;
+         } else {
+-            bs->pos = 0;
+-            file_seek(bs->fp, 0, SEEK_SET);
++            pos = 0;
+         }
+-        bs->size = file_read(bs->fp, bs->buf, BF_BUF_SIZE);
+-        bb_init(&bs->bb, bs->buf, bs->size);
++        result = _bs_read_at(bs, pos);
+         bs->bb.p = bs->bb.p_end;
+     } else if (b < bs->pos || b >= (bs->pos + BF_BUF_SIZE)) {
+-        file_seek(bs->fp, b, SEEK_SET);
+-        bs->pos = b;
+-        bs->size = file_read(bs->fp, bs->buf, BF_BUF_SIZE);
+-        bb_init(&bs->bb, bs->buf, bs->size);
++        result  = _bs_read_at(bs, b);
+     } else {
+         b -= bs->pos;
+         bs->bb.p = &bs->bb.p_start[b];
+         bs->bb.i_left = 8 - (off & 0x07);
+     }
++
++    return result;
+ }
+ 
+ #if 0
+@@ -129,9 +156,9 @@ void bb_seek_byte( BITBUFFER *bb, int64_t off)
+ }
+ #endif
+ 
+-void bs_seek_byte( BITSTREAM *s, int64_t off)
++int bs_seek_byte( BITSTREAM *s, int64_t off)
+ {
+-    bs_seek(s, off << 3, SEEK_SET);
++    return _bs_seek(s, off << 3, SEEK_SET);
+ }
+ 
+ 
+diff --git a/src/util/bits.h b/src/util/bits.h
+index dc7e9d8..af94466 100644
+--- a/src/util/bits.h
++++ b/src/util/bits.h
+@@ -49,17 +49,17 @@ typedef struct {
+     BD_FILE_H *fp;
+     uint8_t    buf[BF_BUF_SIZE];
+     BITBUFFER  bb;
+-    int64_t    pos;
+-    int64_t    end;
+-    size_t     size;
++    int64_t    pos;   /* file offset of buffer start (buf[0]) */
++    int64_t    end;   /* size of file */
++    size_t     size;  /* bytes in buf */
+ } BITSTREAM;
+ 
+ BD_PRIVATE void bb_init( BITBUFFER *bb, const uint8_t *p_data, size_t i_data );
+-BD_PRIVATE void bs_init( BITSTREAM *bs, BD_FILE_H *fp );
++BD_PRIVATE int  bs_init( BITSTREAM *bs, BD_FILE_H *fp ) BD_USED;
+ BD_PRIVATE void bb_seek( BITBUFFER *bb, int64_t off, int whence);
+-BD_PRIVATE void bs_seek( BITSTREAM *bs, int64_t off, int whence);
++//BD_PRIVATE void bs_seek( BITSTREAM *bs, int64_t off, int whence);
+ //BD_PRIVATE void bb_seek_byte( BITBUFFER *bb, int64_t off);
+-BD_PRIVATE void bs_seek_byte( BITSTREAM *s, int64_t off);
++BD_PRIVATE int  bs_seek_byte( BITSTREAM *s, int64_t off) BD_USED;
+ BD_PRIVATE void bb_skip( BITBUFFER *bb, size_t i_count );
+ BD_PRIVATE void bs_skip( BITSTREAM *bs, size_t i_count );  /* note: i_count must be less than BF_BUF_SIZE */
+ BD_PRIVATE uint32_t bb_read( BITBUFFER *bb, int i_count );
