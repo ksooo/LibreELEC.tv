@@ -41,3 +41,10 @@ if [ "$BLURAY_AACS_SUPPORT" = "yes" ]; then
 else
   PKG_CONFIGURE_OPTS_TARGET="$PKG_CONFIGURE_OPTS_TARGET --without-libaacs"
 fi
+
+# Hack! To dumb/lazy to do this in a clean way.
+post_makeinstall_target() {
+  mkdir -p $INSTALL/usr/lib/bd
+  mv $INSTALL/usr/lib/libbdplus.* $INSTALL/usr/lib/bd
+  ln -sf /storage/bd/lib/libbdplus.so.0 $INSTALL/usr/lib/libbdplus.so.0
+}
