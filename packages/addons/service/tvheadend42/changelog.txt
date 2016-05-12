@@ -1,3 +1,10 @@
+7.0.104
+- update to Tvheadend 4.1.2195
+- added TRACE debug option at the addon config
+
+7.0.103
+- update to Tvheadend 4.1.2134
+
 7.0.102
 - Update to Tvheadend 4.1.1945
 - fixes problems with DVB-C sticks
