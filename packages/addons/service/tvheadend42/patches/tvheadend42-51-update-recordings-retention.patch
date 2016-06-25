@@ -1,0 +1,38 @@
+diff --git a/src/dvr/dvr_db.c b/src/dvr/dvr_db.c
+index 5adb0b1..828ca1a 100644
+--- a/src/dvr/dvr_db.c
++++ b/src/dvr/dvr_db.c
+@@ -1726,6 +1726,20 @@ static dvr_entry_t *_dvr_entry_update
+         de->de_playposition = playposition;
+         save |= DVR_UPDATED_PLAYPOS;
+       }
++      if (retention && (retention != de->de_retention)) {
++        de->de_retention = retention;
++        save |= DVR_UPDATED_RETENTION;
++      }
++      if (removal && (removal != de->de_removal)) {
++        de->de_removal = removal;
++        save |= DVR_UPDATED_REMOVAL;
++      }
++      if (title) {
++        save |= lang_str_set(&de->de_title, title, lang) ? DVR_UPDATED_TITLE : 0;
++      }
++      if (subtitle) {
++        save |= lang_str_set(&de->de_subtitle, subtitle, lang) ? DVR_UPDATED_SUBTITLE : 0;
++      }
+     }
+     goto dosave;
+   }
+diff --git a/src/htsp_server.c b/src/htsp_server.c
+index 42409f3..f2b140f 100644
+--- a/src/htsp_server.c
++++ b/src/htsp_server.c
+@@ -66,7 +66,7 @@
+ 
+ static void *htsp_server, *htsp_server_2;
+ 
+-#define HTSP_PROTO_VERSION 27
++#define HTSP_PROTO_VERSION 28
+ 
+ #define HTSP_ASYNC_OFF  0x00
+ #define HTSP_ASYNC_ON   0x01
