@@ -1,0 +1,15 @@
+diff --git a/data/conf/descrambler b/data/conf/descrambler
+index 8caabfb..2d0120a 100644
+--- a/data/conf/descrambler
++++ b/data/conf/descrambler
+@@ -1,8 +1,8 @@
+ {
+   "const_cw" : [
+     {
+-      "name" : "BISS",
+-      "caid" : "2600"
++      "name" : "HD+",
++      "caid" : "1843"
+     }
+   ],
+   "quick_ecm" : [
