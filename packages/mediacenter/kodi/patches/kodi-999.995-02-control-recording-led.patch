@@ -1,0 +1,54 @@
+diff -Naur xbmc/xbmc/pvr/timers/PVRTimers.cpp.orig xbmc/xbmc/pvr/timers/PVRTimers.cpp 
+--- xbmc/xbmc/pvr/timers/PVRTimers.cpp.orig	2014-05-19 00:44:40.000000000 +0200
++++ xbmc/xbmc/pvr/timers/PVRTimers.cpp	2014-05-24 16:48:33.358770212 +0200
+@@ -18,6 +18,8 @@
+  *
+  */
+ 
++#include <sys/ioctl.h>
++
+ #include "PVRTimers.h"
+ 
+ #include <cassert>
+@@ -99,6 +101,13 @@
+   return false;
+ }
+ 
++static void SetRecordingLED(bool bOn)
++{
++  static int fd = open("/dev/ttyS0", O_RDWR | O_NDELAY);
++  int state = bOn ? TIOCM_RTS : 0;
++  ioctl(fd, TIOCMSET, &state);
++}
++
+ bool CPVRTimers::UpdateEntries(const CPVRTimers &timers, const std::vector<int> &failedClients)
+ {
+   bool bChanged(false);
+@@ -255,6 +264,8 @@
+   m_bIsUpdating = false;
+   if (bChanged)
+   {
++    SetRecordingLED(IsRecording());
++
+     UpdateChannels();
+     SetChanged();
+     lock.Leave();
+@@ -300,6 +311,8 @@
+ 
+   UpdateEpgEvent(tag);
+ 
++  SetRecordingLED(IsRecording());
++
+   return tag->UpdateEntry(timer);
+ }
+ 
+@@ -456,6 +469,9 @@
+           CLog::Log(LOGDEBUG,"PVRTimers - %s - deleted timer %d on client %d", __FUNCTION__, (*timerIt)->m_iClientIndex, (*timerIt)->m_iClientId);
+           bReturn = (*timerIt)->DeleteFromClient(true) || bReturn;
+           bChanged = true;
++
++          SetRecordingLED(IsRecording());
++
+         }
+       }
+     }

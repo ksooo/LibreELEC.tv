@@ -1,0 +1,23 @@
+diff -Naur xbmc/xbmc/peripherals/devices/PeripheralCecAdapter.cpp.orig xbmc/xbmc/peripherals/devices/PeripheralCecAdapter.cpp
+--- xbmc/xbmc/peripherals/devices/PeripheralCecAdapter.cpp.orig	2014-02-07 00:41:35.000000000 +0100
++++ xbmc/xbmc/peripherals/devices/PeripheralCecAdapter.cpp	2014-02-10 22:34:07.253217138 +0100
+@@ -318,8 +318,8 @@
+   CLog::Log(LOGDEBUG, "%s - opening a connection to the CEC adapter: %s", __FUNCTION__, m_strComPort.c_str());
+ 
+   // scanning the CEC bus takes about 5 seconds, so display a notification to inform users that we're busy
+-  std::string strMessage = StringUtils::Format(g_localizeStrings.Get(21336).c_str(), g_localizeStrings.Get(36000).c_str());
+-  CGUIDialogKaiToast::QueueNotification(CGUIDialogKaiToast::Info, g_localizeStrings.Get(36000), strMessage);
++//  std::string strMessage = StringUtils::Format(g_localizeStrings.Get(21336).c_str(), g_localizeStrings.Get(36000).c_str());
++//  CGUIDialogKaiToast::QueueNotification(CGUIDialogKaiToast::Info, g_localizeStrings.Get(36000), strMessage);
+ 
+   bool bConnectionFailedDisplayed(false);
+ 
+@@ -1550,7 +1550,7 @@
+   m_adapter->m_bIsReady = true;
+ 
+   // and let the gui know that we're done
+-  CGUIDialogKaiToast::QueueNotification(CGUIDialogKaiToast::Info, g_localizeStrings.Get(36000), strNotification);
++  //CGUIDialogKaiToast::QueueNotification(CGUIDialogKaiToast::Info, g_localizeStrings.Get(36000), strNotification);
+ 
+   CSingleLock lock(m_critSection);
+   m_bIsUpdating = false;

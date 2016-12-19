@@ -1,0 +1,628 @@
+diff --git a/lib/DllLibbluray.h b/lib/DllLibbluray.h
+index f5a337f..8850698 100644
+--- a/lib/DllLibbluray.h
++++ b/lib/DllLibbluray.h
+@@ -80,6 +80,7 @@ public:
+ #endif
+   virtual int      bd_menu_call                 (BLURAY *bd, int64_t pts)=0;
+   virtual int      bd_mouse_select              (BLURAY *bd, int64_t pts, uint16_t x, uint16_t y)=0;
++  virtual int      bd_get_sound_effect          (BLURAY *bd, unsigned sound_id, struct bd_sound_effect *effect)=0;
+ };
+ 
+ class DllLibbluray : public DllDynamic, DllLibblurayInterface
+@@ -128,6 +129,7 @@ class DllLibbluray : public DllDynamic, DllLibblurayInterface
+ #endif
+   DEFINE_METHOD2(int,                 bd_menu_call,              (BLURAY *p1, int64_t p2))
+   DEFINE_METHOD4(int,                 bd_mouse_select,           (BLURAY *p1, int64_t p2, uint16_t p3, uint16_t p4))
++  DEFINE_METHOD3(int,                 bd_get_sound_effect,       (BLURAY *p1, unsigned p2, struct bd_sound_effect* p3))
+ 
+   BEGIN_METHOD_RESOLVE()
+     RESOLVE_METHOD(bd_get_titles)
+@@ -172,6 +174,7 @@ class DllLibbluray : public DllDynamic, DllLibblurayInterface
+ #endif
+     RESOLVE_METHOD(bd_menu_call)
+     RESOLVE_METHOD(bd_mouse_select)
++    RESOLVE_METHOD(bd_get_sound_effect)
+   END_METHOD_RESOLVE()
+ 
+ public:
+diff --git a/xbmc/cores/VideoPlayer/DVDInputStreams/DVDInputStreamBluray.cpp b/xbmc/cores/VideoPlayer/DVDInputStreams/DVDInputStreamBluray.cpp
+index b3e9b16..353cc97 100644
+--- a/xbmc/cores/VideoPlayer/DVDInputStreams/DVDInputStreamBluray.cpp
++++ b/xbmc/cores/VideoPlayer/DVDInputStreams/DVDInputStreamBluray.cpp
+@@ -156,6 +156,9 @@ int DllLibbluray::dir_read(BD_DIR_H *dir, BD_DIRENT *entry)
+ 
+ BD_DIR_H *DllLibbluray::dir_open(const char* dirname)
+ {
++  if (CFile::Exists(dirname))
++    return NULL;
++
+     CLog::Log(LOGDEBUG, "CDVDInputStreamBluray - Opening dir %s\n", dirname);
+     SDirState *st = new SDirState();
+ 
+@@ -400,18 +403,17 @@ bool CDVDInputStreamBluray::Open()
+       m_title = GetTitleLongest();
+   }
+ 
+-  if(m_navmode)
++  SetupPlayerSettings();
++  m_dll->bd_get_event(m_bd, NULL);
++
++  if (m_navmode)
+   {
+-    SetupPlayerSettings();
+ 
+     m_dll->bd_register_overlay_proc (m_bd, this, bluray_overlay_cb);
+ #ifdef HAVE_LIBBLURAY_BDJ
+     m_dll->bd_register_argb_overlay_proc (m_bd, this, bluray_overlay_argb_cb, NULL);
+ #endif
+ 
+-    m_dll->bd_get_event(m_bd, NULL);
+-
+-
+     if(m_dll->bd_play(m_bd) <= 0)
+     {
+       CLog::Log(LOGERROR, "CDVDInputStreamBluray::Open - failed play disk %s", strPath.c_str());
+@@ -435,6 +437,10 @@ bool CDVDInputStreamBluray::Open()
+     m_clip = 0;
+   }
+ 
++  // Process any events that occured during opening
++  while (m_dll->bd_get_event(m_bd, &m_event))
++    ProcessEvent();
++
+   return true;
+ }
+ 
+@@ -458,9 +464,30 @@ void CDVDInputStreamBluray::ProcessEvent() {
+ 
+   int pid = -1;
+   switch (m_event.event) {
++  
++   /* errors */
+ 
+   case BD_EVENT_ERROR:
+-    CLog::Log(LOGERROR, "CDVDInputStreamBluray - BD_EVENT_ERROR");
++    switch (m_event.param)
++    {
++    case BD_ERROR_HDMV:
++    case BD_ERROR_BDJ:
++      m_player->OnDiscNavResult(nullptr, BD_EVENT_MENU_ERROR);
++      break;
++    case BD_ERROR_AACS:
++      break;
++    case BD_ERROR_BDPLUS:
++      break;
++    default:
++      break;
++
++    }
++    CLog::Log(LOGERROR, "CDVDInputStreamBluray - BD_EVENT_ERROR: Fatal error. Playback can't be continued.");
++    m_hold = HOLD_ERROR;
++    break;
++
++  case BD_EVENT_READ_ERROR:
++    CLog::Log(LOGERROR, "CDVDInputStreamBluray - BD_EVENT_READ_ERROR");
+     break;
+ 
+   case BD_EVENT_ENCRYPTED:
+@@ -479,7 +506,7 @@ void CDVDInputStreamBluray::ProcessEvent() {
+   case BD_EVENT_STILL_TIME:
+     CLog::Log(LOGDEBUG, "CDVDInputStreamBluray - BD_EVENT_STILL_TIME %d", m_event.param);
+     pid = m_event.param;
+-    m_player->OnDVDNavResult((void*) &pid, 5);
++    m_player->OnDiscNavResult(static_cast<void*>(&pid), BD_EVENT_STILL_TIME);
+     m_hold = HOLD_STILL;
+     break;
+ 
+@@ -547,14 +574,14 @@ void CDVDInputStreamBluray::ProcessEvent() {
+       pid = m_title->clips[m_clip].audio_streams[m_event.param - 1].pid;
+     CLog::Log(LOGDEBUG, "CDVDInputStreamBluray - BD_EVENT_AUDIO_STREAM %d %d",
+         m_event.param, pid);
+-    m_player->OnDVDNavResult((void*) &pid, 2);
++    m_player->OnDiscNavResult(static_cast<void*>(&pid), BD_EVENT_AUDIO_STREAM);
+     break;
+ 
+   case BD_EVENT_PG_TEXTST:
+     CLog::Log(LOGDEBUG, "CDVDInputStreamBluray - BD_EVENT_PG_TEXTST %d",
+         m_event.param);
+     pid = m_event.param;
+-    m_player->OnDVDNavResult((void*) &pid, 4);
++    m_player->OnDiscNavResult(static_cast<void*>(&pid), BD_EVENT_PG_TEXTST);
+     break;
+ 
+   case BD_EVENT_PG_TEXTST_STREAM:
+@@ -566,26 +593,36 @@ void CDVDInputStreamBluray::ProcessEvent() {
+     CLog::Log(LOGDEBUG,
+         "CDVDInputStreamBluray - BD_EVENT_PG_TEXTST_STREAM %d, %d",
+         m_event.param, pid);
+-    m_player->OnDVDNavResult((void*) &pid, 3);
++    m_player->OnDiscNavResult(static_cast<void*>(&pid), BD_EVENT_PG_TEXTST_STREAM);
+     break;
+ 
+-#if (BLURAY_VERSION >= BLURAY_VERSION_CODE(0,2,2))
+   case BD_EVENT_MENU:
+     CLog::Log(LOGDEBUG, "CDVDInputStreamBluray - BD_EVENT_MENU %d",
+         m_event.param);
+-    m_menu = !!m_event.param;
++    m_menu = (m_event.param != 0);
+     break;
+-#endif
+-#if (BLURAY_VERSION >= BLURAY_VERSION_CODE(0,3,0))
++
+   case BD_EVENT_IDLE:
+-#ifdef HAVE_LIBBLURAY_BDJ
+     Sleep(100);
+-#else
+-    m_hold = HOLD_ERROR;
+-    m_player->OnDVDNavResult(NULL, 6);
+-#endif
+     break;
+-#endif
++
++  case BD_EVENT_SOUND_EFFECT:
++  {
++    BLURAY_SOUND_EFFECT effect;
++    if (m_event.param >= 0)
++    {
++      if (m_dll->bd_get_sound_effect(m_bd, m_event.param, &effect) <= 0)
++      {
++        CLog::Log(LOGDEBUG, "CDVDInputStreamBluray - BD_EVENT_SOUND_EFFECT %d not valid",
++          m_event.param);
++      }
++      else
++      {
++        CLog::Log(LOGDEBUG, "CDVDInputStreamBluray - BD_EVENT_SOUND_EFFECT %d",
++          m_event.param);
++      }
++    }
++  }
+ 
+   case BD_EVENT_IG_STREAM:
+   case BD_EVENT_SECONDARY_AUDIO:
+@@ -596,6 +633,10 @@ void CDVDInputStreamBluray::ProcessEvent() {
+   case BD_EVENT_PLAYMARK:
+     break;
+ 
++  case BD_EVENT_PLAYLIST_STOP:
++    CLog::Log(LOGDEBUG, "CDVDInputStreamBluray - BD_EVENT_PLAYLIST_STOP: flush buffers");
++    m_player->OnDiscNavResult(nullptr, BD_EVENT_PLAYLIST_STOP);
++    break;
+   case BD_EVENT_NONE:
+     break;
+ 
+@@ -612,10 +653,10 @@ void CDVDInputStreamBluray::ProcessEvent() {
+ 
+ int CDVDInputStreamBluray::Read(uint8_t* buf, int buf_size)
+ {
++  int result = 0;
+   m_dispTimeBeforeRead = (int)(m_dll->bd_tell_time(m_bd) / 90);
+   if(m_navmode)
+   {
+-    int result = 0;
+     do {
+ 
+       if(m_hold == HOLD_HELD)
+@@ -665,10 +706,14 @@ int CDVDInputStreamBluray::Read(uint8_t* buf, int buf_size)
+ 
+     } while(result == 0);
+ 
+-    return result;
+   }
+   else
+-    return m_dll->bd_read(m_bd, buf, buf_size);
++  {
++    result = m_dll->bd_read(m_bd, buf, buf_size);
++    while (m_dll->bd_get_event(m_bd, &m_event))
++      ProcessEvent();
++  }
++  return result;
+ }
+ 
+ static uint8_t  clamp(double v)
+@@ -694,7 +739,7 @@ void CDVDInputStreamBluray::OverlayClose()
+     m_planes[i].o.clear();
+   CDVDOverlayGroup* group   = new CDVDOverlayGroup();
+   group->bForced = true;
+-  m_player->OnDVDNavResult(group, 0);
++  m_player->OnDiscNavResult(static_cast<void*>(group), BD_EVENT_MENU_OVERLAY);
+   group->Release();
+ #endif
+ }
+@@ -765,7 +810,7 @@ void CDVDInputStreamBluray::OverlayFlush(int64_t pts)
+       group->m_overlays.push_back((*it)->Acquire());
+   }
+ 
+-  m_player->OnDVDNavResult(group, 0);
++  m_player->OnDiscNavResult(static_cast<void*>(group), BD_EVENT_MENU_OVERLAY);
+   group->Release();
+ #endif
+ }
+@@ -916,8 +961,11 @@ bool CDVDInputStreamBluray::PosTime(int ms)
+ {
+   if(m_dll->bd_seek_time(m_bd, ms * 90) < 0)
+     return false;
+-  else
+-    return true;
++
++  while (m_dll->bd_get_event(m_bd, &m_event))
++    ProcessEvent();
++
++  return true;
+ }
+ 
+ int CDVDInputStreamBluray::GetChapterCount()
+@@ -940,8 +988,11 @@ bool CDVDInputStreamBluray::SeekChapter(int ch)
+ {
+   if(m_title && m_dll->bd_seek_chapter(m_bd, ch-1) < 0)
+     return false;
+-  else
+-    return true;
++
++  while (m_dll->bd_get_event(m_bd, &m_event))
++    ProcessEvent();
++
++  return true;
+ }
+ 
+ int64_t CDVDInputStreamBluray::GetChapterPos(int ch)
+@@ -1028,17 +1079,8 @@ void CDVDInputStreamBluray::GetStreamInfo(int pid, char* language)
+ 
+ CDVDInputStream::ENextStream CDVDInputStreamBluray::NextStream()
+ {
+-  if(!m_navmode || m_hold == HOLD_EXIT)
+-    return NEXTSTREAM_NONE;
+-
+-  if (m_hold == HOLD_ERROR)
+-  {
+-#if (BLURAY_VERSION < BLURAY_VERSION_CODE(0,3,0))
+-    CLog::Log(LOGDEBUG, "CDVDInputStreamBluray::NextStream - libbluray navigation mode read error");
+-    CGUIDialogKaiToast::QueueNotification(g_localizeStrings.Get(25008), g_localizeStrings.Get(25009));
+-#endif
++  if(!m_navmode || m_hold == HOLD_EXIT || m_hold == HOLD_ERROR)
+     return NEXTSTREAM_NONE;
+-  }
+ 
+   /* process any current event */
+   ProcessEvent();
+@@ -1058,7 +1100,18 @@ void CDVDInputStreamBluray::UserInput(bd_vk_key_e vk)
+ {
+   if(m_bd == NULL || !m_navmode)
+     return;
+-  m_dll->bd_user_input(m_bd, -1, vk);
++
++  int ret = m_dll->bd_user_input(m_bd, -1, vk);
++  if (ret < 0)
++  {
++    CLog::Log(LOGDEBUG, "CDVDInputStreamBluray::UserInput - user input failed");
++  }
++  else
++  {
++    /* process all queued up events */
++    while (m_dll->bd_get_event(m_bd, &m_event))
++      ProcessEvent();
++  }
+ }
+ 
+ bool CDVDInputStreamBluray::MouseMove(const CPoint &point)
+@@ -1131,6 +1184,10 @@ void CDVDInputStreamBluray::SkipStill()
+   {
+     m_hold = HOLD_HELD;
+     m_dll->bd_read_skip_still(m_bd);
++
++    /* process all queued up events */
++    while (m_dll->bd_get_event(m_bd, &m_event))
++      ProcessEvent();
+   }
+ }
+ 
+diff --git a/xbmc/cores/VideoPlayer/DVDInputStreams/DVDInputStreamBluray.h b/xbmc/cores/VideoPlayer/DVDInputStreams/DVDInputStreamBluray.h
+index b967a85..45219f0 100644
+--- a/xbmc/cores/VideoPlayer/DVDInputStreams/DVDInputStreamBluray.h
++++ b/xbmc/cores/VideoPlayer/DVDInputStreams/DVDInputStreamBluray.h
+@@ -34,6 +34,9 @@ extern "C"
+ }
+ 
+ #define MAX_PLAYLIST_ID 99999
++#define BD_EVENT_MENU_OVERLAY -1
++#define BD_EVENT_MENU_ERROR   -2
++#define BD_EVENT_ENC_ERROR    -3
+ 
+ class CDVDOverlayImage;
+ class DllLibbluray;
+diff --git a/xbmc/cores/VideoPlayer/DVDInputStreams/DVDInputStreamNavigator.cpp b/xbmc/cores/VideoPlayer/DVDInputStreams/DVDInputStreamNavigator.cpp
+index 7990ba5..6605615 100644
+--- a/xbmc/cores/VideoPlayer/DVDInputStreams/DVDInputStreamNavigator.cpp
++++ b/xbmc/cores/VideoPlayer/DVDInputStreams/DVDInputStreamNavigator.cpp
+@@ -260,7 +260,7 @@ int CDVDInputStreamNavigator::Read(uint8_t* buf, int buf_size)
+       {
+         m_bEOF = true;
+         CLog::Log(LOGERROR,"CDVDInputStreamNavigator: Stopping playback due to infinite loop, caused by badly authored DVD navigation structure. Try enabling 'Attempt to skip introduction before DVD menu'.");
+-        m_pVideoPlayer->OnDVDNavResult(NULL, DVDNAV_STOP);
++        m_pVideoPlayer->OnDiscNavResult(NULL, DVDNAV_STOP);
+         return -1; // fail and stop playback.
+       }
+     }
+@@ -334,7 +334,7 @@ int CDVDInputStreamNavigator::ProcessBlock(uint8_t* dest_buffer, int* read)
+         // A length of 0xff means an indefinite still which has to be skipped
+         // indirectly by some user interaction.
+         m_holdmode = HOLDMODE_NONE;
+-        iNavresult = m_pVideoPlayer->OnDVDNavResult(buf, DVDNAV_STILL_FRAME);
++        iNavresult = m_pVideoPlayer->OnDiscNavResult(buf, DVDNAV_STILL_FRAME);
+       }
+       break;
+ 
+@@ -353,7 +353,7 @@ int CDVDInputStreamNavigator::ProcessBlock(uint8_t* dest_buffer, int* read)
+           iNavresult = NAVRESULT_HOLD;
+         }
+         else
+-          iNavresult = m_pVideoPlayer->OnDVDNavResult(buf, DVDNAV_WAIT);
++          iNavresult = m_pVideoPlayer->OnDiscNavResult(buf, DVDNAV_WAIT);
+ 
+         /* if user didn't care for action, just skip it */
+         if(iNavresult == NAVRESULT_NOP)
+@@ -365,7 +365,7 @@ int CDVDInputStreamNavigator::ProcessBlock(uint8_t* dest_buffer, int* read)
+       // Player applications should pass the new colour lookup table to their
+       // SPU decoder. The CLUT is given as 16 uint32_t's in the buffer.
+       {
+-        iNavresult = m_pVideoPlayer->OnDVDNavResult(buf, DVDNAV_SPU_CLUT_CHANGE);
++        iNavresult = m_pVideoPlayer->OnDiscNavResult(buf, DVDNAV_SPU_CLUT_CHANGE);
+       }
+       break;
+ 
+@@ -392,7 +392,7 @@ int CDVDInputStreamNavigator::ProcessBlock(uint8_t* dest_buffer, int* read)
+           SetActiveSubtitleStream(0);
+         }
+         m_bCheckButtons = true;
+-        iNavresult = m_pVideoPlayer->OnDVDNavResult(buf, DVDNAV_SPU_STREAM_CHANGE);
++        iNavresult = m_pVideoPlayer->OnDiscNavResult(buf, DVDNAV_SPU_STREAM_CHANGE);
+       }
+       break;
+ 
+@@ -418,14 +418,14 @@ int CDVDInputStreamNavigator::ProcessBlock(uint8_t* dest_buffer, int* read)
+           SetActiveAudioStream(0);
+         }
+ 
+-        iNavresult = m_pVideoPlayer->OnDVDNavResult(buf, DVDNAV_AUDIO_STREAM_CHANGE);
++        iNavresult = m_pVideoPlayer->OnDiscNavResult(buf, DVDNAV_AUDIO_STREAM_CHANGE);
+       }
+ 
+       break;
+ 
+     case DVDNAV_HIGHLIGHT:
+       {
+-        iNavresult = m_pVideoPlayer->OnDVDNavResult(buf, DVDNAV_HIGHLIGHT);
++        iNavresult = m_pVideoPlayer->OnDiscNavResult(buf, DVDNAV_HIGHLIGHT);
+       }
+       break;
+ 
+@@ -448,7 +448,7 @@ int CDVDInputStreamNavigator::ProcessBlock(uint8_t* dest_buffer, int* read)
+           {
+             m_bInMenu = menu;
+           }
+-          iNavresult = m_pVideoPlayer->OnDVDNavResult(buf, DVDNAV_VTS_CHANGE);
++          iNavresult = m_pVideoPlayer->OnDiscNavResult(buf, DVDNAV_VTS_CHANGE);
+         }
+       }
+       break;
+@@ -501,7 +501,7 @@ int CDVDInputStreamNavigator::ProcessBlock(uint8_t* dest_buffer, int* read)
+         m_iTime      = (int) (m_iCellStart / 90);
+         m_iTotalTime = (int) (cell_change_event->pgc_length / 90);
+ 
+-        iNavresult = m_pVideoPlayer->OnDVDNavResult(buf, DVDNAV_CELL_CHANGE);
++        iNavresult = m_pVideoPlayer->OnDiscNavResult(buf, DVDNAV_CELL_CHANGE);
+       }
+       break;
+ 
+@@ -561,7 +561,7 @@ int CDVDInputStreamNavigator::ProcessBlock(uint8_t* dest_buffer, int* read)
+ 
+         m_iTime = (int) ( m_dll.dvdnav_get_current_time(m_dvdnav)  / 90 );
+ 
+-        iNavresult = m_pVideoPlayer->OnDVDNavResult((void*)pci, DVDNAV_NAV_PACKET);
++        iNavresult = m_pVideoPlayer->OnDiscNavResult((void*)pci, DVDNAV_NAV_PACKET);
+       }
+       break;
+ 
+@@ -569,7 +569,7 @@ int CDVDInputStreamNavigator::ProcessBlock(uint8_t* dest_buffer, int* read)
+       // This event is issued whenever a non-seamless operation has been executed.
+       // Applications with fifos should drop the fifos content to speed up responsiveness.
+       {
+-        iNavresult = m_pVideoPlayer->OnDVDNavResult(NULL, DVDNAV_HOP_CHANNEL);
++        iNavresult = m_pVideoPlayer->OnDiscNavResult(NULL, DVDNAV_HOP_CHANNEL);
+       }
+       break;
+ 
+@@ -581,7 +581,7 @@ int CDVDInputStreamNavigator::ProcessBlock(uint8_t* dest_buffer, int* read)
+         // the disc. reading further results in a crash
+         m_bEOF = true;
+ 
+-        m_pVideoPlayer->OnDVDNavResult(NULL, DVDNAV_STOP);
++        m_pVideoPlayer->OnDiscNavResult(NULL, DVDNAV_STOP);
+         iNavresult = NAVRESULT_ERROR;
+       }
+       break;
+diff --git a/xbmc/cores/VideoPlayer/DVDInputStreams/DVDInputStreamNavigator.h b/xbmc/cores/VideoPlayer/DVDInputStreams/DVDInputStreamNavigator.h
+index beab7ab..58d1e32 100644
+--- a/xbmc/cores/VideoPlayer/DVDInputStreams/DVDInputStreamNavigator.h
++++ b/xbmc/cores/VideoPlayer/DVDInputStreams/DVDInputStreamNavigator.h
+@@ -86,19 +86,6 @@ struct DVDNavVideoStreamInfo : DVDNavStreamInfo
+   {}
+ };
+ 
+-class DVDNavResult
+-{
+-public:
+-  DVDNavResult() :
+-      pData (NULL ),
+-      type  (0    )
+-  {
+-  };
+-  DVDNavResult(void* p, int t) { pData = p; type = t; };
+-  void* pData;
+-  int type;
+-};
+-
+ class CDVDInputStreamNavigator
+   : public CDVDInputStream
+   , public CDVDInputStream::IDisplayTime
+diff --git a/xbmc/cores/VideoPlayer/IVideoPlayer.h b/xbmc/cores/VideoPlayer/IVideoPlayer.h
+index 6897982..fe3e0a3 100644
+--- a/xbmc/cores/VideoPlayer/IVideoPlayer.h
++++ b/xbmc/cores/VideoPlayer/IVideoPlayer.h
+@@ -36,7 +36,6 @@
+ template <typename T> class CRectGen;
+ typedef CRectGen<float>  CRect;
+ 
+-class DVDNavResult;
+ class CDVDMsg;
+ class CDVDStreamInfo;
+ class CProcessInfo;
+@@ -52,7 +51,7 @@ struct SStartMsg
+ class IVideoPlayer
+ {
+ public:
+-  virtual int OnDVDNavResult(void* pData, int iMessage) = 0;
++  virtual int OnDiscNavResult(void* pData, int iMessage) = 0;
+   virtual void GetVideoResolution(unsigned int &width, unsigned int &height) = 0;
+   virtual ~IVideoPlayer() { }
+ };
+diff --git a/xbmc/cores/VideoPlayer/VideoPlayer.cpp b/xbmc/cores/VideoPlayer/VideoPlayer.cpp
+index 7a623bd..90904aa 100644
+--- a/xbmc/cores/VideoPlayer/VideoPlayer.cpp
++++ b/xbmc/cores/VideoPlayer/VideoPlayer.cpp
+@@ -25,6 +25,7 @@
+ #include "DVDInputStreams/DVDInputStream.h"
+ #include "DVDInputStreams/DVDFactoryInputStream.h"
+ #include "DVDInputStreams/DVDInputStreamNavigator.h"
++#include "DVDInputStreams/DVDInputStreamBluray.h"
+ #include "DVDInputStreams/DVDInputStreamPVRManager.h"
+ 
+ #include "DVDDemuxers/DVDDemux.h"
+@@ -4018,49 +4019,72 @@ void CVideoPlayer::FlushBuffers(double pts, bool accurate, bool sync)
+ }
+ 
+ // since we call ffmpeg functions to decode, this is being called in the same thread as ::Process() is
+-int CVideoPlayer::OnDVDNavResult(void* pData, int iMessage)
++int CVideoPlayer::OnDiscNavResult(void* pData, int iMessage)
+ {
+   if (m_pInputStream->IsStreamType(DVDSTREAM_TYPE_BLURAY))
+   {
+-    if(iMessage == 0)
+-      m_overlayContainer.Add((CDVDOverlay*)pData);
+-    else if(iMessage == 1)
++    switch (iMessage)
++    {
++    case BD_EVENT_MENU_OVERLAY:
++      m_overlayContainer.Add(static_cast<CDVDOverlay*>(pData));
++      break;
++    case BD_EVENT_PLAYLIST_STOP:
+       m_messenger.Put(new CDVDMsg(CDVDMsg::GENERAL_FLUSH));
+-    else if(iMessage == 2)
+-      m_dvd.iSelectedAudioStream = *(int*)pData;
+-    else if(iMessage == 3)
+-      m_dvd.iSelectedSPUStream   = *(int*)pData;
+-    else if(iMessage == 4)
+-      m_VideoPlayerVideo->EnableSubtitle(*(int*)pData ? true: false);
+-    else if(iMessage == 5)
++      break;
++    case BD_EVENT_AUDIO_STREAM:
++      m_dvd.iSelectedAudioStream = *static_cast<int*>(pData);
++      break;
++
++    case BD_EVENT_PG_TEXTST_STREAM:
++      m_dvd.iSelectedSPUStream = *static_cast<int*>(pData);
++      break;
++    case BD_EVENT_PG_TEXTST:
++    {
++      bool enable = (*static_cast<int*>(pData) != 0);
++      m_VideoPlayerVideo->EnableSubtitle(enable);
++    }
++    break;
++    case BD_EVENT_STILL_TIME:
+     {
+       if (m_dvd.state != DVDSTATE_STILL)
+       {
+         // else notify the player we have received a still frame
+ 
+-        m_dvd.iDVDStillTime      = *(int*)pData;
++        m_dvd.iDVDStillTime = *(int*)pData;
+         m_dvd.iDVDStillStartTime = XbmcThreads::SystemClockMillis();
+ 
+         /* adjust for the output delay in the video queue */
+         unsigned int time = 0;
+-        if( m_CurrentVideo.stream && m_dvd.iDVDStillTime > 0 )
++        if (m_CurrentVideo.stream && m_dvd.iDVDStillTime > 0)
+         {
+-          time = (unsigned int)(m_VideoPlayerVideo->GetOutputDelay() / ( DVD_TIME_BASE / 1000 ));
+-          if( time < 10000 && time > 0 )
++          time = (unsigned int)(m_VideoPlayerVideo->GetOutputDelay() / (DVD_TIME_BASE / 1000));
++          if (time < 10000 && time > 0)
+             m_dvd.iDVDStillTime += time;
+         }
+         m_dvd.state = DVDSTATE_STILL;
+         CLog::Log(LOGDEBUG,
+-                  "DVDNAV_STILL_FRAME - waiting %i sec, with delay of %d sec",
+-                  m_dvd.iDVDStillTime, time / 1000);
++          "BD_EVENT_STILL_TIME - waiting %i sec, with delay of %d sec",
++          m_dvd.iDVDStillTime, time / 1000);
+       }
+     }
+-    else if (iMessage == 6)
++    break;
++    case BD_EVENT_MENU_ERROR:
+     {
+       m_dvd.state = DVDSTATE_NORMAL;
+-      CLog::Log(LOGDEBUG, "CVideoPlayer::OnDVDNavResult - libbluray read error (DVDSTATE_NORMAL)");
++      CLog::Log(LOGDEBUG, "CVideoPlayer::OnDiscNavResult - libbluray menu not supported (DVDSTATE_NORMAL)");
+       CGUIDialogKaiToast::QueueNotification(g_localizeStrings.Get(25008), g_localizeStrings.Get(25009));
+     }
++    break;
++    case BD_EVENT_ENC_ERROR:
++    {
++      m_dvd.state = DVDSTATE_NORMAL;
++      CLog::Log(LOGDEBUG, "CVideoPlayer::OnDiscNavResult - libbluray .m2ts file is encrypted and can't be played (DVDSTATE_NORMAL)");
++      CGUIDialogKaiToast::QueueNotification(g_localizeStrings.Get(16026), g_localizeStrings.Get(16029));
++    }
++    break;
++    default:
++      break;
++    }
+ 
+     return 0;
+   }
+diff --git a/xbmc/cores/VideoPlayer/VideoPlayer.h b/xbmc/cores/VideoPlayer/VideoPlayer.h
+index f6f6f62..ea1dea7 100644
+--- a/xbmc/cores/VideoPlayer/VideoPlayer.h
++++ b/xbmc/cores/VideoPlayer/VideoPlayer.h
+@@ -396,7 +396,7 @@ public:
+   virtual bool IsCaching() const override;
+   virtual int GetCacheLevel() const override;
+ 
+-  virtual int OnDVDNavResult(void* pData, int iMessage) override;
++  virtual int OnDiscNavResult(void* pData, int iMessage) override;
+   void GetVideoResolution(unsigned int &width, unsigned int &height) override;
+ 
+ protected:
+diff --git a/xbmc/cores/VideoPlayer/VideoRenderers/RenderManager.cpp b/xbmc/cores/VideoPlayer/VideoRenderers/RenderManager.cpp
+index 5230c6d..9b1203f 100644
+--- a/xbmc/cores/VideoPlayer/VideoRenderers/RenderManager.cpp
++++ b/xbmc/cores/VideoPlayer/VideoRenderers/RenderManager.cpp
+@@ -212,15 +212,18 @@ bool CRenderManager::Configure(DVDVideoPicture& picture, float fps, unsigned fla
+   {
+     CSingleLock lock(m_presentlock);
+     XbmcThreads::EndTime endtime(5000);
++    m_forceNext = true;
+     while (m_presentstep != PRESENT_IDLE)
+     {
+       if(endtime.IsTimePast())
+       {
+         CLog::Log(LOGWARNING, "CRenderManager::Configure - timeout waiting for state");
++        m_forceNext = false;
+         return false;
+       }
+       m_presentevent.wait(lock, endtime.MillisLeft());
+     }
++    m_forceNext = false;
+   }
+ 
+   {

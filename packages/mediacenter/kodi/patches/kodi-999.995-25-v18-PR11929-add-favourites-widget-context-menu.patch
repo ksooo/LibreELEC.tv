@@ -1,0 +1,490 @@
+diff --git a/addons/skin.estuary/xml/Home.xml b/addons/skin.estuary/xml/Home.xml
+index 248b4ae..d0b1ba1 100644
+--- a/addons/skin.estuary/xml/Home.xml
++++ b/addons/skin.estuary/xml/Home.xml
+@@ -483,7 +483,6 @@
+ 						<onright>9000</onright>
+ 						<onup>14100</onup>
+ 						<ondown>14100</ondown>
+-						<onclick>$INFO[ListItem.FileNameAndPath]</onclick>
+ 						<preloaditems>2</preloaditems>
+ 						<scrolltime tween="cubic" easing="out">500</scrolltime>
+ 						<orientation>vertical</orientation>
+diff --git a/xbmc/CMakeLists.txt b/xbmc/CMakeLists.txt
+index bda338a..4192d15 100644
+--- a/xbmc/CMakeLists.txt
++++ b/xbmc/CMakeLists.txt
+@@ -6,6 +6,7 @@ set(SOURCES Application.cpp
+             BackgroundInfoLoader.cpp
+             ContextMenuItem.cpp
+             ContextMenuManager.cpp
++            ContextMenus.cpp
+             CueDocument.cpp
+             DatabaseManager.cpp
+             DbUrl.cpp
+@@ -45,6 +46,7 @@ set(HEADERS AppParamParser.h
+             CompileInfo.h
+             ContextMenuItem.h
+             ContextMenuManager.h
++            ContextMenus.h
+             CueDocument.h
+             DatabaseManager.h
+             DbUrl.h
+diff --git a/xbmc/ContextMenuManager.cpp b/xbmc/ContextMenuManager.cpp
+index 9268872..790b975 100644
+--- a/xbmc/ContextMenuManager.cpp
++++ b/xbmc/ContextMenuManager.cpp
+@@ -20,6 +20,7 @@
+ 
+ #include "ContextMenuManager.h"
+ #include "ContextMenuItem.h"
++#include "ContextMenus.h"
+ #include "addons/Addon.h"
+ #include "addons/ContextMenuAddon.h"
+ #include "addons/ContextMenus.h"
+@@ -77,6 +78,9 @@ void CContextMenuManager::Init()
+       std::make_shared<CONTEXTMENU::CSongInfo>(),
+       std::make_shared<CONTEXTMENU::CMarkWatched>(),
+       std::make_shared<CONTEXTMENU::CMarkUnWatched>(),
++      std::make_shared<CONTEXTMENU::CRemoveFavourite>(),
++      std::make_shared<CONTEXTMENU::CRenameFavourite>(),
++      std::make_shared<CONTEXTMENU::CChooseThumbnailForFavourite>(),
+   };
+   ReloadAddonItems();
+ }
+diff --git a/xbmc/ContextMenus.cpp b/xbmc/ContextMenus.cpp
+new file mode 100644
+index 0000000..4ea218f
+--- /dev/null
++++ b/xbmc/ContextMenus.cpp
+@@ -0,0 +1,100 @@
++/*
++ *      Copyright (C) 2016 Team Kodi
++ *      http://kodi.tv
++ *
++ *  This Program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation; either version 2, or (at your option)
++ *  any later version.
++ *
++ *  This Program is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with XBMC; see the file COPYING.  If not, see
++ *  <http://www.gnu.org/licenses/>.
++ *
++ */
++
++#include "FileItem.h"
++#include "dialogs/GUIDialogFavourites.h"
++#include "filesystem/FavouritesDirectory.h"
++#include "storage/MediaManager.h"
++#include "utils/URIUtils.h"
++
++#include "ContextMenus.h"
++
++namespace CONTEXTMENU
++{
++
++  bool CEjectDisk::IsVisible(const CFileItem& item) const
++  {
++#ifdef HAS_DVD_DRIVE
++    return item.IsRemovable() && (item.IsDVD() || item.IsCDDA());
++#else
++    return false;
++#endif
++  }
++
++  bool CEjectDisk::Execute(const CFileItemPtr& item) const
++  {
++#ifdef HAS_DVD_DRIVE
++    g_mediaManager.ToggleTray(g_mediaManager.TranslateDevicePath(item->GetPath())[0]);
++#endif
++    return true;
++  }
++
++  bool CEjectDrive::IsVisible(const CFileItem& item) const
++  {
++    // Must be HDD
++    return item.IsRemovable() && !item.IsDVD() && !item.IsCDDA();
++  }
++
++  bool CEjectDrive::Execute(const CFileItemPtr& item) const
++  {
++    return g_mediaManager.Eject(item->GetPath());
++  }
++
++  bool CFavouriteContextMenuAction::IsVisible(const CFileItem& item) const
++  {
++    return URIUtils::IsProtocol(item.GetPath(), "favourites");
++  }
++
++  bool CFavouriteContextMenuAction::Execute(const CFileItemPtr& item) const
++  {
++    CFileItemList items;
++    if (XFILE::CFavouritesDirectory::Load(items))
++    {
++      for (unsigned int i = 0; i < items.Size(); ++i)
++      {
++        const CFileItemPtr favourite = items[i];
++        if (favourite->GetPath() == item->GetPath())
++        {
++          if (DoExecute(items, favourite))
++            return XFILE::CFavouritesDirectory::Save(items);
++        }
++      }
++    }
++    return false;
++  }
++
++  bool CRemoveFavourite::DoExecute(CFileItemList &items, const CFileItemPtr& item) const
++  {
++    int iBefore = items.Size();
++    items.Remove(item.get());
++    return items.Size() == iBefore - 1;
++  }
++
++  bool CRenameFavourite::DoExecute(CFileItemList&, const CFileItemPtr& item) const
++  {
++    return CGUIDialogFavourites::ChooseAndSetNewName(item);
++  }
++
++  bool CChooseThumbnailForFavourite::DoExecute(CFileItemList&, const CFileItemPtr& item) const
++  {
++    return CGUIDialogFavourites::ChooseAndSetNewThumbnail(item);
++  }
++
++} // namespace CONTEXTMENU
+diff --git a/xbmc/ContextMenus.h b/xbmc/ContextMenus.h
+new file mode 100644
+index 0000000..95d2323
+--- /dev/null
++++ b/xbmc/ContextMenus.h
+@@ -0,0 +1,77 @@
++#pragma once
++/*
++ *      Copyright (C) 2016 Team Kodi
++ *      http://kodi.tv
++ *
++ *  This Program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation; either version 2, or (at your option)
++ *  any later version.
++ *
++ *  This Program is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with XBMC; see the file COPYING.  If not, see
++ *  <http://www.gnu.org/licenses/>.
++ *
++ */
++
++#include "ContextMenuItem.h"
++
++
++namespace CONTEXTMENU
++{
++
++struct CEjectDisk : CStaticContextMenuAction
++{
++  CEjectDisk() : CStaticContextMenuAction(13391) {} // Eject/Load CD/DVD!
++  bool IsVisible(const CFileItem& item) const override;
++  bool Execute(const CFileItemPtr& item) const override;
++};
++
++struct CEjectDrive : CStaticContextMenuAction
++{
++  CEjectDrive() : CStaticContextMenuAction(13420) {} // Eject Removable HDD!
++  bool IsVisible(const CFileItem& item) const override;
++  bool Execute(const CFileItemPtr& item) const override;
++};
++
++class CFavouriteContextMenuAction : public CStaticContextMenuAction
++{
++public:
++  explicit CFavouriteContextMenuAction(uint32_t label) : CStaticContextMenuAction(label) {}
++  bool IsVisible(const CFileItem& item) const override;
++  bool Execute(const CFileItemPtr& item) const override;
++protected:
++  virtual ~CFavouriteContextMenuAction() = default;
++  virtual bool DoExecute(CFileItemList& items, const CFileItemPtr& item) const = 0;
++};
++
++class CRemoveFavourite : public CFavouriteContextMenuAction
++{
++public:
++  CRemoveFavourite() : CFavouriteContextMenuAction(15015) {} // Remove
++protected:
++  bool DoExecute(CFileItemList& items, const CFileItemPtr& item) const override;
++};
++
++class CRenameFavourite : public CFavouriteContextMenuAction
++{
++public:
++  CRenameFavourite() : CFavouriteContextMenuAction(118) {} // Rename
++protected:
++  bool DoExecute(CFileItemList& items, const CFileItemPtr& item) const override;
++};
++
++class CChooseThumbnailForFavourite : public CFavouriteContextMenuAction
++{
++public:
++  CChooseThumbnailForFavourite() : CFavouriteContextMenuAction(20019) {} // Choose thumbnail
++protected:
++  bool DoExecute(CFileItemList& items, const CFileItemPtr& item) const override;
++};
++
++}
+diff --git a/xbmc/dialogs/GUIDialogFavourites.cpp b/xbmc/dialogs/GUIDialogFavourites.cpp
+index 6e98c5d..2028686 100644
+--- a/xbmc/dialogs/GUIDialogFavourites.cpp
++++ b/xbmc/dialogs/GUIDialogFavourites.cpp
+@@ -103,14 +103,10 @@ void CGUIDialogFavourites::OnClick(int item)
+   if (item < 0 || item >= m_favourites->Size())
+     return;
+ 
+-  // grab our message, close the dialog, and send
+-  CFileItemPtr pItem = (*m_favourites)[item];
+-  std::string execute(pItem->GetPath());
+-
+   Close();
+ 
+   CGUIMessage message(GUI_MSG_EXECUTE, 0, GetID());
+-  message.SetStringParam(execute);
++  message.SetStringParam(CFavouritesDirectory::GetExecutePath(*(*m_favourites)[item], GetID()));
+   g_windowManager.SendMessage(message);
+ }
+ 
+@@ -125,12 +121,12 @@ void CGUIDialogFavourites::OnPopupMenu(int item)
+   CContextButtons choices;
+   if (m_favourites->Size() > 1)
+   {
+-    choices.Add(1, 13332);
+-    choices.Add(2, 13333);
++    choices.Add(1, 13332); // Move up
++    choices.Add(2, 13333); // Move down
+   }
+-  choices.Add(3, 15015);
+-  choices.Add(4, 118);
+-  choices.Add(5, 20019);
++  choices.Add(3, 15015); // Remove
++  choices.Add(4, 118); // Rename
++  choices.Add(5, 20019); // Choose thumbnail
+ 
+   CFileItemPtr itemPtr = m_favourites->Get(item);
+ 
+@@ -193,13 +189,11 @@ void CGUIDialogFavourites::OnRename(int item)
+   if (item < 0 || item >= m_favourites->Size())
+     return;
+ 
+-  std::string label((*m_favourites)[item]->GetLabel());
+-  if (CGUIKeyboardFactory::ShowAndGetInput(label, CVariant{g_localizeStrings.Get(16008)}, false))
+-    (*m_favourites)[item]->SetLabel(label);
+-
+-  CFavouritesDirectory::Save(*m_favourites);
+-
+-  UpdateList();
++  if (ChooseAndSetNewName((*m_favourites)[item]))
++  {
++    CFavouritesDirectory::Save(*m_favourites);
++    UpdateList();
++  }
+ }
+ 
+ void CGUIDialogFavourites::OnSetThumb(int item)
+@@ -207,34 +201,11 @@ void CGUIDialogFavourites::OnSetThumb(int item)
+   if (item < 0 || item >= m_favourites->Size())
+     return;
+ 
+-  CFileItemPtr pItem = (*m_favourites)[item];
+-
+-  CFileItemList items;
+-
+-  // Current
+-  if (pItem->HasArt("thumb"))
++  if (ChooseAndSetNewThumbnail((*m_favourites)[item]))
+   {
+-    CFileItemPtr current(new CFileItem("thumb://Current", false));
+-    current->SetArt("thumb", pItem->GetArt("thumb"));
+-    current->SetLabel(g_localizeStrings.Get(20016));
+-    items.Add(current);
++    CFavouritesDirectory::Save(*m_favourites);
++    UpdateList();
+   }
+-
+-  // None
+-  CFileItemPtr none(new CFileItem("thumb://None", false));
+-  none->SetIconImage(pItem->GetIconImage());
+-  none->SetLabel(g_localizeStrings.Get(20018));
+-  items.Add(none);
+-
+-  std::string thumb;
+-  VECSOURCES sources;
+-  g_mediaManager.GetLocalDrives(sources);
+-  if (!CGUIDialogFileBrowser::ShowAndGetImage(items, sources, g_localizeStrings.Get(1030), thumb))
+-    return;
+-
+-  (*m_favourites)[item]->SetArt("thumb", thumb);
+-  CFavouritesDirectory::Save(*m_favourites);
+-  UpdateList();
+ }
+ 
+ void CGUIDialogFavourites::UpdateList()
+@@ -254,3 +225,40 @@ CFileItemPtr CGUIDialogFavourites::GetCurrentListItem(int offset)
+   return (*m_favourites)[item];
+ }
+ 
++bool CGUIDialogFavourites::ChooseAndSetNewName(const CFileItemPtr &item)
++{
++  std::string label(item->GetLabel());
++  if (CGUIKeyboardFactory::ShowAndGetInput(label, CVariant{g_localizeStrings.Get(16008)}, false)) // Enter new title
++  {
++    item->SetLabel(label);
++    return true;
++  }
++  return false;
++}
++
++bool CGUIDialogFavourites::ChooseAndSetNewThumbnail(const CFileItemPtr &item)
++{
++  CFileItemList prefilledItems;
++  if (item->HasArt("thumb"))
++  {
++    const CFileItemPtr current(std::make_shared<CFileItem>("thumb://Current", false));
++    current->SetArt("thumb", item->GetArt("thumb"));
++    current->SetLabel(g_localizeStrings.Get(20016)); // Current thumb
++    prefilledItems.Add(current);
++  }
++
++  const CFileItemPtr none(std::make_shared<CFileItem>("thumb://None", false));
++  none->SetIconImage(item->GetIconImage());
++  none->SetLabel(g_localizeStrings.Get(20018)); // No thumb
++  prefilledItems.Add(none);
++
++  std::string thumb;
++  VECSOURCES sources;
++  g_mediaManager.GetLocalDrives(sources);
++  if (CGUIDialogFileBrowser::ShowAndGetImage(prefilledItems, sources, g_localizeStrings.Get(1030), thumb)) // Browse for image
++  {
++    item->SetArt("thumb", thumb);
++    return true;
++  }
++  return false;
++}
+diff --git a/xbmc/dialogs/GUIDialogFavourites.h b/xbmc/dialogs/GUIDialogFavourites.h
+index 08c883d..2796777 100644
+--- a/xbmc/dialogs/GUIDialogFavourites.h
++++ b/xbmc/dialogs/GUIDialogFavourites.h
+@@ -36,7 +36,10 @@ public:
+ 
+   virtual CFileItemPtr GetCurrentListItem(int offset = 0);
+ 
+-  virtual bool HasListItems() const { return true; };
++  virtual bool HasListItems() const { return true; }
++
++  static bool ChooseAndSetNewName(const CFileItemPtr &item);
++  static bool ChooseAndSetNewThumbnail(const CFileItemPtr &item);
+ 
+ protected:
+   int GetSelectedItem();
+diff --git a/xbmc/filesystem/FavouritesDirectory.cpp b/xbmc/filesystem/FavouritesDirectory.cpp
+index dd50787..ed72b92 100644
+--- a/xbmc/filesystem/FavouritesDirectory.cpp
++++ b/xbmc/filesystem/FavouritesDirectory.cpp
+@@ -37,7 +37,6 @@
+ namespace XFILE
+ {
+ 
+-
+ bool CFavouritesDirectory::GetDirectory(const CURL& url, CFileItemList &items)
+ {
+   items.Clear();
+@@ -103,11 +102,16 @@ bool CFavouritesDirectory::LoadFavourites(const std::string& strPath, CFileItemL
+     const char *thumb = favourite->Attribute("thumb");
+     if (name && favourite->FirstChild())
+     {
+-      if(!items.Contains(favourite->FirstChild()->Value()))
++      CURL url;
++      url.SetProtocol("favourites");
++      url.SetHostName(CURL::Encode(favourite->FirstChild()->Value()));
++      const std::string favURL(url.Get());
++      if (!items.Contains(favURL))
+       {
+-        CFileItemPtr item(new CFileItem(name));
+-        item->SetPath(favourite->FirstChild()->Value());
+-        if (thumb) item->SetArt("thumb", thumb);
++        const CFileItemPtr item(std::make_shared<CFileItem>(name));
++        item->SetPath(favURL);
++        if (thumb)
++          item->SetArt("thumb", thumb);
+         items.Add(item);
+       }
+     }
+@@ -131,7 +135,9 @@ bool CFavouritesDirectory::Save(const CFileItemList &items)
+     favNode.SetAttribute("name", item->GetLabel().c_str());
+     if (item->HasArt("thumb"))
+       favNode.SetAttribute("thumb", item->GetArt("thumb").c_str());
+-    TiXmlText execute(item->GetPath());
++
++    const CURL url(item->GetPath());
++    TiXmlText execute(CURL::Decode(url.GetHostName()));
+     favNode.InsertEndChild(execute);
+     rootNode->InsertEndChild(favNode);
+   }
+@@ -162,11 +168,16 @@ bool CFavouritesDirectory::AddOrRemove(CFileItem *item, int contextWindow)
+   }
+   else
+   { // create our new favourite item
+-    CFileItemPtr favourite(new CFileItem(item->GetLabel()));
++    const CFileItemPtr favourite(std::make_shared<CFileItem>(item->GetLabel()));
+     if (item->GetLabel().empty())
+       favourite->SetLabel(CUtil::GetTitleFromPath(item->GetPath(), item->m_bIsFolder));
+     favourite->SetArt("thumb", item->GetArt("thumb"));
+-    favourite->SetPath(executePath);
++
++    CURL url;
++    url.SetProtocol("favourites");
++    url.SetHostName(CURL::Encode(executePath));
++    favourite->SetPath(url.Get());
++
+     items.Add(favourite);
+   }
+ 
+@@ -177,7 +188,8 @@ bool CFavouritesDirectory::AddOrRemove(CFileItem *item, int contextWindow)
+ bool CFavouritesDirectory::IsFavourite(CFileItem *item, int contextWindow)
+ {
+   CFileItemList items;
+-  if (!Load(items)) return false;
++  if (!Load(items))
++    return false;
+ 
+   return items.Contains(GetExecutePath(*item, contextWindow));
+ }
+@@ -190,8 +202,13 @@ std::string CFavouritesDirectory::GetExecutePath(const CFileItem &item, int cont
+ std::string CFavouritesDirectory::GetExecutePath(const CFileItem &item, const std::string &contextWindow)
+ {
+   std::string execute;
+-  if (item.m_bIsFolder && (g_advancedSettings.m_playlistAsFolders ||
+-                            !(item.IsSmartPlayList() || item.IsPlayList())))
++  if (URIUtils::IsProtocol(item.GetPath(), "favourites"))
++  {
++    const CURL url(item.GetPath());
++    execute = CURL::Decode(url.GetHostName());
++  }
++  else if (item.m_bIsFolder && (g_advancedSettings.m_playlistAsFolders ||
++                                !(item.IsSmartPlayList() || item.IsPlayList())))
+   {
+     if (!contextWindow.empty())
+       execute = StringUtils::Format("ActivateWindow(%s,%s,return)", contextWindow.c_str(), StringUtils::Paramify(item.GetPath()).c_str());
+@@ -220,4 +237,4 @@ std::string CFavouritesDirectory::GetExecutePath(const CFileItem &item, const st
+   return execute;
+ }
+ 
+-}
++} // namespace XFILE

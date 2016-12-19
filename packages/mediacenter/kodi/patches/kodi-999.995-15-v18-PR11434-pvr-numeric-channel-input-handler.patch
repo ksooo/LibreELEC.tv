@@ -1,0 +1,1057 @@
+diff --git a/addons/resource.language.en_gb/resources/strings.po b/addons/resource.language.en_gb/resources/strings.po
+index 0242b2c..ac57839 100644
+--- a/addons/resource.language.en_gb/resources/strings.po
++++ b/addons/resource.language.en_gb/resources/strings.po
+@@ -17971,7 +17971,7 @@ msgstr ""
+ 
+ #: system/settings/settings.xml
+ msgctxt "#36231"
+-msgid "When flipping through channels using channel up/down buttons or when pressing a number button in full screen mode, channel switches must be confirmed using the OK button."
++msgid "When flipping through channels using channel up/down buttons, channel switches must be confirmed using the OK button."
+ msgstr ""
+ 
+ #: system/settings/settings.xml
+diff --git a/addons/skin.estuary/xml/DialogPVRChannelsOSD.xml b/addons/skin.estuary/xml/DialogPVRChannelsOSD.xml
+index 0750f42..c7c7f90 100644
+--- a/addons/skin.estuary/xml/DialogPVRChannelsOSD.xml
++++ b/addons/skin.estuary/xml/DialogPVRChannelsOSD.xml
+@@ -2,6 +2,7 @@
+ <window>
+ 	<defaultcontrol always="true">11</defaultcontrol>
+ 	<controls>
++		<include>PVRChannelNumberInput</include>
+ 		<control type="group">
+ 			<animation effect="fade" start="100" end="0" time="200" tween="sine" condition="$EXP[infodialog_active]">Conditional</animation>
+ 			<control type="group">
+diff --git a/addons/skin.estuary/xml/DialogSeekBar.xml b/addons/skin.estuary/xml/DialogSeekBar.xml
+index 6308c02..b712d68 100644
+--- a/addons/skin.estuary/xml/DialogSeekBar.xml
++++ b/addons/skin.estuary/xml/DialogSeekBar.xml
+@@ -1,12 +1,12 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+ <window>
+-	<visible>Player.Seeking | Player.DisplayAfterSeek | [Player.Paused + !Player.Caching] | Player.Forwarding | Player.Rewinding | Player.ShowInfo | Window.IsActive(fullscreeninfo) | Window.IsActive(videoosd) | Window.IsActive(musicosd) | Window.IsActive(playerprocessinfo) | !IsEmpty(Player.SeekNumeric)</visible>
++	<visible>[[Player.Seeking | Player.DisplayAfterSeek | [Player.Paused + !Player.Caching] | Player.Forwarding | Player.Rewinding | Player.ShowInfo | Window.IsActive(fullscreeninfo) | Window.IsActive(videoosd) | Window.IsActive(playerprocessinfo)] + Window.IsActive(fullscreenvideo)] | Window.IsActive(visualisation) | !String.IsEmpty(Player.SeekNumeric) | [[Window.IsActive(fullscreenvideo) | Window.IsActive(visualisation)] + !Window.IsActive(pvrosdchannels) + !String.IsEmpty(PVR.ChannelNumberInput)]</visible>
+ 	<visible>!Window.IsActive(sliderdialog)</visible>
+-	<visible>Window.IsActive(visualisation) | Window.IsActive(fullscreenvideo)</visible>
+ 	<include>Animation_BottomSlide</include>
+ 	<depth>DepthOSD</depth>
+ 	<zorder>0</zorder>
+ 	<controls>
++		<include>PVRChannelNumberInput</include>
+ 		<control type="group">
+ 			<bottom>0</bottom>
+ 			<height>190</height>
+diff --git a/addons/skin.estuary/xml/Includes_PVR.xml b/addons/skin.estuary/xml/Includes_PVR.xml
+index 675396f..e6dd5de 100644
+--- a/addons/skin.estuary/xml/Includes_PVR.xml
++++ b/addons/skin.estuary/xml/Includes_PVR.xml
+@@ -143,4 +143,18 @@
+ 			<visible>String.IsEmpty(Listitem.Plot) + String.IsEmpty(Listitem.Genre)</visible>
+ 		</control>
+ 	</include>
++	<include name="PVRChannelNumberInput">
++		<control type="label">
++			<left>0</left>
++			<top>0</top>
++			<width>100%</width>
++			<height>100%</height>
++			<label>$INFO[PVR.ChannelNumberInput]</label>
++			<shadowcolor>black</shadowcolor>
++			<align>center</align>
++			<font>WeatherTemp</font>
++			<aligny>center</aligny>
++			<visible>!String.IsEmpty(PVR.ChannelNumberInput)</visible>
++		</control>
++	</include>
+ </includes>
+diff --git a/addons/skin.estuary/xml/MyPVRChannels.xml b/addons/skin.estuary/xml/MyPVRChannels.xml
+index 1d441b0..6be50f4 100644
+--- a/addons/skin.estuary/xml/MyPVRChannels.xml
++++ b/addons/skin.estuary/xml/MyPVRChannels.xml
+@@ -367,6 +367,7 @@
+ 					<visible>String.IsEmpty(Listitem.Plot)</visible>
+ 				</control>
+ 			</control>
++			<include>PVRChannelNumberInput</include>
+ 			<include content="TopBar">
+ 				<param name="breadcrumbs_label" value="$VAR[BreadcrumbsPVRChannelsVar]" />
+ 			</include>
+diff --git a/addons/skin.estuary/xml/MyPVRGuide.xml b/addons/skin.estuary/xml/MyPVRGuide.xml
+index b5dfaab..42e2008 100644
+--- a/addons/skin.estuary/xml/MyPVRGuide.xml
++++ b/addons/skin.estuary/xml/MyPVRGuide.xml
+@@ -197,6 +197,7 @@
+ 					</control>
+ 				</control>
+ 			</control>
++			<include>PVRChannelNumberInput</include>
+ 			<include content="TopBar">
+ 				<param name="breadcrumbs_label" value="$VAR[BreadcrumbsPVRGuideVar]" />
+ 				<param name="sublabel" value="" />
+diff --git a/system/keymaps/remote.xml b/system/keymaps/remote.xml
+index 3c7f68f..dd567ff 100644
+--- a/system/keymaps/remote.xml
++++ b/system/keymaps/remote.xml
+@@ -261,6 +261,16 @@
+       <info>Info</info>
+       <guide>ActivateWindow(PVROSDGuide)</guide>
+       <playlist>ActivateWindow(PVROSDChannels)</playlist>
++      <zero>Number0</zero>
++      <one>Number1</one>
++      <two>Number2</two>
++      <three>Number3</three>
++      <four>Number4</four>
++      <five>Number5</five>
++      <six>Number6</six>
++      <seven>Number7</seven>
++      <eight>Number8</eight>
++      <nine>Number9</nine>
+     </remote>
+   </Visualisation>
+   <MusicOSD>
+diff --git a/system/settings/settings.xml b/system/settings/settings.xml
+index fe6d050..5fbd418 100644
+--- a/system/settings/settings.xml
++++ b/system/settings/settings.xml
+@@ -1411,7 +1411,7 @@
+         </setting>
+         <setting id="pvrplayback.confirmchannelswitch" type="boolean" label="19281" help="36231">
+           <level>1</level>
+-          <default>false</default>
++          <default>true</default>
+           <control type="toggle" />
+         </setting>
+         <setting id="pvrplayback.channelentrytimeout" type="integer" label="19073" help="36232">
+diff --git a/xbmc/GUIInfoManager.cpp b/xbmc/GUIInfoManager.cpp
+index 8279532..058c50d 100644
+--- a/xbmc/GUIInfoManager.cpp
++++ b/xbmc/GUIInfoManager.cpp
+@@ -87,6 +87,7 @@
+ #include "threads/SingleLock.h"
+ #include "utils/log.h"
+ 
++#include "pvr/PVRGUIActions.h"
+ #include "pvr/PVRManager.h"
+ #include "pvr/channels/PVRChannelGroupsContainer.h"
+ #include "pvr/channels/PVRRadioRDSInfoTag.h"
+@@ -4521,6 +4522,11 @@ const infomap playlist[] =       {{ "length",           PLAYLIST_LENGTH },
+ ///                  _boolean_,
+ ///     Returns true if there are radio timers present who currently not do recording
+ ///   }
++///   \table_row3{   <b>`Pvr.ChannelNumberInput`</b>,
++///                  \anchor Pvr_ChannelNumberInput
++///                  _string_,
++///     Returns the currently entered channel number while in numeric channel input mode, an empty string otherwise
++///   }
+ /// \table_end
+ ///
+ /// -----------------------------------------------------------------------------
+@@ -4604,7 +4610,8 @@ const infomap pvr[] =            {{ "isrecording",              PVR_IS_RECORDING
+                                   { "hasnonrecordingtvtimer",     PVR_HAS_NONRECORDING_TV_TIMER },
+                                   { "isrecordingradio",           PVR_IS_RECORDING_RADIO },
+                                   { "hasradiotimer",              PVR_HAS_RADIO_TIMER },
+-                                  { "hasnonrecordingradiotimer",  PVR_HAS_NONRECORDING_RADIO_TIMER }};
++                                  { "hasnonrecordingradiotimer",  PVR_HAS_NONRECORDING_RADIO_TIMER },
++                                  { "channelnumberinput",         PVR_CHANNEL_NUMBER_INPUT }};
+ 
+ /// \page modules__General__List_of_gui_access
+ /// \section modules__General__List_of_gui_access_ADSP ADSP
+@@ -5919,6 +5926,9 @@ std::string CGUIInfoManager::GetLabel(int info, int contextWindow, std::string *
+   case PVR_RADIO_NEXT_RECORDING_DATETIME:
+     g_PVRManager.TranslateCharInfo(info, strLabel);
+     break;
++  case PVR_CHANNEL_NUMBER_INPUT:
++    strLabel = CPVRGUIActions::GetInstance().GetChannelNumberInputHandler().GetChannelNumberAsString();
++    break;
+   case ADSP_ACTIVE_STREAM_TYPE:
+   case ADSP_DETECTED_STREAM_TYPE:
+   case ADSP_MASTER_NAME:
+diff --git a/xbmc/guiinfo/GUIInfoLabels.h b/xbmc/guiinfo/GUIInfoLabels.h
+index 59567aa..a58e08c 100644
+--- a/xbmc/guiinfo/GUIInfoLabels.h
++++ b/xbmc/guiinfo/GUIInfoLabels.h
+@@ -517,7 +517,8 @@
+ #define PVR_RADIO_NEXT_RECORDING_CHANNEL  (PVR_STRINGS_START + 56)
+ #define PVR_RADIO_NEXT_RECORDING_CHAN_ICO (PVR_STRINGS_START + 57)
+ #define PVR_RADIO_NEXT_RECORDING_DATETIME (PVR_STRINGS_START + 58)
+-#define PVR_STRINGS_END             PVR_HAS_NONRECORDING_RADIO_TIMER
++#define PVR_CHANNEL_NUMBER_INPUT    (PVR_STRINGS_START + 59)
++#define PVR_STRINGS_END             PVR_CHANNEL_NUMBER_INPUT
+ 
+ #define ADSP_CONDITIONS_START       1300
+ #define ADSP_IS_ACTIVE              (ADSP_CONDITIONS_START)
+diff --git a/xbmc/pvr/CMakeLists.txt b/xbmc/pvr/CMakeLists.txt
+index b5d5387..8761e72 100644
+--- a/xbmc/pvr/CMakeLists.txt
++++ b/xbmc/pvr/CMakeLists.txt
+@@ -5,7 +5,8 @@ set(SOURCES PVRActionListener.cpp
+             PVRSettings.cpp
+             PVRContextMenus.cpp
+             PVRGUIActions.cpp
+-            PVRItem.cpp)
++            PVRItem.cpp
++            PVRChannelNumberInputHandler.cpp)
+ 
+ set(HEADERS PVRActionListener.h
+             PVRDatabase.h
+@@ -16,6 +17,7 @@ set(HEADERS PVRActionListener.h
+             PVRContextMenus.h
+             PVRGUIActions.h
+             PVRItem.h
+-            PVRTypes.h)
++            PVRTypes.h
++            PVRChannelNumberInputHandler.h)
+ 
+ core_add_library(pvr)
+diff --git a/xbmc/pvr/PVRActionListener.cpp b/xbmc/pvr/PVRActionListener.cpp
+index e555cd3..9a6a041 100644
+--- a/xbmc/pvr/PVRActionListener.cpp
++++ b/xbmc/pvr/PVRActionListener.cpp
+@@ -19,23 +19,17 @@
+  */
+ 
+ #include "Application.h"
+-#include "dialogs/GUIDialogNumeric.h"
+-#include "guilib/LocalizeStrings.h"
+ #include "guilib/GUIWindowManager.h"
+ #include "input/Key.h"
+-#include "messaging/ApplicationMessenger.h"
+-#include "settings/AdvancedSettings.h"
+-#include "settings/Settings.h"
+-#include "utils/log.h"
+-#include "utils/StringUtils.h"
+ 
++#include "pvr/PVRGUIActions.h"
+ #include "pvr/PVRManager.h"
+-#include "pvr/channels/PVRChannelGroupsContainer.h"
++#include "pvr/channels/PVRChannel.h"
+ 
+ #include "PVRActionListener.h"
+ 
+-using namespace PVR;
+-using namespace KODI::MESSAGING;
++namespace PVR
++{
+ 
+ CPVRActionListener::CPVRActionListener()
+ {
+@@ -50,6 +43,8 @@ CPVRActionListener &CPVRActionListener::GetInstance()
+ 
+ bool CPVRActionListener::OnAction(const CAction &action)
+ {
++  bool bIsJumpSMS = false;
++
+   switch (action.GetID())
+   {
+     case ACTION_PVR_PLAY:
+@@ -76,6 +71,16 @@ bool CPVRActionListener::OnAction(const CAction &action)
+       }
+       return true;
+     }
++    case ACTION_JUMP_SMS2:
++    case ACTION_JUMP_SMS3:
++    case ACTION_JUMP_SMS4:
++    case ACTION_JUMP_SMS5:
++    case ACTION_JUMP_SMS6:
++    case ACTION_JUMP_SMS7:
++    case ACTION_JUMP_SMS8:
++    case ACTION_JUMP_SMS9:
++      bIsJumpSMS = true;
++      // fallthru is intended
+     case REMOTE_0:
+     case REMOTE_1:
+     case REMOTE_2:
+@@ -96,48 +101,8 @@ bool CPVRActionListener::OnAction(const CAction &action)
+         if (g_windowManager.IsPythonWindow(g_windowManager.GetTopMostModalDialogID()))
+           return false;
+ 
+-        if(g_PVRManager.IsPlaying())
+-        {
+-          // pvr client addon
+-          CPVRChannelPtr playingChannel(g_PVRManager.GetCurrentChannel());
+-          if(!playingChannel)
+-            return false;
+-
+-          if (action.GetID() == REMOTE_0)
+-          {
+-            CPVRChannelGroupPtr group = g_PVRChannelGroups->GetPreviousPlayedGroup();
+-            if (group)
+-            {
+-              g_PVRManager.SetPlayingGroup(group);
+-              CFileItemPtr fileItem = group->GetLastPlayedChannel(playingChannel->ChannelID());
+-              if (fileItem && fileItem->HasPVRChannelInfoTag())
+-              {
+-                CLog::Log(LOGDEBUG, "%s - switch to channel number %d", __FUNCTION__, fileItem->GetPVRChannelInfoTag()->ChannelNumber());
+-                CApplicationMessenger::GetInstance().SendMsg(TMSG_GUI_ACTION, WINDOW_INVALID, -1,static_cast<void*>(
+-                  new CAction(ACTION_CHANNEL_SWITCH, static_cast<float>(fileItem->GetPVRChannelInfoTag()->ChannelNumber()))));
+-              }
+-            }
+-          }
+-          else
+-          {
+-            int autoCloseTime = CSettings::GetInstance().GetBool(CSettings::SETTING_PVRPLAYBACK_CONFIRMCHANNELSWITCH) ? 0 : g_advancedSettings.m_iPVRNumericChannelSwitchTimeout;
+-            std::string strChannel = StringUtils::Format("%i", action.GetID() - REMOTE_0);
+-            if (CGUIDialogNumeric::ShowAndGetNumber(strChannel, g_localizeStrings.Get(19000), autoCloseTime) || autoCloseTime)
+-            {
+-              int iChannelNumber = atoi(strChannel.c_str());
+-              if (iChannelNumber > 0 && iChannelNumber != playingChannel->ChannelNumber())
+-              {
+-                CPVRChannelGroupPtr selectedGroup = g_PVRManager.GetPlayingGroup(playingChannel->IsRadio());
+-                CFileItemPtr channel = selectedGroup->GetByChannelNumber(iChannelNumber);
+-                if (!channel || !channel->HasPVRChannelInfoTag())
+-                  return false;
+-
+-                CApplicationMessenger::GetInstance().PostMsg(TMSG_GUI_ACTION, WINDOW_INVALID, -1, static_cast<void*>(
+-                  new CAction(ACTION_CHANNEL_SWITCH, static_cast<float>(iChannelNumber))));
+-              }
+-            }
+-          }
+-        }
++        int iRemote = bIsJumpSMS ? action.GetID() - (ACTION_JUMP_SMS2 - REMOTE_2) : action.GetID();
++        CPVRGUIActions::GetInstance().GetChannelNumberInputHandler().AppendChannelNumberDigit(iRemote - REMOTE_0);
+       }
+       return true;
+     }
+@@ -145,3 +110,5 @@ bool CPVRActionListener::OnAction(const CAction &action)
+   }
+   return false;
+ }
++
++} // namespace PVR
+diff --git a/xbmc/pvr/PVRActionListener.h b/xbmc/pvr/PVRActionListener.h
+index d785fc3..3bca56d 100644
+--- a/xbmc/pvr/PVRActionListener.h
++++ b/xbmc/pvr/PVRActionListener.h
+@@ -22,6 +22,9 @@
+ 
+ #include "interfaces/IActionListener.h"
+ 
++namespace PVR
++{
++
+ class CPVRActionListener : public IActionListener
+ {
+ public:
+@@ -36,3 +39,5 @@ private:
+   CPVRActionListener& operator=(const CPVRActionListener&);
+   ~CPVRActionListener() {};
+ };
++
++} // namespace PVR
+diff --git a/xbmc/pvr/PVRChannelNumberInputHandler.cpp b/xbmc/pvr/PVRChannelNumberInputHandler.cpp
+new file mode 100644
+index 0000000..3cf8e5b
+--- /dev/null
++++ b/xbmc/pvr/PVRChannelNumberInputHandler.cpp
+@@ -0,0 +1,97 @@
++/*
++ *      Copyright (C) 2012-2017 Team Kodi
++ *      http://kodi.tv
++ *
++ *  This Program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation; either version 2, or (at your option)
++ *  any later version.
++ *
++ *  This Program is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with XBMC; see the file COPYING.  If not, see
++ *  <http://www.gnu.org/licenses/>.
++ *
++ */
++
++#include "settings/AdvancedSettings.h"
++#include "utils/StringUtils.h"
++
++#include "PVRChannelNumberInputHandler.h"
++
++namespace PVR
++{
++
++CPVRChannelNumberInputHandler::CPVRChannelNumberInputHandler()
++: CPVRChannelNumberInputHandler(g_advancedSettings.m_iPVRNumericChannelSwitchTimeout, CHANNEL_NUMBER_INPUT_MAX_DIGITS)
++{
++}
++
++CPVRChannelNumberInputHandler::CPVRChannelNumberInputHandler(int iDelay, int iMaxDigits /* = CHANNEL_NUMBER_INPUT_MAX_DIGITS */)
++: m_iDelay(iDelay),
++  m_iMaxDigits(iMaxDigits),
++  m_timer(this)
++{
++}
++
++void CPVRChannelNumberInputHandler::OnTimeout()
++{
++  // call the overridden worker method
++  OnInputDone();
++
++  CSingleLock lock(m_mutex);
++  m_digits.clear();
++  m_strChannel.erase();
++}
++
++void CPVRChannelNumberInputHandler::AppendChannelNumberDigit(int iDigit)
++{
++  if (iDigit < 0 || iDigit > 9)
++    return;
++
++  CSingleLock lock(m_mutex);
++
++  if (m_digits.size() == m_iMaxDigits)
++    m_digits.pop_front();
++
++  m_digits.emplace_back(iDigit);
++
++  // recalc channel string
++  m_strChannel.erase();
++  if (m_digits.size() != m_iMaxDigits || GetChannelNumber() > 0)
++  {
++    for (int digit : m_digits)
++      m_strChannel.append(StringUtils::Format("%d", digit));
++  }
++
++  if (!m_timer.IsRunning())
++    m_timer.Start(m_iDelay);
++  else
++    m_timer.Restart();
++}
++
++int CPVRChannelNumberInputHandler::GetChannelNumber() const
++{
++  int iNumber = 0;
++  int iDigitMultiplier = 1;
++
++  for (std::deque<int>::const_reverse_iterator it = m_digits.rbegin(); it != m_digits.rend(); ++it)
++  {
++    iNumber += (*it * iDigitMultiplier);
++    iDigitMultiplier *= 10;
++  }
++
++  return iNumber;
++}
++
++std::string CPVRChannelNumberInputHandler::GetChannelNumberAsString() const
++{
++  CSingleLock lock(m_mutex);
++  return m_strChannel;
++}
++
++} // namespace PVR
+diff --git a/xbmc/pvr/PVRChannelNumberInputHandler.h b/xbmc/pvr/PVRChannelNumberInputHandler.h
+new file mode 100644
+index 0000000..b580f30
+--- /dev/null
++++ b/xbmc/pvr/PVRChannelNumberInputHandler.h
+@@ -0,0 +1,90 @@
++#pragma once
++/*
++ *      Copyright (C) 2012-2017 Team Kodi
++ *      http://kodi.tv
++ *
++ *  This Program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation; either version 2, or (at your option)
++ *  any later version.
++ *
++ *  This Program is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with XBMC; see the file COPYING.  If not, see
++ *  <http://www.gnu.org/licenses/>.
++ *
++ */
++
++#include <string>
++#include <deque>
++
++#include "threads/CriticalSection.h"
++#include "threads/Timer.h"
++
++namespace PVR
++{
++
++class CPVRChannelNumberInputHandler : private ITimerCallback
++{
++public:
++  static const int CHANNEL_NUMBER_INPUT_MAX_DIGITS = 4;
++
++  CPVRChannelNumberInputHandler();
++
++  /*!
++   * @brief ctor.
++   * @param iDelay timer delay in millisecods.
++   * @param iMaxDigits maximum number of display digits to use.
++   */
++  CPVRChannelNumberInputHandler(int iDelay, int iMaxDigits = CHANNEL_NUMBER_INPUT_MAX_DIGITS);
++
++  virtual ~CPVRChannelNumberInputHandler() = default;
++
++  // implementation of ITimerCallback
++  void OnTimeout() override;
++
++  /*!
++   * @brief This method gets called after the channel number input timer has expired.
++   */
++  virtual void OnInputDone() = 0;
++
++  /*!
++   * @brief Appends a channel digit.
++   * @param iDigit the digit to append. value must be in range of 0 to 9.
++   */
++  void AppendChannelNumberDigit(int iDigit);
++
++  /*!
++   * @brief Get the currently entered channel number as a formatted string. Format is n digits with leading zeros, where n is the number of digits specified when calling the ctor.
++   * @return the channel number string.
++   */
++  std::string GetChannelNumberAsString() const;
++
++protected:
++  /*!
++   * @brief Get the currently entered channel number.
++   * @return the channel number.
++   */
++  int GetChannelNumber() const;
++
++  /*!
++   * @brief Get the currently entered number of digits.
++   * @return the number of digits.
++   */
++  int GetCurrentDigitCount() const { return m_digits.size(); }
++
++  CCriticalSection m_mutex;
++
++private:
++  const int m_iDelay;
++  const int m_iMaxDigits;
++  std::deque<int> m_digits;
++  std::string m_strChannel;
++  CTimer m_timer;
++};
++
++} // namespace PVR
+diff --git a/xbmc/pvr/PVRGUIActions.cpp b/xbmc/pvr/PVRGUIActions.cpp
+index d58bf36..296ff8d 100644
+--- a/xbmc/pvr/PVRGUIActions.cpp
++++ b/xbmc/pvr/PVRGUIActions.cpp
+@@ -29,6 +29,7 @@
+ #include "guilib/GUIKeyboardFactory.h"
+ #include "guilib/GUIWindowManager.h"
+ #include "guilib/LocalizeStrings.h"
++#include "input/Key.h"
+ #include "messaging/ApplicationMessenger.h"
+ #include "pvr/channels/PVRChannelGroupsContainer.h"
+ #include "pvr/dialogs/GUIDialogPVRGuideInfo.h"
+@@ -759,4 +760,78 @@ namespace PVR
+     return true;
+   }
+ 
++  CPVRChannelNumberInputHandler &CPVRGUIActions::GetChannelNumberInputHandler()
++  {
++    // window/dialog specific input handler
++    CPVRChannelNumberInputHandler *windowInputHandler
++      = dynamic_cast<CPVRChannelNumberInputHandler *>(g_windowManager.GetWindow(g_windowManager.GetFocusedWindow()));
++    if (windowInputHandler)
++      return *windowInputHandler;
++
++    // default
++    return m_channelNumberInputHandler;
++  }
++
++  void CPVRChannelSwitchingInputHandler::OnInputDone()
++  {
++    int iChannelNumber;
++    bool bSwitchToPreviousChannel;
++    {
++      CSingleLock lock(m_mutex);
++      iChannelNumber = GetChannelNumber();
++      // special case. if only a single zero was typed in, switch to previously played channel.
++      bSwitchToPreviousChannel = (iChannelNumber == 0 && GetCurrentDigitCount() == 1);
++    }
++
++    if (iChannelNumber > 0)
++      SwitchToChannel(iChannelNumber);
++    else if (bSwitchToPreviousChannel)
++      SwitchToPreviousChannel();
++  }
++
++  void CPVRChannelSwitchingInputHandler::SwitchToChannel(int iChannelNumber)
++  {
++    if (iChannelNumber > 0 && g_PVRManager.IsPlaying())
++    {
++      const CPVRChannelPtr playingChannel(g_PVRManager.GetCurrentChannel());
++      if (playingChannel)
++      {
++        if (iChannelNumber != playingChannel->ChannelNumber())
++        {
++          const CPVRChannelGroupPtr selectedGroup(g_PVRManager.GetPlayingGroup(playingChannel->IsRadio()));
++          const CFileItemPtr channel(selectedGroup->GetByChannelNumber(iChannelNumber));
++          if (channel && channel->HasPVRChannelInfoTag())
++          {
++            CApplicationMessenger::GetInstance().PostMsg(
++              TMSG_GUI_ACTION, WINDOW_INVALID, -1,
++              static_cast<void*>(new CAction(ACTION_CHANNEL_SWITCH, static_cast<float>(iChannelNumber))));
++          }
++        }
++      }
++    }
++  }
++
++  void CPVRChannelSwitchingInputHandler::SwitchToPreviousChannel()
++  {
++    if (g_PVRManager.IsPlaying())
++    {
++      const CPVRChannelPtr playingChannel(g_PVRManager.GetCurrentChannel());
++      if (playingChannel)
++      {
++        const CPVRChannelGroupPtr group(g_PVRChannelGroups->GetPreviousPlayedGroup());
++        if (group)
++        {
++          g_PVRManager.SetPlayingGroup(group);
++          const CFileItemPtr channel(group->GetLastPlayedChannel(playingChannel->ChannelID()));
++          if (channel && channel->HasPVRChannelInfoTag())
++          {
++            CApplicationMessenger::GetInstance().SendMsg(
++              TMSG_GUI_ACTION, WINDOW_INVALID, -1,
++              static_cast<void*>(new CAction(ACTION_CHANNEL_SWITCH, static_cast<float>(channel->GetPVRChannelInfoTag()->ChannelNumber()))));
++          }
++        }
++      }
++    }
++  }
++
+ } // namespace PVR
+diff --git a/xbmc/pvr/PVRGUIActions.h b/xbmc/pvr/PVRGUIActions.h
+index c56adc5..eabc2d5 100644
+--- a/xbmc/pvr/PVRGUIActions.h
++++ b/xbmc/pvr/PVRGUIActions.h
+@@ -20,6 +20,7 @@
+  */
+ 
+ #include "pvr/PVRTypes.h"
++#include "pvr/PVRChannelNumberInputHandler.h"
+ 
+ #include <memory>
+ #include <string>
+@@ -31,6 +32,25 @@ class CGUIWindow;
+ 
+ namespace PVR
+ {
++  class CPVRChannelSwitchingInputHandler : public CPVRChannelNumberInputHandler
++  {
++  public:
++    // CPVRChannelNumberInputHandler implementation
++    void OnInputDone() override;
++
++  private:
++    /*!
++     * @brief Switch to the channel with the given number.
++     * @param iChannelNumber the channel number
++     */
++    void SwitchToChannel(int iChannelNumber);
++
++    /*!
++     * @brief Switch to the previously played channel.
++     */
++    void SwitchToPreviousChannel();
++  };
++
+   class CPVRGUIActions
+   {
+   public:
+@@ -213,6 +233,12 @@ namespace PVR
+      */
+     bool HideChannel(const CFileItemPtr &item) const;
+ 
++    /*!
++     * @brief Get the currently active channel number input handler.
++     * @return the handler.
++     */
++    CPVRChannelNumberInputHandler &GetChannelNumberInputHandler();
++
+   private:
+     CPVRGUIActions() = default;
+     CPVRGUIActions(const CPVRGUIActions&) = delete;
+@@ -299,6 +325,9 @@ namespace PVR
+      * @param item containing a channel or a recording.
+      */
+     void StartPlayback(CFileItem *item) const;
++
++  private:
++    CPVRChannelSwitchingInputHandler m_channelNumberInputHandler;
+   };
+ 
+ } // namespace PVR
+diff --git a/xbmc/pvr/dialogs/GUIDialogPVRChannelsOSD.cpp b/xbmc/pvr/dialogs/GUIDialogPVRChannelsOSD.cpp
+index 4e7996f..4450583 100644
+--- a/xbmc/pvr/dialogs/GUIDialogPVRChannelsOSD.cpp
++++ b/xbmc/pvr/dialogs/GUIDialogPVRChannelsOSD.cpp
+@@ -42,7 +42,8 @@ using namespace KODI::MESSAGING;
+ #define CONTROL_LIST                  11
+ 
+ CGUIDialogPVRChannelsOSD::CGUIDialogPVRChannelsOSD() :
+-    CGUIDialog(WINDOW_DIALOG_PVR_OSD_CHANNELS, "DialogPVRChannelsOSD.xml")
++    CGUIDialog(WINDOW_DIALOG_PVR_OSD_CHANNELS, "DialogPVRChannelsOSD.xml"),
++    CPVRChannelNumberInputHandler(1000)
+ {
+   m_vecItems = new CFileItemList;
+ }
+@@ -160,6 +161,20 @@ bool CGUIDialogPVRChannelsOSD::OnAction(const CAction &action)
+       RestoreControlStates();
+       return true;
+     }
++    case REMOTE_0:
++    case REMOTE_1:
++    case REMOTE_2:
++    case REMOTE_3:
++    case REMOTE_4:
++    case REMOTE_5:
++    case REMOTE_6:
++    case REMOTE_7:
++    case REMOTE_8:
++    case REMOTE_9:
++    {
++      AppendChannelNumberDigit(action.GetID() - REMOTE_0);
++      return true;
++    }
+   }
+ 
+   return CGUIDialog::OnAction(action);
+@@ -307,3 +322,21 @@ std::string CGUIDialogPVRChannelsOSD::GetLastSelectedItemPath(int iGroupID) cons
+     return it->second;
+   return "";
+ }
++
++void CGUIDialogPVRChannelsOSD::OnInputDone()
++{
++  const int iChannelNumber = GetChannelNumber();
++  if (iChannelNumber >= 0)
++  {
++    int itemIndex = 0;
++    for (const CFileItemPtr channel : m_vecItems->GetList())
++    {
++      if (channel->GetPVRChannelInfoTag()->ChannelNumber() == iChannelNumber)
++      {
++        m_viewControl.SetSelectedItem(itemIndex);
++        return;
++      }
++      ++itemIndex;
++    }
++  }
++}
+diff --git a/xbmc/pvr/dialogs/GUIDialogPVRChannelsOSD.h b/xbmc/pvr/dialogs/GUIDialogPVRChannelsOSD.h
+index 02c5206..4c87125 100644
+--- a/xbmc/pvr/dialogs/GUIDialogPVRChannelsOSD.h
++++ b/xbmc/pvr/dialogs/GUIDialogPVRChannelsOSD.h
+@@ -23,6 +23,7 @@
+ #include "utils/Observer.h"
+ #include "view/GUIViewControl.h"
+ 
++#include "pvr/PVRChannelNumberInputHandler.h"
+ #include "pvr/channels/PVRChannelGroupsContainer.h"
+ 
+ #include <map>
+@@ -31,30 +32,33 @@ class CFileItemList;
+ 
+ namespace PVR
+ {
+-  class CGUIDialogPVRChannelsOSD : public CGUIDialog, public Observer
++  class CGUIDialogPVRChannelsOSD : public CGUIDialog, public Observer, public CPVRChannelNumberInputHandler
+   {
+   public:
+     CGUIDialogPVRChannelsOSD(void);
+     virtual ~CGUIDialogPVRChannelsOSD(void);
+-    virtual bool OnMessage(CGUIMessage& message);
+-    virtual bool OnAction(const CAction &action);
+-    virtual void OnWindowLoaded();
+-    virtual void OnWindowUnload();
+-    virtual void Notify(const Observable &obs, const ObservableMessage msg);
++    bool OnMessage(CGUIMessage& message) override;
++    bool OnAction(const CAction &action) override;
++    void OnWindowLoaded() override;
++    void OnWindowUnload() override;
++    void Notify(const Observable &obs, const ObservableMessage msg) override;
++
++    // CPVRChannelNumberInputHandler implementation
++    void OnInputDone() override;
+ 
+   protected:
+-    virtual void OnInitWindow();
+-    virtual void OnDeinitWindow(int nextWindowID);
+-    virtual void RestoreControlStates();
+-    virtual void SaveControlStates();
+-    virtual void SetInvalid();
++    void OnInitWindow() override;
++    void OnDeinitWindow(int nextWindowID) override;
++    void RestoreControlStates() override;
++    void SaveControlStates() override;
++    void SetInvalid() override;
+ 
+     void GotoChannel(int iItem);
+     void ShowInfo(int item);
+     void Clear();
+     void Update();
+     CPVRChannelGroupPtr GetPlayingGroup();
+-    CGUIControl *GetFirstFocusableControl(int id);
++    CGUIControl *GetFirstFocusableControl(int id) override;
+ 
+     CFileItemList    *m_vecItems;
+     CGUIViewControl   m_viewControl;
+diff --git a/xbmc/pvr/windows/GUIWindowPVRChannels.cpp b/xbmc/pvr/windows/GUIWindowPVRChannels.cpp
+index 0fce604..24de21e 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRChannels.cpp
++++ b/xbmc/pvr/windows/GUIWindowPVRChannels.cpp
+@@ -23,7 +23,6 @@
+ #include "epg/EpgContainer.h"
+ #include "dialogs/GUIDialogContextMenu.h"
+ #include "dialogs/GUIDialogKaiToast.h"
+-#include "dialogs/GUIDialogNumeric.h"
+ #include "dialogs/GUIDialogYesNo.h"
+ #include "guilib/GUIKeyboardFactory.h"
+ #include "guilib/GUIRadioButtonControl.h"
+@@ -47,6 +46,7 @@ using namespace EPG;
+ 
+ CGUIWindowPVRChannels::CGUIWindowPVRChannels(bool bRadio) :
+   CGUIWindowPVRBase(bRadio, bRadio ? WINDOW_RADIO_CHANNELS : WINDOW_TV_CHANNELS, "MyPVRChannels.xml"),
++  CPVRChannelNumberInputHandler(1000),
+   m_bShowHiddenChannels(false)
+ {
+   g_EpgContainer.RegisterObserver(this);
+@@ -119,6 +119,7 @@ bool CGUIWindowPVRChannels::OnAction(const CAction &action)
+ {
+   switch (action.GetID())
+   {
++    case REMOTE_0:
+     case REMOTE_1:
+     case REMOTE_2:
+     case REMOTE_3:
+@@ -128,7 +129,8 @@ bool CGUIWindowPVRChannels::OnAction(const CAction &action)
+     case REMOTE_7:
+     case REMOTE_8:
+     case REMOTE_9:
+-      return InputChannelNumber(action.GetID() - REMOTE_0);
++      AppendChannelNumberDigit(action.GetID() - REMOTE_0);
++      return true;
+   }
+ 
+   return CGUIWindowPVRBase::OnAction(action);
+@@ -310,26 +312,20 @@ void CGUIWindowPVRChannels::ShowGroupManager(void)
+   return;
+ }
+ 
+-bool CGUIWindowPVRChannels::InputChannelNumber(int input)
++void CGUIWindowPVRChannels::OnInputDone()
+ {
+-  std::string strInput = StringUtils::Format("%i", input);
+-  if (CGUIDialogNumeric::ShowAndGetNumber(strInput, g_localizeStrings.Get(19103)))
++  const int iChannelNumber = GetChannelNumber();
++  if (iChannelNumber >= 0)
+   {
+-    int iChannelNumber = atoi(strInput.c_str());
+-    if (iChannelNumber >= 0)
++    int itemIndex = 0;
++    for (const CFileItemPtr channel : m_vecItems->GetList())
+     {
+-      int itemIndex = 0;
+-      for (auto channel : m_vecItems->GetList())
++      if (channel->GetPVRChannelInfoTag()->ChannelNumber() == iChannelNumber)
+       {
+-        if (channel->GetPVRChannelInfoTag()->ChannelNumber() == iChannelNumber)
+-        {
+-          m_viewControl.SetSelectedItem(itemIndex);
+-          return true;
+-        }
+-        ++itemIndex;
++        m_viewControl.SetSelectedItem(itemIndex);
++        return;
+       }
++      ++itemIndex;
+     }
+   }
+-
+-  return false;
+ }
+diff --git a/xbmc/pvr/windows/GUIWindowPVRChannels.h b/xbmc/pvr/windows/GUIWindowPVRChannels.h
+index 9578402..c338159 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRChannels.h
++++ b/xbmc/pvr/windows/GUIWindowPVRChannels.h
+@@ -19,11 +19,13 @@
+  *
+  */
+ 
++#include "pvr/PVRChannelNumberInputHandler.h"
++
+ #include "GUIWindowPVRBase.h"
+ 
+ namespace PVR
+ {
+-  class CGUIWindowPVRChannels : public CGUIWindowPVRBase
++  class CGUIWindowPVRChannels : public CGUIWindowPVRBase, public CPVRChannelNumberInputHandler
+   {
+   public:
+     CGUIWindowPVRChannels(bool bRadio);
+@@ -36,6 +38,9 @@ namespace PVR
+     virtual void UpdateButtons(void) override;
+     virtual bool OnAction(const CAction &action) override;
+ 
++    // CPVRChannelNumberInputHandler implementation
++    void OnInputDone() override;
++
+   protected:
+     virtual std::string GetDirectoryPath(void) override;
+ 
+@@ -45,7 +50,6 @@ namespace PVR
+     void ShowChannelManager();
+     void ShowGroupManager();
+     void UpdateEpg(const CFileItemPtr &item);
+-    bool InputChannelNumber(int input);
+ 
+     bool m_bShowHiddenChannels;
+   };
+diff --git a/xbmc/pvr/windows/GUIWindowPVRGuide.cpp b/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
+index 98983d1..883ef43 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
++++ b/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
+@@ -19,7 +19,6 @@
+  */
+ 
+ #include "ContextMenuManager.h"
+-#include "dialogs/GUIDialogNumeric.h"
+ #include "epg/GUIEPGGridContainer.h"
+ #include "GUIUserMessages.h"
+ #include "ServiceBroker.h"
+@@ -45,6 +44,7 @@ using namespace EPG;
+ 
+ CGUIWindowPVRGuide::CGUIWindowPVRGuide(bool bRadio) :
+   CGUIWindowPVRBase(bRadio, bRadio ? WINDOW_RADIO_GUIDE : WINDOW_TV_GUIDE, "MyPVRGuide.xml"),
++  CPVRChannelNumberInputHandler(1000),
+   m_cachedChannelGroup(new CPVRChannelGroup)
+ {
+   m_bRefreshTimelineItems = false;
+@@ -217,6 +217,13 @@ bool CGUIWindowPVRGuide::OnAction(const CAction &action)
+ {
+   switch (action.GetID())
+   {
++    case REMOTE_0:
++      if (GetCurrentDigitCount() == 0)
++      {
++        // single zero input is handled by epg grid container
++        break;
++      }
++      // fall-thru is intended
+     case REMOTE_1:
+     case REMOTE_2:
+     case REMOTE_3:
+@@ -226,7 +233,8 @@ bool CGUIWindowPVRGuide::OnAction(const CAction &action)
+     case REMOTE_7:
+     case REMOTE_8:
+     case REMOTE_9:
+-      return InputChannelNumber(action.GetID() - REMOTE_0);
++      AppendChannelNumberDigit(action.GetID() - REMOTE_0);
++      return true;
+   }
+ 
+   return CGUIWindowPVRBase::OnAction(action);
+@@ -472,31 +480,25 @@ bool CGUIWindowPVRGuide::OnContextButtonNow(CFileItem *item, CONTEXT_BUTTON butt
+   return bReturn;
+ }
+ 
+-bool CGUIWindowPVRGuide::InputChannelNumber(int input)
++void CGUIWindowPVRGuide::OnInputDone()
+ {
+-  std::string strInput = StringUtils::Format("%i", input);
+-  if (CGUIDialogNumeric::ShowAndGetNumber(strInput, g_localizeStrings.Get(19103)))
++  const int iChannelNumber = GetChannelNumber();
++  if (iChannelNumber >= 0)
+   {
+-    int iChannelNumber = atoi(strInput.c_str());
+-    if (iChannelNumber >= 0)
++    for (const CFileItemPtr event : m_vecItems->GetList())
+     {
+-      for (auto event : m_vecItems->GetList())
++      const CEpgInfoTagPtr tag(event->GetEPGInfoTag());
++      if (tag->HasPVRChannel() && tag->PVRChannelNumber() == iChannelNumber)
+       {
+-        const CEpgInfoTagPtr tag(event->GetEPGInfoTag());
+-        if (tag->HasPVRChannel() && tag->PVRChannelNumber() == iChannelNumber)
++        CGUIEPGGridContainer* epgGridContainer = dynamic_cast<CGUIEPGGridContainer*>(GetControl(m_viewControl.GetCurrentControl()));
++        if (epgGridContainer)
+         {
+-          CGUIEPGGridContainer* epgGridContainer = dynamic_cast<CGUIEPGGridContainer*>(GetControl(m_viewControl.GetCurrentControl()));
+-          if (epgGridContainer)
+-          {
+-            epgGridContainer->SetChannel(tag->ChannelTag());
+-            return true;
+-          }
++          epgGridContainer->SetChannel(tag->ChannelTag());
++          return;
+         }
+       }
+     }
+   }
+-
+-  return false;
+ }
+ 
+ CPVRRefreshTimelineItemsThread::CPVRRefreshTimelineItemsThread(CGUIWindowPVRGuide *pGuideWindow)
+diff --git a/xbmc/pvr/windows/GUIWindowPVRGuide.h b/xbmc/pvr/windows/GUIWindowPVRGuide.h
+index bdbc1d7..f4c5ffc 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRGuide.h
++++ b/xbmc/pvr/windows/GUIWindowPVRGuide.h
+@@ -22,6 +22,7 @@
+ #include <atomic>
+ #include <memory>
+ #include "threads/Thread.h"
++#include "pvr/PVRChannelNumberInputHandler.h"
+ #include "GUIWindowPVRBase.h"
+ 
+ class CSetting;
+@@ -35,7 +36,7 @@ namespace PVR
+ {
+   class CPVRRefreshTimelineItemsThread;
+ 
+-  class CGUIWindowPVRGuide : public CGUIWindowPVRBase
++  class CGUIWindowPVRGuide : public CGUIWindowPVRBase, public CPVRChannelNumberInputHandler
+   {
+   public:
+     CGUIWindowPVRGuide(bool bRadio);
+@@ -53,6 +54,9 @@ namespace PVR
+ 
+     bool RefreshTimelineItems();
+ 
++    // CPVRChannelNumberInputHandler implementation
++    void OnInputDone() override;
++
+   protected:
+     virtual void UpdateSelectedItemPath() override;
+     virtual std::string GetDirectoryPath(void) override { return ""; }
+@@ -71,8 +75,6 @@ namespace PVR
+     bool OnContextButtonEnd(CFileItem *item, CONTEXT_BUTTON button);
+     bool OnContextButtonNow(CFileItem *item, CONTEXT_BUTTON button);
+ 
+-    bool InputChannelNumber(int input);
+-
+     void StartRefreshTimelineItemsThread();
+     void StopRefreshTimelineItemsThread();
+ 
+diff --git a/xbmc/settings/AdvancedSettings.cpp b/xbmc/settings/AdvancedSettings.cpp
+index 7c0fa70..4c9b2f9 100644
+--- a/xbmc/settings/AdvancedSettings.cpp
++++ b/xbmc/settings/AdvancedSettings.cpp
+@@ -353,7 +353,7 @@ void CAdvancedSettings::Initialize()
+   m_iPVRInfoToggleInterval         = 3000;
+   m_bPVRChannelIconsAutoScan       = true;
+   m_bPVRAutoScanIconsUserSet       = false;
+-  m_iPVRNumericChannelSwitchTimeout = 1000;
++  m_iPVRNumericChannelSwitchTimeout = 2000;
+ 
+   m_cacheMemSize = 1024 * 1024 * 20;
+   m_cacheBufferMode = CACHE_BUFFER_MODE_INTERNET; // Default (buffer all internet streams/filesystems)

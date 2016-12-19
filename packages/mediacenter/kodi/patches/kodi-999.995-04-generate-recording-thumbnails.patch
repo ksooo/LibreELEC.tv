@@ -1,0 +1,28 @@
+diff --git a/xbmc/video/VideoThumbLoader.cpp b/xbmc/video/VideoThumbLoader.cpp
+index ae1b99e..69daabd 100644
+--- a/xbmc/video/VideoThumbLoader.cpp
++++ b/xbmc/video/VideoThumbLoader.cpp
+@@ -86,9 +86,6 @@ bool CThumbExtractor::operator==(const CJob* job) const
+ bool CThumbExtractor::DoWork()
+ {
+   if (m_item.IsLiveTV()
+-  // Due to a pvr addon api design flaw (no support for multiple concurrent streams
+-  // per addon instance), pvr recording thumbnail extraction does not work (reliably).
+-  ||  m_item.IsPVRRecording()
+   ||  URIUtils::IsUPnP(m_item.GetPath())
+   ||  URIUtils::IsBluray(m_item.GetPath())
+   ||  m_item.IsBDFile()
+diff --git a/xbmc/pvr/recordings/PVRRecordings.cpp b/xbmc/pvr/recordings/PVRRecordings.cpp
+index 0a9fae5..8438bf7 100644
+--- a/xbmc/pvr/recordings/PVRRecordings.cpp
++++ b/xbmc/pvr/recordings/PVRRecordings.cpp
+@@ -352,9 +352,6 @@ bool CPVRRecordings::GetDirectory(const std::string& strPath, CFileItemList &ite
+       if (!current->m_strFanartPath.empty())
+         pFileItem->SetArt("fanart", current->m_strFanartPath);
+ 
+-      // Use the channel icon as a fallback when a thumbnail is not available
+-      pFileItem->SetArtFallback("thumb", "icon");
+-
+       pFileItem->SetOverlayImage(CGUIListItem::ICON_OVERLAY_UNWATCHED, pFileItem->GetPVRRecordingInfoTag()->m_playCount > 0);
+ 
+       items.Add(pFileItem);

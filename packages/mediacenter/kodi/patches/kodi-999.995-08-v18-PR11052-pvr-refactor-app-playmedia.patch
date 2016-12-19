@@ -1,0 +1,151 @@
+diff --git a/xbmc/Application.cpp b/xbmc/Application.cpp
+index 1570714..38dd717 100644
+--- a/xbmc/Application.cpp
++++ b/xbmc/Application.cpp
+@@ -152,6 +152,7 @@
+ #include "addons/GUIDialogAddonSettings.h"
+ 
+ // PVR related include Files
++#include "pvr/PVRGUIActions.h"
+ #include "pvr/PVRManager.h"
+ 
+ #include "epg/EpgContainer.h"
+@@ -3063,7 +3064,7 @@ bool CApplication::PlayMedia(const CFileItem& item, const std::string &player, i
+   }
+   else if (item.IsPVR())
+   {
+-    return g_PVRManager.PlayMedia(item);
++    return CPVRGUIActions::GetInstance().PlayMedia(CFileItemPtr(new CFileItem(item)));
+   }
+ 
+   //nothing special just play
+diff --git a/xbmc/pvr/PVRGUIActions.cpp b/xbmc/pvr/PVRGUIActions.cpp
+index eb5b9e6..b966eeb 100644
+--- a/xbmc/pvr/PVRGUIActions.cpp
++++ b/xbmc/pvr/PVRGUIActions.cpp
+@@ -689,6 +689,30 @@ namespace PVR
+     return true;
+   }
+ 
++  bool CPVRGUIActions::PlayMedia(const CFileItemPtr &item) const
++  {
++    CFileItemPtr pvrItem(item);
++    if (URIUtils::IsPVRChannel(item->GetPath()) && !item->HasPVRChannelInfoTag())
++      pvrItem = g_PVRChannelGroups->GetByPath(item->GetPath());
++    else if (URIUtils::IsPVRRecording(item->GetPath()) && !item->HasPVRRecordingInfoTag())
++      pvrItem = g_PVRRecordings->GetByPath(item->GetPath());
++
++    if (pvrItem->HasPVRChannelInfoTag())
++    {
++      return SwitchToChannel(pvrItem,
++                             CSettings::GetInstance().GetBool(CSettings::SETTING_PVRPLAYBACK_PLAYMINIMIZED),
++                             true);
++    }
++    else if (pvrItem->HasPVRRecordingInfoTag())
++    {
++      return PlayRecording(pvrItem,
++                           CSettings::GetInstance().GetBool(CSettings::SETTING_PVRPLAYBACK_PLAYMINIMIZED),
++                           true);
++    }
++
++    return false;
++  }
++
+   bool CPVRGUIActions::HideChannel(const CFileItemPtr &item) const
+   {
+     const CPVRChannelPtr channel(item->GetPVRChannelInfoTag());
+diff --git a/xbmc/pvr/PVRGUIActions.h b/xbmc/pvr/PVRGUIActions.h
+index 4816245..39ba1ae 100644
+--- a/xbmc/pvr/PVRGUIActions.h
++++ b/xbmc/pvr/PVRGUIActions.h
+@@ -217,6 +217,13 @@ namespace PVR
+     bool SwitchToChannel(const CFileItemPtr &item, bool bPlayMinimized, bool bCheckResume) const;
+ 
+     /*!
++     * @brief Playback the given file item.
++     * @param item containing a channel or a recording.
++     * @return True if the item could be played, false otherwise.
++     */
++    bool PlayMedia(const CFileItemPtr &item) const;
++
++    /*!
+      * @brief Hide a channel, always showing a confirmation dialog.
+      * @param item containing a channel or an epg tag.
+      * @return true on success, false otherwise.
+diff --git a/xbmc/pvr/PVRManager.cpp b/xbmc/pvr/PVRManager.cpp
+index d312e95..b03c29b 100644
+--- a/xbmc/pvr/PVRManager.cpp
++++ b/xbmc/pvr/PVRManager.cpp
+@@ -1247,41 +1247,6 @@ void CPVRManager::CloseStream(void)
+   SAFE_DELETE(m_currentFile);
+ }
+ 
+-bool CPVRManager::PlayMedia(const CFileItem& item)
+-{
+-  if (!g_PVRManager.IsStarted())
+-  {
+-    CLog::Log(LOGERROR, "CApplication - %s PVR manager not started to play file '%s'", __FUNCTION__, item.GetPath().c_str());
+-    return false;
+-  }
+-
+-  CFileItem pvrItem(item);
+-  if (URIUtils::IsPVRChannel(item.GetPath()) && !item.HasPVRChannelInfoTag())
+-    pvrItem = *g_PVRChannelGroups->GetByPath(item.GetPath());
+-  else if (URIUtils::IsPVRRecording(item.GetPath()) && !item.HasPVRRecordingInfoTag())
+-    pvrItem = *g_PVRRecordings->GetByPath(item.GetPath());
+-
+-  if (!pvrItem.HasPVRChannelInfoTag() && !pvrItem.HasPVRRecordingInfoTag())
+-    return false;
+-
+-  // check parental lock if we want to play a channel
+-  if (pvrItem.IsPVRChannel() && !g_PVRManager.CheckParentalLock(pvrItem.GetPVRChannelInfoTag()))
+-    return false;
+-
+-  /* copy over resume info from original item */
+-  pvrItem.m_lStartOffset = item.m_lStartOffset;
+-
+-  if (!g_application.IsCurrentThread())
+-  {
+-    CFileItemList *l = new CFileItemList; //don't delete,
+-    l->Add(std::make_shared<CFileItem>(pvrItem));
+-    CApplicationMessenger::GetInstance().PostMsg(TMSG_MEDIA_PLAY, -1, -1, static_cast<void*>(l));
+-    return true;
+-  }
+-
+-  return g_application.PlayFile(pvrItem, "videoplayer", false) == PLAYBACK_OK;
+-}
+-
+ void CPVRManager::UpdateCurrentChannel(void)
+ {
+   CSingleLock lock(m_critSection);
+diff --git a/xbmc/pvr/PVRManager.h b/xbmc/pvr/PVRManager.h
+index 3137db4..40c2e83 100644
+--- a/xbmc/pvr/PVRManager.h
++++ b/xbmc/pvr/PVRManager.h
+@@ -329,13 +329,6 @@ namespace PVR
+     bool OpenRecordedStream(const CPVRRecordingPtr &tag);
+ 
+     /*!
+-    * @brief Try to playback the given file item
+-    * @param item The file item to playback.
+-    * @return True if the file could be playback, otherwise false.
+-    */
+-    bool PlayMedia(const CFileItem& item);
+-
+-    /*!
+      * @brief Start recording on a given channel if it is not already recording, stop if it is.
+      * @param channel the channel to start/stop recording.
+      * @return True if the recording was started or stopped successfully, false otherwise.
+diff --git a/xbmc/video/windows/GUIWindowVideoBase.cpp b/xbmc/video/windows/GUIWindowVideoBase.cpp
+index 63ed45c..c1d692e 100644
+--- a/xbmc/video/windows/GUIWindowVideoBase.cpp
++++ b/xbmc/video/windows/GUIWindowVideoBase.cpp
+@@ -763,7 +763,7 @@ std::string CGUIWindowVideoBase::GetResumeString(const CFileItem &item)
+ 
+ bool CGUIWindowVideoBase::ShowResumeMenu(CFileItem &item)
+ {
+-  if (!item.m_bIsFolder && !item.IsLiveTV())
++  if (!item.m_bIsFolder && !item.IsPVR())
+   {
+     std::string resumeString = GetResumeString(item);
+     if (!resumeString.empty())

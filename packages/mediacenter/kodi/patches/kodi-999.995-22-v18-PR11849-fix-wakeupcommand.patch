@@ -1,0 +1,153 @@
+diff --git a/xbmc/pvr/PVRActionListener.cpp b/xbmc/pvr/PVRActionListener.cpp
+index 002d117..3fcaebf 100644
+--- a/xbmc/pvr/PVRActionListener.cpp
++++ b/xbmc/pvr/PVRActionListener.cpp
+@@ -52,7 +52,6 @@ void CPVRActionListener::Init()
+   settingSet.insert(CSettings::SETTING_PVRMANAGER_CHANNELSCAN);
+   settingSet.insert(CSettings::SETTING_PVRMENU_SEARCHICONS);
+   settingSet.insert(CSettings::SETTING_PVRCLIENT_MENUHOOK);
+-  settingSet.insert(CSettings::SETTING_EPG_DAYSTODISPLAY);
+   CSettings::GetInstance().RegisterCallback(this, settingSet);
+ }
+ 
+@@ -197,10 +196,6 @@ void CPVRActionListener::OnSettingAction(const CSetting *setting)
+   {
+     CPVRGUIActions::GetInstance().ProcessMenuHooks(CFileItemPtr());
+   }
+-  else if (settingId == CSettings::SETTING_EPG_DAYSTODISPLAY)
+-  {
+-    g_PVRClients->SetEPGTimeFrame(static_cast<const CSettingInt*>(setting)->GetValue());
+-  }
+ }
+ 
+ } // namespace PVR
+diff --git a/xbmc/pvr/PVRManager.cpp b/xbmc/pvr/PVRManager.cpp
+index 7795c50..eff552f 100644
+--- a/xbmc/pvr/PVRManager.cpp
++++ b/xbmc/pvr/PVRManager.cpp
+@@ -159,13 +159,16 @@ CPVRManager::CPVRManager(void) :
+     m_progressBar(nullptr),
+     m_progressHandle(nullptr),
+     m_managerState(ManagerStateStopped),
+-    m_isChannelPreview(false)
++    m_isChannelPreview(false),
++    m_bSettingPowerManagementEnabled(CSettings::GetInstance().GetBool(CSettings::SETTING_PVRPOWERMANAGEMENT_ENABLED)),
++    m_strSettingWakeupCommand(CSettings::GetInstance().GetString(CSettings::SETTING_PVRPOWERMANAGEMENT_SETWAKEUPCMD))
+ {
+   CAnnouncementManager::GetInstance().AddAnnouncer(this);
+ }
+ 
+ CPVRManager::~CPVRManager(void)
+ {
++  CSettings::GetInstance().UnregisterCallback(this);
+   CAnnouncementManager::GetInstance().RemoveAnnouncer(this);
+   CLog::Log(LOGDEBUG,"PVRManager - destroyed");
+ }
+@@ -249,6 +252,28 @@ CPVRClientsPtr CPVRManager::Clients(void) const
+   return m_addons;
+ }
+ 
++void CPVRManager::OnSettingChanged(const CSetting *setting)
++{
++  if (setting == nullptr)
++    return;
++
++  const std::string &settingId = setting->GetId();
++  if (settingId == CSettings::SETTING_EPG_DAYSTODISPLAY)
++  {
++    m_addons->SetEPGTimeFrame(static_cast<const CSettingInt*>(setting)->GetValue());
++  }
++  else if (settingId == CSettings::SETTING_PVRPOWERMANAGEMENT_ENABLED)
++  {
++    CSingleLock lock(m_critSection);
++    m_bSettingPowerManagementEnabled = static_cast<const CSettingBool*>(setting)->GetValue();
++  }
++  else if (settingId == CSettings::SETTING_PVRPOWERMANAGEMENT_SETWAKEUPCMD)
++  {
++    CSingleLock lock(m_critSection);
++    m_strSettingWakeupCommand = static_cast<const CSettingString*>(setting)->GetValue();
++  }
++}
++
+ void CPVRManager::Clear(void)
+ {
+   g_application.UnregisterActionListener(&CPVRActionListener::GetInstance());
+@@ -286,6 +311,12 @@ void CPVRManager::ResetProperties(void)
+ 
+ void CPVRManager::Init()
+ {
++  std::set<std::string> settingSet;
++  settingSet.insert(CSettings::SETTING_EPG_DAYSTODISPLAY);
++  settingSet.insert(CSettings::SETTING_PVRPOWERMANAGEMENT_ENABLED);
++  settingSet.insert(CSettings::SETTING_PVRPOWERMANAGEMENT_SETWAKEUPCMD);
++  CSettings::GetInstance().RegisterCallback(this, settingSet);
++
+   // Create and init action listener
+   CPVRActionListener::GetInstance().Init();
+ 
+@@ -528,11 +559,19 @@ void CPVRManager::Process(void)
+ 
+ bool CPVRManager::SetWakeupCommand(void)
+ {
+-  if (!CSettings::GetInstance().GetBool(CSettings::SETTING_PVRPOWERMANAGEMENT_ENABLED))
++  bool bSettingPowerManagementEnabled;
++  std::string strSettingWakeupCommand;
++
++  {
++    CSingleLock lock(m_critSection);
++    bSettingPowerManagementEnabled = m_bSettingPowerManagementEnabled;
++    strSettingWakeupCommand = m_strSettingWakeupCommand;
++  }
++
++  if (!bSettingPowerManagementEnabled)
+     return false;
+ 
+-  const std::string strWakeupCommand = CSettings::GetInstance().GetString(CSettings::SETTING_PVRPOWERMANAGEMENT_SETWAKEUPCMD);
+-  if (!strWakeupCommand.empty() && m_timers)
++  if (!strSettingWakeupCommand.empty() && m_timers)
+   {
+     time_t iWakeupTime;
+     const CDateTime nextEvent = m_timers->GetNextEventTime();
+@@ -540,7 +579,7 @@ bool CPVRManager::SetWakeupCommand(void)
+     {
+       nextEvent.GetAsTime(iWakeupTime);
+ 
+-      std::string strExecCommand = StringUtils::Format("%s %ld", strWakeupCommand.c_str(), iWakeupTime);
++      std::string strExecCommand = StringUtils::Format("%s %ld", strSettingWakeupCommand.c_str(), iWakeupTime);
+ 
+       const int iReturn = system(strExecCommand.c_str());
+       if (iReturn != 0)
+diff --git a/xbmc/pvr/PVRManager.h b/xbmc/pvr/PVRManager.h
+index 3ecface..abb2b45 100644
+--- a/xbmc/pvr/PVRManager.h
++++ b/xbmc/pvr/PVRManager.h
+@@ -94,7 +94,7 @@ namespace PVR
+     bool m_bStopped;
+   };
+ 
+-  class CPVRManager : private CThread, public Observable, public ANNOUNCEMENT::IAnnouncer
++  class CPVRManager : private CThread, public Observable, public ANNOUNCEMENT::IAnnouncer, public ISettingCallback
+   {
+     friend class CPVRClients;
+ 
+@@ -131,6 +131,9 @@ namespace PVR
+      */
+     static CPVRManager &GetInstance();
+ 
++    // ISettingCallback implementation
++    void OnSettingChanged(const CSetting *setting) override;
++
+     /*!
+      * @brief Get the channel groups container.
+      * @return The groups container.
+@@ -647,6 +650,10 @@ namespace PVR
+ 
+     std::atomic_bool m_isChannelPreview;
+     CEventSource<PVREvent> m_events;
++
++    // settings cache
++    bool m_bSettingPowerManagementEnabled; // SETTING_PVRPOWERMANAGEMENT_ENABLED
++    std::string m_strSettingWakeupCommand; // SETTING_PVRPOWERMANAGEMENT_SETWAKEUPCMD
+   };
+ 
+   class CPVRStartupJob : public CJob

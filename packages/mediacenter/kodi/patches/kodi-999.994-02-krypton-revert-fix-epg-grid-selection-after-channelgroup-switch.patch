@@ -1,0 +1,361 @@
+diff --git a/xbmc/epg/GUIEPGGridContainer.cpp b/xbmc/epg/GUIEPGGridContainer.cpp
+index ec3c4b0..44ff0dd 100644
+--- a/xbmc/epg/GUIEPGGridContainer.cpp
++++ b/xbmc/epg/GUIEPGGridContainer.cpp
+@@ -346,6 +346,14 @@ void CGUIEPGGridContainer::RenderItem(float posX, float posY, CGUIListItem *item
+   g_graphicsContext.RestoreOrigin();
+ }
+ 
++void CGUIEPGGridContainer::ResetCoordinates()
++{
++  m_channelCursor = 0;
++  m_channelOffset = 0;
++  m_blockCursor = 0;
++  m_blockOffset = 0;
++}
++
+ bool CGUIEPGGridContainer::OnAction(const CAction &action)
+ {
+   switch (action.GetID())
+@@ -595,23 +603,9 @@ void CGUIEPGGridContainer::UpdateItems()
+ 
+   if (prevSelectedEpgTag && (oldChannelIndex != 0 || oldBlockIndex != 0))
+   {
+-    if (newChannelIndex >= m_gridModel->ChannelItemsSize() ||
+-        newBlockIndex >= m_gridModel->GetBlockCount() ||
+-        m_gridModel->GetGridItem(newChannelIndex, newBlockIndex)->GetEPGInfoTag() != prevSelectedEpgTag)
+-    {
++    if (m_gridModel->GetGridItem(newChannelIndex, newBlockIndex)->GetEPGInfoTag() != prevSelectedEpgTag)
+       m_gridModel->FindChannelAndBlockIndex(channelUid, broadcastUid, eventOffset, newChannelIndex, newBlockIndex);
+ 
+-      if (newChannelIndex == CGUIEPGGridContainerModel::INVALID_INDEX ||
+-          newBlockIndex == CGUIEPGGridContainerModel::INVALID_INDEX)
+-      {
+-        // previous selection is no longer in grid, goto channel 0 and now
+-        SetInvalid();
+-        GoToChannel(0);
+-        GoToNow();
+-        return;
+-      }
+-    }
+-
+     // restore previous selection.
+     if (newChannelIndex == oldChannelIndex && newBlockIndex == oldBlockIndex)
+     {
+@@ -1388,18 +1382,18 @@ void CGUIEPGGridContainer::SetTimelineItems(const std::unique_ptr<CFileItemList>
+ 
+ void CGUIEPGGridContainer::GoToChannel(int channelIndex)
+ {
+-  if (channelIndex < m_channelsPerPage)
+-  {
+-    // first page
+-    ScrollToChannelOffset(0);
+-    SetChannel(channelIndex);
+-  }
+-  else if (channelIndex > m_gridModel->ChannelItemsSize() - m_channelsPerPage)
++  if (channelIndex > m_gridModel->ChannelItemsSize() - m_channelsPerPage)
+   {
+     // last page
+     ScrollToChannelOffset(m_gridModel->ChannelItemsSize() - m_channelsPerPage);
+     SetChannel(channelIndex - (m_gridModel->ChannelItemsSize() - m_channelsPerPage));
+   }
++  else if (channelIndex < m_channelsPerPage)
++  {
++    // first page
++    ScrollToChannelOffset(0);
++    SetChannel(channelIndex);
++  }
+   else
+   {
+     ScrollToChannelOffset(channelIndex - m_channelCursor);
+@@ -1409,12 +1403,17 @@ void CGUIEPGGridContainer::GoToChannel(int channelIndex)
+ 
+ void CGUIEPGGridContainer::GoToBlock(int blockIndex)
+ {
+-  int lastPage = m_gridModel->GetBlockCount() - m_blocksPerPage;
+-  if (blockIndex > lastPage)
++  if (blockIndex > m_gridModel->GetBlockCount() - m_blocksPerPage)
+   {
+-    // last page
+-    ScrollToBlockOffset(lastPage);
+-    SetBlock(blockIndex - lastPage);
++    // last block
++    ScrollToBlockOffset(m_gridModel->GetBlockCount() - m_blocksPerPage);
++    SetBlock(blockIndex - (m_gridModel->GetBlockCount() - m_blocksPerPage));
++  }
++  else if (blockIndex < m_blocksPerPage)
++  {
++    // first block
++    ScrollToBlockOffset(0);
++    SetBlock(blockIndex);
+   }
+   else
+   {
+diff --git a/xbmc/epg/GUIEPGGridContainer.h b/xbmc/epg/GUIEPGGridContainer.h
+index 72be679..cf6a901 100644
+--- a/xbmc/epg/GUIEPGGridContainer.h
++++ b/xbmc/epg/GUIEPGGridContainer.h
+@@ -84,6 +84,7 @@ namespace EPG
+     void SetTimelineItems(const std::unique_ptr<CFileItemList> &items, const CDateTime &gridStart, const CDateTime &gridEnd);
+     void SetChannel(const PVR::CPVRChannelPtr &channel);
+     void SetChannel(const std::string &channel);
++    void ResetCoordinates();
+ 
+   protected:
+     bool OnClick(int actionID);
+diff --git a/xbmc/epg/GUIEPGGridContainerModel.cpp b/xbmc/epg/GUIEPGGridContainerModel.cpp
+index 69fd12d..1abc733 100644
+--- a/xbmc/epg/GUIEPGGridContainerModel.cpp
++++ b/xbmc/epg/GUIEPGGridContainerModel.cpp
+@@ -272,9 +272,6 @@ void CGUIEPGGridContainerModel::FindChannelAndBlockIndex(int channelUid, unsigne
+   const CDateTimeSpan blockDuration(0, 0, MINSPERBLOCK, 0);
+   bool bFoundPrevChannel = false;
+ 
+-  newChannelIndex = INVALID_INDEX;
+-  newBlockIndex = INVALID_INDEX;
+-
+   for (size_t channel = 0; channel < m_channelItems.size(); ++channel)
+   {
+     CDateTime gridCursor(m_gridStart); //reset cursor for new channel
+diff --git a/xbmc/epg/GUIEPGGridContainerModel.h b/xbmc/epg/GUIEPGGridContainerModel.h
+index 716816e..06e66ec 100644
+--- a/xbmc/epg/GUIEPGGridContainerModel.h
++++ b/xbmc/epg/GUIEPGGridContainerModel.h
+@@ -53,7 +53,6 @@ namespace EPG
+     void Refresh(const std::unique_ptr<CFileItemList> &items, const CDateTime &gridStart, const CDateTime &gridEnd, int iRulerUnit, int iBlocksPerPage, float fBlockSize);
+     void SetInvalid();
+ 
+-    static const int INVALID_INDEX = -1;
+     void FindChannelAndBlockIndex(int channelUid, unsigned int broadcastUid, int eventOffset, int &newChannelIndex, int &newBlockIndex) const;
+ 
+     void FreeChannelMemory(int keepStart, int keepEnd);
+diff --git a/xbmc/pvr/windows/GUIWindowPVRGuide.cpp b/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
+index 9c4d338..93e875c 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
++++ b/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
+@@ -19,7 +19,6 @@
+  */
+ 
+ #include "ContextMenuManager.h"
+-#include "dialogs/GUIDialogBusy.h"
+ #include "epg/GUIEPGGridContainer.h"
+ #include "GUIUserMessages.h"
+ #include "epg/EpgContainer.h"
+@@ -42,7 +41,8 @@ using namespace PVR;
+ using namespace EPG;
+ 
+ CGUIWindowPVRGuide::CGUIWindowPVRGuide(bool bRadio) :
+-  CGUIWindowPVRBase(bRadio, bRadio ? WINDOW_RADIO_GUIDE : WINDOW_TV_GUIDE, "MyPVRGuide.xml")
++  CGUIWindowPVRBase(bRadio, bRadio ? WINDOW_RADIO_GUIDE : WINDOW_TV_GUIDE, "MyPVRGuide.xml"),
++  m_cachedChannelGroup(new CPVRChannelGroup)
+ {
+   m_bRefreshTimelineItems = false;
+   g_EpgContainer.RegisterObserver(this);
+@@ -51,8 +51,6 @@ CGUIWindowPVRGuide::CGUIWindowPVRGuide(bool bRadio) :
+ CGUIWindowPVRGuide::~CGUIWindowPVRGuide(void)
+ {
+   g_EpgContainer.UnregisterObserver(this);
+-
+-  m_bRefreshTimelineItems = false;
+   StopRefreshTimelineItemsThread();
+ }
+ 
+@@ -70,12 +68,7 @@ void CGUIWindowPVRGuide::Init()
+     epgGridContainer->GoToNow();
+   }
+ 
+-  if (!m_refreshTimelineItemsThread)
+-  {
+-    CSingleLock lock(m_critSection);
+-    m_bRefreshTimelineItems = true; // force data update on first window open
+-  }
+-
++  m_bRefreshTimelineItems = true;
+   StartRefreshTimelineItemsThread();
+ }
+ 
+@@ -83,7 +76,7 @@ void CGUIWindowPVRGuide::ClearData()
+ {
+   {
+     CSingleLock lock(m_critSection);
+-    m_cachedChannelGroup.reset();
++    m_cachedChannelGroup.reset(new CPVRChannelGroup);
+     m_newTimeline.reset();
+   }
+ 
+@@ -104,16 +97,7 @@ void CGUIWindowPVRGuide::OnInitWindow()
+ void CGUIWindowPVRGuide::OnDeinitWindow(int nextWindowID)
+ {
+   StopRefreshTimelineItemsThread();
+-
+-  {
+-    CSingleLock lock(m_critSection);
+-    if (m_vecItems && !m_newTimeline)
+-    {
+-      // speedup: save a copy of current items for reuse when re-opening the window
+-      m_newTimeline.reset(new CFileItemList);
+-      m_newTimeline->Copy(*m_vecItems);
+-    }
+-  }
++  m_bRefreshTimelineItems = false;
+ 
+   CGUIWindowPVRBase::OnDeinitWindow(nextWindowID);
+ }
+@@ -128,12 +112,13 @@ void CGUIWindowPVRGuide::StartRefreshTimelineItemsThread()
+ void CGUIWindowPVRGuide::StopRefreshTimelineItemsThread()
+ {
+   if (m_refreshTimelineItemsThread)
+-    m_refreshTimelineItemsThread->Stop();
++    m_refreshTimelineItemsThread->StopThread(false);
+ }
+ 
+ void CGUIWindowPVRGuide::Notify(const Observable &obs, const ObservableMessage msg)
+ {
+-  if (m_viewControl.GetCurrentControl() == GUIDE_VIEW_TIMELINE &&
++  if (IsActive() &&
++      m_viewControl.GetCurrentControl() == GUIDE_VIEW_TIMELINE &&
+       (msg == ObservableMessageEpg ||
+        msg == ObservableMessageEpgContainer ||
+        msg == ObservableMessageChannelGroupReset ||
+@@ -523,16 +508,10 @@ void CGUIWindowPVRGuide::GetViewNextItems(CFileItemList &items)
+ 
+ bool CGUIWindowPVRGuide::RefreshTimelineItems()
+ {
+-  bool bRefreshTimelineItems;
++  if (m_bRefreshTimelineItems)
+   {
+-    CSingleLock lock(m_critSection);
+-
+-    bRefreshTimelineItems = m_bRefreshTimelineItems;
+     m_bRefreshTimelineItems = false;
+-  }
+ 
+-  if (bRefreshTimelineItems)
+-  {
+     CGUIEPGGridContainer* epgGridContainer = GetGridControl();
+     if (epgGridContainer)
+     {
+@@ -577,22 +556,27 @@ bool CGUIWindowPVRGuide::RefreshTimelineItems()
+ 
+ void CGUIWindowPVRGuide::GetViewTimelineItems(CFileItemList &items)
+ {
+-  bool bRefreshTimelineItems = false;
++  bool bRefresh = false;
+ 
+   {
+     CSingleLock lock(m_critSection);
+ 
+-    if (m_cachedChannelGroup && *m_cachedChannelGroup != *GetChannelGroup())
++    // group change detected reset grid coordinates and refresh grid items
++    if (!m_bRefreshTimelineItems && *m_cachedChannelGroup != *GetChannelGroup())
+     {
+-      // channel group change and not very first open of this window. force immediate update.
++      CGUIEPGGridContainer* epgGridContainer = GetGridControl();
++      if (!epgGridContainer)
++        return;
++
++      epgGridContainer->ResetCoordinates();
+       m_bRefreshTimelineItems = true;
+-      bRefreshTimelineItems = true;
++      bRefresh = true;
+     }
+   }
+ 
+-  // never call DoRefresh with locked mutex!
+-  if (bRefreshTimelineItems)
+-    m_refreshTimelineItemsThread->DoRefresh();
++  // never call RefreshTimelineItems with locked mutex!
++  if (bRefresh)
++    RefreshTimelineItems();
+ 
+   {
+     CSingleLock lock(m_critSection);
+@@ -721,23 +705,8 @@ bool CGUIWindowPVRGuide::OnContextButtonDeleteTimer(CFileItem *item, CONTEXT_BUT
+ 
+ CPVRRefreshTimelineItemsThread::CPVRRefreshTimelineItemsThread(CGUIWindowPVRGuide *pGuideWindow)
+ : CThread("epg-grid-refresh-timeline-items"),
+-  m_pGuideWindow(pGuideWindow),
+-  m_ready(true),
+-  m_done(false)
+-{
+-}
+-
+-void CPVRRefreshTimelineItemsThread::Stop()
++  m_pGuideWindow(pGuideWindow)
+ {
+-  StopThread(false);
+-  m_ready.Set(); // wake up the worker thread to let it exit
+-}
+-
+-void CPVRRefreshTimelineItemsThread::DoRefresh()
+-{
+-  m_ready.Set(); // wake up the worker thread
+-  m_done.Reset();
+-  CGUIDialogBusy::WaitOnEvent(m_done, 100, false);
+ }
+ 
+ void CPVRRefreshTimelineItemsThread::Process()
+@@ -749,19 +718,12 @@ void CPVRRefreshTimelineItemsThread::Process()
+ 
+   while (!m_bStop)
+   {
+-    m_done.Reset();
+-
+     if (m_pGuideWindow->RefreshTimelineItems() && !m_bStop)
+     {
+       CGUIMessage m(GUI_MSG_REFRESH_LIST, m_pGuideWindow->GetID(), 0, ObservableMessageEpg);
+       KODI::MESSAGING::CApplicationMessenger::GetInstance().SendGUIMessage(m);
+     }
+ 
+-    if (m_bStop)
+-      break;
+-
+-    m_done.Set();
+-
+     // in order to fill the guide window asap, use a short update interval until we the
+     // same amount of epg events for BOOSTED_SLEEPS_THRESHOLD + 1 times in a row .
+     if (iUpdatesWithoutChange < BOOSTED_SLEEPS_THRESHOLD)
+@@ -775,16 +737,11 @@ void CPVRRefreshTimelineItemsThread::Process()
+ 
+       iLastEpgItemsCount = iCurrentEpgItemsCount;
+ 
+-      m_ready.WaitMSec(1000); // boosted update cycle
++      Sleep(1000); // boosted update cycle
+     }
+     else
+     {
+-      m_ready.WaitMSec(5000); // normal update cycle
++      Sleep(5000); // normal update cycle
+     }
+-
+-    m_ready.Reset();
+   }
+-
+-  m_ready.Reset();
+-  m_done.Set();
+ }
+diff --git a/xbmc/pvr/windows/GUIWindowPVRGuide.h b/xbmc/pvr/windows/GUIWindowPVRGuide.h
+index c4f0682..d5a41fc 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRGuide.h
++++ b/xbmc/pvr/windows/GUIWindowPVRGuide.h
+@@ -21,7 +21,6 @@
+ 
+ #include <atomic>
+ #include <memory>
+-#include "threads/Event.h"
+ #include "threads/Thread.h"
+ #include "GUIWindowPVRBase.h"
+ 
+@@ -100,12 +99,7 @@ namespace PVR
+ 
+     virtual void Process();
+ 
+-    void DoRefresh();
+-    void Stop();
+-
+   private:
+     CGUIWindowPVRGuide *m_pGuideWindow;
+-    CEvent m_ready;
+-    CEvent m_done;
+   };
+ }

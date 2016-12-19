@@ -1,0 +1,174 @@
+diff --git a/xbmc/addons/PVRClient.cpp b/xbmc/addons/PVRClient.cpp
+index a07d20f..9999273 100644
+--- a/xbmc/addons/PVRClient.cpp
++++ b/xbmc/addons/PVRClient.cpp
+@@ -40,6 +40,7 @@
+ #include "PVRClient.h"
+ 
+ #include <assert.h>
++#include <cmath>
+ #include <memory>
+ #include <algorithm>
+ 
+@@ -288,8 +289,8 @@ void CPVRClient::WriteClientRecordingInfo(const CPVRRecording &xbmcRecording, PV
+   addonRecording.iDuration           = xbmcRecording.GetDuration();
+   addonRecording.iPriority           = xbmcRecording.m_iPriority;
+   addonRecording.iLifetime           = xbmcRecording.m_iLifetime;
+-  addonRecording.iPlayCount          = xbmcRecording.GetPlayCount();
+-  addonRecording.iLastPlayedPosition = (int)xbmcRecording.GetResumePoint().timeInSeconds;
++  addonRecording.iPlayCount          = xbmcRecording.GetLocalPlayCount();
++  addonRecording.iLastPlayedPosition = lrint(xbmcRecording.GetLocalResumePoint().timeInSeconds);
+   addonRecording.bIsDeleted          = xbmcRecording.IsDeleted();
+   strncpy(addonRecording.strDirectory, xbmcRecording.m_strDirectory.c_str(), sizeof(addonRecording.strDirectory) - 1);
+   strncpy(addonRecording.strStreamURL, xbmcRecording.m_strStreamURL.c_str(), sizeof(addonRecording.strStreamURL) - 1);
+diff --git a/xbmc/pvr/recordings/PVRRecording.cpp b/xbmc/pvr/recordings/PVRRecording.cpp
+index ac198bd..2612fae 100644
+--- a/xbmc/pvr/recordings/PVRRecording.cpp
++++ b/xbmc/pvr/recordings/PVRRecording.cpp
+@@ -285,6 +285,19 @@ bool CPVRRecording::SetPlayCount(int count)
+   return CVideoInfoTag::SetPlayCount(count);
+ }
+ 
++bool CPVRRecording::IncrementPlayCount()
++{
++  PVR_ERROR error;
++  if (g_PVRClients->SupportsRecordingPlayCount(m_iClientId) &&
++      !g_PVRClients->SetRecordingPlayCount(*this, CVideoInfoTag::GetPlayCount(), &error))
++  {
++    DisplayError(error);
++    return false;
++  }
++
++  return CVideoInfoTag::IncrementPlayCount();
++}
++
+ bool CPVRRecording::SetResumePoint(const CBookmark &resumePoint)
+ {
+   PVR_ERROR error;
+@@ -298,6 +311,19 @@ bool CPVRRecording::SetResumePoint(const CBookmark &resumePoint)
+   return CVideoInfoTag::SetResumePoint(resumePoint);
+ }
+ 
++bool CPVRRecording::SetResumePoint(double timeInSeconds, double totalTimeInSeconds)
++{
++  PVR_ERROR error;
++  if (g_PVRClients->SupportsLastPlayedPosition(m_iClientId) &&
++      !g_PVRClients->SetRecordingLastPlayedPosition(*this, lrint(timeInSeconds), &error))
++  {
++    DisplayError(error);
++    return false;
++  }
++
++  return CVideoInfoTag::SetResumePoint(timeInSeconds, totalTimeInSeconds);
++}
++
+ CBookmark CPVRRecording::GetResumePoint() const
+ {
+   if (g_PVRClients->SupportsLastPlayedPosition(m_iClientId))
+@@ -385,8 +411,8 @@ void CPVRRecording::Update(const CPVRRecording &tag)
+   m_iChannelUid       = tag.m_iChannelUid;
+   m_bRadio            = tag.m_bRadio;
+ 
+-  SetPlayCount(tag.GetPlayCount());
+-  SetResumePoint(tag.GetResumePoint());
++  CVideoInfoTag::SetPlayCount(tag.GetLocalPlayCount());
++  CVideoInfoTag::SetResumePoint(tag.GetLocalResumePoint());
+   SetDuration(tag.GetDuration());
+ 
+   //Old Method of identifying TV show title and subtitle using m_strDirectory and strPlotOutline (deprecated)
+diff --git a/xbmc/pvr/recordings/PVRRecording.h b/xbmc/pvr/recordings/PVRRecording.h
+index 561b47e..602dc60 100644
+--- a/xbmc/pvr/recordings/PVRRecording.h
++++ b/xbmc/pvr/recordings/PVRRecording.h
+@@ -126,26 +126,53 @@ namespace PVR
+     bool Rename(const std::string &strNewName);
+ 
+     /*!
+-     * @brief Set this recording's play count on the client (if supported).
++     * @brief Set this recording's play count. The value will be transferred to the backend if it supports server-side play counts.
+      * @param count play count.
+      * @return True if play count was set successfully, false otherwise.
+      */
+     bool SetPlayCount(int count) override;
+ 
+     /*!
+-     * @brief Set this videos's resume point.
++     * @brief Increment this recording's play count. The value will be transferred to the backend if it supports server-side play counts.
++     * @return True if play count was increased successfully, false otherwise.
++     */
++    bool IncrementPlayCount() override;
++
++   /*!
++     * @brief Get this recording's local play count. The value will not be obtained from the backend, even if it supports server-side play counts.
++     * @return the play count.
++     */
++    int GetLocalPlayCount() const { return CVideoInfoTag::GetPlayCount(); }
++
++    /*!
++     * @brief Set this recording's resume point. The value will be transferred to the backend if it supports server-side resume points.
+      * @param resumePoint resume point.
+      * @return True if resume point was set successfully, false otherwise.
+      */
+     bool SetResumePoint(const CBookmark &resumePoint) override;
+ 
+     /*!
+-     * @brief Get this recording's resume point.
++     * @brief Set this recording's resume point. The value will be transferred to the backend if it supports server-side resume points.
++     * @param timeInSeconds the time of the resume point
++     * @param totalTimeInSeconds the total time of the video
++     * @param playerState the player state
++     * @return True if resume point was set successfully, false otherwise.
++     */
++    bool SetResumePoint(double timeInSeconds, double totalTimeInSeconds) override;
++
++    /*!
++     * @brief Get this recording's resume point. The value will be obtained from the backend if it supports server-side resume points.
+      * @return the resume point.
+      */
+     CBookmark GetResumePoint() const override;
+ 
+     /*!
++     * @brief Get this recording's local resume point. The value will not be obtained from the backend even if it supports server-side resume points.
++     * @return the resume point.
++     */
++    CBookmark GetLocalResumePoint() const { return CVideoInfoTag::GetResumePoint(); }
++
++    /*!
+      * @brief Retrieve the edit decision list (EDL) of a recording on the backend.
+      * @return The edit decision list (empty on error)
+      */
+diff --git a/xbmc/video/VideoInfoTag.cpp b/xbmc/video/VideoInfoTag.cpp
+index 9a6712b..a6090cf 100644
+--- a/xbmc/video/VideoInfoTag.cpp
++++ b/xbmc/video/VideoInfoTag.cpp
+@@ -1529,7 +1529,7 @@ bool CVideoInfoTag::SetPlayCount(int count)
+ 
+ bool CVideoInfoTag::IncrementPlayCount()
+ {
+-  SetPlayCount(m_playCount + 1); // note: not just m_playCount++; call the possibly overridden SetPlayCount
++  m_playCount++;
+   return true;
+ }
+ 
+@@ -1550,5 +1550,7 @@ bool CVideoInfoTag::SetResumePoint(double timeInSeconds, double totalTimeInSecon
+   resumePoint.timeInSeconds = timeInSeconds;
+   resumePoint.totalTimeInSeconds = totalTimeInSeconds;
+   resumePoint.type = CBookmark::RESUME;
+-  return SetResumePoint(resumePoint); // note: not just m_resumePoint = resumePoint; call the possibly overridden SetResumePoint
++
++  m_resumePoint = resumePoint;
++  return true;
+ }
+diff --git a/xbmc/video/VideoInfoTag.h b/xbmc/video/VideoInfoTag.h
+index 90391da..299c03c 100644
+--- a/xbmc/video/VideoInfoTag.h
++++ b/xbmc/video/VideoInfoTag.h
+@@ -207,7 +207,7 @@ public:
+    * @param totalTimeInSeconds the total time of the video
+    * @return True if resume point was set successfully, false otherwise.
+    */
+-  bool SetResumePoint(double timeInSeconds, double totalTimeInSeconds);
++  virtual bool SetResumePoint(double timeInSeconds, double totalTimeInSeconds);
+ 
+   std::string m_basePath; // the base path of the video, for folder-based lookups
+   int m_parentPathID;      // the parent path id where the base path of the video lies

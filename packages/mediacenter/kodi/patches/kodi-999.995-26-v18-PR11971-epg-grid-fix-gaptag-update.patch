@@ -1,0 +1,116 @@
+diff --git a/xbmc/epg/GUIEPGGridContainer.cpp b/xbmc/epg/GUIEPGGridContainer.cpp
+index 2a20b1d..9852e01 100644
+--- a/xbmc/epg/GUIEPGGridContainer.cpp
++++ b/xbmc/epg/GUIEPGGridContainer.cpp
+@@ -698,6 +698,10 @@ void CGUIEPGGridContainer::UpdateItems()
+     }
+     else // "gap" tag selected
+     {
++      const GridItem *currItem(GetItem(m_channelCursor));
++      if (currItem)
++        channelUid = currItem->item->GetEPGInfoTag()->ChannelTag()->UniqueID();
++
+       const GridItem *prevItem(GetPrevItem(m_channelCursor));
+       if (prevItem)
+       {
+@@ -715,10 +719,6 @@ void CGUIEPGGridContainer::UpdateItems()
+           else
+             newBlockIndex = (eventEnd - gridStart).GetSecondsTotal() / 60 / CGUIEPGGridContainerModel::MINSPERBLOCK + eventOffset;
+ 
+-          const CPVRChannelPtr channel(tag->ChannelTag());
+-          if (channel)
+-            channelUid = channel->UniqueID();
+-
+           broadcastUid = tag->UniqueBroadcastID();
+         }
+       }
+@@ -746,8 +746,11 @@ void CGUIEPGGridContainer::UpdateItems()
+       newBlockIndex += diff / 60 / CGUIEPGGridContainerModel::MINSPERBLOCK;
+       if (newBlockIndex < 0 || newBlockIndex + 1 > m_gridModel->GetBlockCount())
+       {
+-        // previously selected event no longer in grid.
+-        prevSelectedEpgTag.reset();
++        // previous selection is no longer in grid.
++        SetInvalid();
++        GoToChannel(newChannelIndex);
++        GoToNow();
++        return;
+       }
+     }
+   }
+@@ -758,16 +761,30 @@ void CGUIEPGGridContainer::UpdateItems()
+         newBlockIndex >= m_gridModel->GetBlockCount() ||
+         m_gridModel->GetGridItem(newChannelIndex, newBlockIndex)->GetEPGInfoTag() != prevSelectedEpgTag)
+     {
+-      m_gridModel->FindChannelAndBlockIndex(channelUid, broadcastUid, eventOffset, newChannelIndex, newBlockIndex);
++      int iChannelIndex = CGUIEPGGridContainerModel::INVALID_INDEX;
++      int iBlockIndex = CGUIEPGGridContainerModel::INVALID_INDEX;
++      m_gridModel->FindChannelAndBlockIndex(channelUid, broadcastUid, eventOffset, iChannelIndex, iBlockIndex);
+ 
+-      if (newChannelIndex == CGUIEPGGridContainerModel::INVALID_INDEX ||
+-          newBlockIndex == CGUIEPGGridContainerModel::INVALID_INDEX)
++      if (iChannelIndex != CGUIEPGGridContainerModel::INVALID_INDEX)
+       {
+-        // previous selection is no longer in grid, goto channel 0 and now
+-        SetInvalid();
+-        GoToChannel(0);
+-        GoToNow();
+-        return;
++        newChannelIndex = iChannelIndex;
++      }
++      else if (newChannelIndex >= m_gridModel->ChannelItemsSize() ||
++               m_gridModel->GetGridItem(newChannelIndex, newBlockIndex)->GetEPGInfoTag()->ChannelTag() != prevSelectedEpgTag->ChannelTag())
++      {
++        // default to first channel
++        newChannelIndex = 0;
++      }
++
++      if (iBlockIndex != CGUIEPGGridContainerModel::INVALID_INDEX)
++      {
++        newBlockIndex = iBlockIndex;
++      }
++      else if (newBlockIndex >= m_gridModel->GetBlockCount())
++      {
++        // default to now
++        const CDateTime currentDate = CDateTime::GetCurrentDateTime().GetAsUTCDateTime();
++        newBlockIndex = (currentDate - m_gridModel->GetGridStart()).GetSecondsTotal() / 60 / CGUIEPGGridContainerModel::MINSPERBLOCK - GetPageNowOffset();
+       }
+     }
+ 
+diff --git a/xbmc/epg/GUIEPGGridContainerModel.cpp b/xbmc/epg/GUIEPGGridContainerModel.cpp
+index aea6ffa..9191a17 100644
+--- a/xbmc/epg/GUIEPGGridContainerModel.cpp
++++ b/xbmc/epg/GUIEPGGridContainerModel.cpp
+@@ -290,6 +290,16 @@ void CGUIEPGGridContainerModel::FindChannelAndBlockIndex(int channelUid, unsigne
+       {
+         tag = m_programmeItems[progIdx]->GetEPGInfoTag();
+ 
++        if (!bFoundPrevChannel && channelUid > -1)
++        {
++          chan = tag->ChannelTag();
++          if (chan && chan->UniqueID() == channelUid)
++          {
++            newChannelIndex = channel;
++            bFoundPrevChannel = true;
++          }
++        }
++
+         if (tag->EpgID() != iEpgId || gridCursor < tag->StartAsUTC() || m_gridEnd <= tag->StartAsUTC())
+           break; // next block
+ 
+@@ -301,15 +311,6 @@ void CGUIEPGGridContainerModel::FindChannelAndBlockIndex(int channelUid, unsigne
+             newBlockIndex   = block + eventOffset;
+             return; // both found. done.
+           }
+-          if (!bFoundPrevChannel && channelUid > -1)
+-          {
+-            chan = tag->ChannelTag();
+-            if (chan && chan->UniqueID() == channelUid)
+-            {
+-              newChannelIndex = channel;
+-              bFoundPrevChannel = true;
+-            }
+-          }
+           break; // next block
+         }
+         progIdx++;

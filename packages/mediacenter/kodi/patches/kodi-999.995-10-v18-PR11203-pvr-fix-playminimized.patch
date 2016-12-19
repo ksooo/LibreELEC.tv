@@ -1,0 +1,426 @@
+diff --git a/addons/resource.language.en_gb/resources/strings.po b/addons/resource.language.en_gb/resources/strings.po
+index f51a7d3..3410107 100644
+--- a/addons/resource.language.en_gb/resources/strings.po
++++ b/addons/resource.language.en_gb/resources/strings.po
+@@ -9948,10 +9948,10 @@ msgctxt "#19170"
+ msgid "Timeout when starting playback"
+ msgstr ""
+ 
+-#. pvr settings "start playback in a window instead of full screen" setting label
++#. pvr settings "start playback full screen" setting label
+ #: system/settings/settings.xml
+ msgctxt "#19171"
+-msgid "Start playback minimised"
++msgid "Switch to full screen"
+ msgstr ""
+ 
+ #. pvr settings "duration for an instant recording" setting label
+@@ -17703,7 +17703,7 @@ msgstr ""
+ 
+ #: system/settings/settings.xml
+ msgctxt "#36227"
+-msgid "Display stream of selected channel in a small box instead of fullscreen."
++msgid "Switch to full screen display when starting playback of channels."
+ msgstr ""
+ 
+ #: system/settings/settings.xml
+diff --git a/system/settings/settings.xml b/system/settings/settings.xml
+index c3804da..f89ad52 100644
+--- a/system/settings/settings.xml
++++ b/system/settings/settings.xml
+@@ -1375,7 +1375,7 @@
+     </category>
+     <category id="pvrplayback" label="19177" help="36226">
+       <group id="1" label="128">
+-        <setting id="pvrplayback.playminimized" type="boolean" label="19171" help="36227">
++        <setting id="pvrplayback.switchtofullscreen" type="boolean" label="19171" help="36227">
+           <level>1</level>
+           <default>true</default>
+           <control type="toggle" />
+diff --git a/xbmc/pvr/PVRContextMenus.cpp b/xbmc/pvr/PVRContextMenus.cpp
+index 729950c..5a9f922 100644
+--- a/xbmc/pvr/PVRContextMenus.cpp
++++ b/xbmc/pvr/PVRContextMenus.cpp
+@@ -27,7 +27,6 @@
+ #include "pvr/PVRManager.h"
+ #include "pvr/recordings/PVRRecording.h"
+ #include "pvr/recordings/PVRRecordingsPath.h"
+-#include "settings/Settings.h"
+ #include "pvr/timers/PVRTimers.h"
+ #include "utils/URIUtils.h"
+ 
+@@ -170,7 +169,7 @@ namespace PVR
+ 
+     bool PlayRecording::Execute(const CFileItemPtr &item) const
+     {
+-      return CPVRGUIActions::GetInstance().PlayRecording(item, false /* bPlayMinimized */, true /* bCheckResume */);
++      return CPVRGUIActions::GetInstance().PlayRecording(item, true /* bCheckResume */);
+     }
+ 
+     ///////////////////////////////////////////////////////////////////////////////
+diff --git a/xbmc/pvr/PVRGUIActions.cpp b/xbmc/pvr/PVRGUIActions.cpp
+index bfa7ef0..641248a 100644
+--- a/xbmc/pvr/PVRGUIActions.cpp
++++ b/xbmc/pvr/PVRGUIActions.cpp
+@@ -513,7 +513,7 @@ namespace PVR
+     return bPlayIt;
+   }
+ 
+-  bool CPVRGUIActions::ResumePlayRecording(const CFileItemPtr &item, bool bPlayMinimized, bool bFallbackToPlay) const
++  bool CPVRGUIActions::ResumePlayRecording(const CFileItemPtr &item, bool bFallbackToPlay) const
+   {
+     bool bCanResume = !GetResumeLabel(*item).empty();
+     if (bCanResume)
+@@ -528,15 +528,57 @@ namespace PVR
+         return false;
+     }
+ 
+-    return PlayRecording(item, bPlayMinimized, false);
++    return PlayRecording(item, false);
+   }
+ 
+-  bool CPVRGUIActions::PlayRecording(const CFileItemPtr &item, bool bPlayMinimized, bool bCheckResume) const
++  void CPVRGUIActions::CheckAndSwitchToFullscreen() const
++  {
++    const bool bFullscreen(CSettings::GetInstance().GetBool(CSettings::SETTING_PVRPLAYBACK_SWITCHTOFULLSCREEN));
++    CMediaSettings::GetInstance().SetVideoStartWindowed(!bFullscreen);
++
++    if (bFullscreen)
++    {
++      CGUIMessage msg(GUI_MSG_FULLSCREEN, 0, g_windowManager.GetActiveWindow());
++      g_windowManager.SendMessage(msg);
++    }
++  }
++
++  bool CPVRGUIActions::TryFastChannelSwitch(const CPVRChannelPtr &channel) const
++  {
++    bool bSwitchSuccessful(false);
++
++    if (channel->StreamURL().empty() &&
++        (g_PVRManager.IsPlayingTV() || g_PVRManager.IsPlayingRadio()) &&
++        (channel->IsRadio() == g_PVRManager.IsPlayingRadio()))
++    {
++      bSwitchSuccessful = g_application.m_pPlayer->SwitchChannel(channel);
++
++      if (bSwitchSuccessful)
++        CheckAndSwitchToFullscreen();
++    }
++
++    return bSwitchSuccessful;
++  }
++
++  void CPVRGUIActions::StartPlayback(CFileItem *item) const
++  {
++    CApplicationMessenger::GetInstance().PostMsg(TMSG_MEDIA_PLAY, 0, 0, static_cast<void*>(item));
++    CheckAndSwitchToFullscreen();
++  }
++
++  bool CPVRGUIActions::PlayRecording(const CFileItemPtr &item, bool bCheckResume) const
+   {
+     const CPVRRecordingPtr recording(CPVRItem(item).GetRecording());
+     if (!recording)
+       return false;
+ 
++    if (g_PVRManager.IsPlayingRecording(recording))
++    {
++      CGUIMessage msg(GUI_MSG_FULLSCREEN, 0, g_windowManager.GetActiveWindow());
++      g_windowManager.SendMessage(msg);
++      return true;
++    }
++
+     std::string stream = recording->m_strStreamURL;
+     if (stream.empty())
+     {
+@@ -544,7 +586,7 @@ namespace PVR
+       {
+         CFileItem *itemToPlay = new CFileItem(recording);
+         itemToPlay->m_lStartOffset = item->m_lStartOffset;
+-        CApplicationMessenger::GetInstance().PostMsg(TMSG_MEDIA_PLAY, 0, 0, static_cast<void*>(itemToPlay));
++        StartPlayback(itemToPlay);
+       }
+       return true;
+     }
+@@ -596,12 +638,12 @@ namespace PVR
+     }
+ 
+     if (!bCheckResume || CheckResumeRecording(item))
+-      CApplicationMessenger::GetInstance().PostMsg(TMSG_MEDIA_PLAY, 0, 0, static_cast<void*>(new CFileItem(*item)));
++      StartPlayback(new CFileItem(*item));
+ 
+     return true;
+   }
+ 
+-  bool CPVRGUIActions::SwitchToChannel(const CFileItemPtr &item, bool bPlayMinimized, bool bCheckResume) const
++  bool CPVRGUIActions::SwitchToChannel(const CFileItemPtr &item, bool bCheckResume) const
+   {
+     if (item->m_bIsFolder)
+       return false;
+@@ -615,8 +657,6 @@ namespace PVR
+       return true;
+     }
+ 
+-    CMediaSettings::GetInstance().SetVideoStartWindowed(bPlayMinimized);
+-
+     // switch to channel or if recording present, ask whether to switch or play recording...
+     bool bSwitchSuccessful(false);
+ 
+@@ -640,21 +680,16 @@ namespace PVR
+         if (bPlayRecording)
+         {
+           const CFileItemPtr recordingItem(new CFileItem(recording));
+-          return PlayRecording(recordingItem, CSettings::GetInstance().GetBool(CSettings::SETTING_PVRPLAYBACK_PLAYMINIMIZED), bCheckResume);
++          return PlayRecording(recordingItem, bCheckResume);
+         }
+       }
+ 
+-      /* try a fast switch */
+-      if ((g_PVRManager.IsPlayingTV() || g_PVRManager.IsPlayingRadio()) &&
+-          (channel->IsRadio() == g_PVRManager.IsPlayingRadio()))
+-      {
+-        if (channel->StreamURL().empty())
+-          bSwitchSuccessful = g_application.m_pPlayer->SwitchChannel(channel);
+-      }
++      /* optimization: try a fast switch */
++      bSwitchSuccessful = TryFastChannelSwitch(channel);
+ 
+       if (!bSwitchSuccessful)
+       {
+-        CApplicationMessenger::GetInstance().PostMsg(TMSG_MEDIA_PLAY, 0, 0, static_cast<void*>(new CFileItem(channel)));
++        StartPlayback(new CFileItem(channel));
+         return true;
+       }
+     }
+@@ -687,15 +722,11 @@ namespace PVR
+ 
+     if (pvrItem->HasPVRChannelInfoTag())
+     {
+-      return SwitchToChannel(pvrItem,
+-                             CSettings::GetInstance().GetBool(CSettings::SETTING_PVRPLAYBACK_PLAYMINIMIZED),
+-                             bCheckResume);
++      return SwitchToChannel(pvrItem, bCheckResume);
+     }
+     else if (pvrItem->HasPVRRecordingInfoTag())
+     {
+-      return PlayRecording(pvrItem,
+-                           CSettings::GetInstance().GetBool(CSettings::SETTING_PVRPLAYBACK_PLAYMINIMIZED),
+-                           bCheckResume);
++      return PlayRecording(pvrItem, bCheckResume);
+     }
+ 
+     return false;
+diff --git a/xbmc/pvr/PVRGUIActions.h b/xbmc/pvr/PVRGUIActions.h
+index 3fed2ca..72c3392 100644
+--- a/xbmc/pvr/PVRGUIActions.h
++++ b/xbmc/pvr/PVRGUIActions.h
+@@ -178,29 +178,26 @@ namespace PVR
+     /*!
+      * @brief Resume a previously not completely played recording.
+      * @param item containing a recording or an epg tag.
+-     * @param bPlayMinimized controls whether the recording should be played fullscreen or in a window.
+      * @param bFallbackToPlay controls whether playback of the recording should be started at the beginning ig no resume data are available.
+      * @return true on success, false otherwise.
+      */
+-    bool ResumePlayRecording(const CFileItemPtr &item, bool bPlayMinimized, bool bFallbackToPlay) const;
++    bool ResumePlayRecording(const CFileItemPtr &item, bool bFallbackToPlay) const;
+ 
+     /*!
+      * @brief Play recording.
+      * @param item containing a recording or an epg tag.
+-     * @param bPlayMinimized controls whether the recording should be played fullscreen or in a window.
+      * @param bCheckResume controls resume check.
+      * @return true on success, false otherwise.
+      */
+-    bool PlayRecording(const CFileItemPtr &item, bool bPlayMinimized, bool bCheckResume) const;
++    bool PlayRecording(const CFileItemPtr &item, bool bCheckResume) const;
+ 
+     /*!
+      * @brief Switch channel.
+      * @param item containing a channel or an epg tag.
+-     * @param bPlayMinimized controls whether the channel should be played fullscreen or in a window.
+      * @param bCheckResume controls resume check in case a recording for the current epg event is present.
+      * @return true on success, false otherwise.
+      */
+-    bool SwitchToChannel(const CFileItemPtr &item, bool bPlayMinimized, bool bCheckResume) const;
++    bool SwitchToChannel(const CFileItemPtr &item, bool bCheckResume) const;
+ 
+     /*!
+      * @brief Playback the given file item.
+@@ -284,6 +281,24 @@ namespace PVR
+      * @return true, to play/resume the item, false otherwise.
+      */
+     bool CheckResumeRecording(const CFileItemPtr &item) const;
++
++    /*!
++     * @brief Check "play minimized" settings value and switch to fullscreen if not set.
++     */
++    void CheckAndSwitchToFullscreen() const;
++
++    /*!
++     * @brief Try a fast Live TV/Radio channel switch. Calls directly into active player instead of using messaging
++     * @param channel the channel to switch to.
++     * @return true if the switch was succesful, false otherwise.
++     */
++    bool TryFastChannelSwitch(const CPVRChannelPtr &channel) const;
++
++    /*!
++     * @brief Start playback of the given item.
++     * @param item containing a channel or a recording.
++     */
++    void StartPlayback(CFileItem *item) const;
+   };
+ 
+ } // namespace PVR
+diff --git a/xbmc/pvr/dialogs/GUIDialogPVRChannelsOSD.cpp b/xbmc/pvr/dialogs/GUIDialogPVRChannelsOSD.cpp
+index 46677fb..4e7996f 100644
+--- a/xbmc/pvr/dialogs/GUIDialogPVRChannelsOSD.cpp
++++ b/xbmc/pvr/dialogs/GUIDialogPVRChannelsOSD.cpp
+@@ -255,7 +255,7 @@ void CGUIDialogPVRChannelsOSD::GotoChannel(int item)
+     return;
+ 
+   Close();
+-  CPVRGUIActions::GetInstance().SwitchToChannel(m_vecItems->Get(item), false /* bPlayMinimized */, true /* bCheckResume */);
++  CPVRGUIActions::GetInstance().SwitchToChannel(m_vecItems->Get(item), true /* bCheckResume */);
+   m_group = GetPlayingGroup();
+ }
+ 
+diff --git a/xbmc/pvr/dialogs/GUIDialogPVRGuideInfo.cpp b/xbmc/pvr/dialogs/GUIDialogPVRGuideInfo.cpp
+index 443eac7..f56dcf7 100644
+--- a/xbmc/pvr/dialogs/GUIDialogPVRGuideInfo.cpp
++++ b/xbmc/pvr/dialogs/GUIDialogPVRGuideInfo.cpp
+@@ -139,9 +139,9 @@ bool CGUIDialogPVRGuideInfo::OnClickButtonPlay(CGUIMessage &message)
+ 
+     const CFileItemPtr item(new CFileItem(m_progItem));
+     if (message.GetSenderId() == CONTROL_BTN_PLAY_RECORDING)
+-      CPVRGUIActions::GetInstance().PlayRecording(item, false /* bPlayMinimized */, true /* bCheckResume */);
++      CPVRGUIActions::GetInstance().PlayRecording(item, true /* bCheckResume */);
+     else
+-      CPVRGUIActions::GetInstance().SwitchToChannel(item, false /* bPlayMinimized */, true /* bCheckResume */);
++      CPVRGUIActions::GetInstance().SwitchToChannel(item, true /* bCheckResume */);
+ 
+     bReturn = true;
+   }
+diff --git a/xbmc/pvr/dialogs/GUIDialogPVRRecordingInfo.cpp b/xbmc/pvr/dialogs/GUIDialogPVRRecordingInfo.cpp
+index 4f8063a..e50a0d4 100644
+--- a/xbmc/pvr/dialogs/GUIDialogPVRRecordingInfo.cpp
++++ b/xbmc/pvr/dialogs/GUIDialogPVRRecordingInfo.cpp
+@@ -67,7 +67,7 @@ bool CGUIDialogPVRRecordingInfo::OnClickButtonPlay(CGUIMessage &message)
+     Close();
+ 
+     if (m_recordItem)
+-      CPVRGUIActions::GetInstance().PlayRecording(m_recordItem, false /* don't play minimized */, true /* check resume */);
++      CPVRGUIActions::GetInstance().PlayRecording(m_recordItem, true /* check resume */);
+ 
+     bReturn = true;
+   }
+diff --git a/xbmc/pvr/windows/GUIWindowPVRChannels.cpp b/xbmc/pvr/windows/GUIWindowPVRChannels.cpp
+index cf81e35..0fce604 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRChannels.cpp
++++ b/xbmc/pvr/windows/GUIWindowPVRChannels.cpp
+@@ -29,7 +29,6 @@
+ #include "guilib/GUIRadioButtonControl.h"
+ #include "guilib/GUIWindowManager.h"
+ #include "input/Key.h"
+-#include "settings/Settings.h"
+ #include "threads/SingleLock.h"
+ #include "utils/StringUtils.h"
+ #include "utils/Variant.h"
+@@ -152,9 +151,7 @@ bool CGUIWindowPVRChannels::OnMessage(CGUIMessage& message)
+            case ACTION_SELECT_ITEM:
+            case ACTION_MOUSE_LEFT_CLICK:
+            case ACTION_PLAY:
+-             CPVRGUIActions::GetInstance().SwitchToChannel(m_vecItems->Get(iItem),
+-                                                           CSettings::GetInstance().GetBool(CSettings::SETTING_PVRPLAYBACK_PLAYMINIMIZED),
+-                                                           true);
++             CPVRGUIActions::GetInstance().SwitchToChannel(m_vecItems->Get(iItem), true);
+              break;
+            case ACTION_SHOW_INFO:
+              CPVRGUIActions::GetInstance().ShowEPGInfo(m_vecItems->Get(iItem));
+diff --git a/xbmc/pvr/windows/GUIWindowPVRGuide.cpp b/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
+index 8313167..501ff7f 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
++++ b/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
+@@ -256,11 +256,11 @@ bool CGUIWindowPVRGuide::OnMessage(CGUIMessage& message)
+                   bReturn = true;
+                   break;
+                 case EPG_SELECT_ACTION_SWITCH:
+-                  CPVRGUIActions::GetInstance().SwitchToChannel(pItem, false, true);
++                  CPVRGUIActions::GetInstance().SwitchToChannel(pItem, true);
+                   bReturn = true;
+                   break;
+                 case EPG_SELECT_ACTION_PLAY_RECORDING:
+-                  CPVRGUIActions::GetInstance().PlayRecording(pItem, false, true);
++                  CPVRGUIActions::GetInstance().PlayRecording(pItem, true);
+                   bReturn = true;
+                   break;
+                 case EPG_SELECT_ACTION_INFO:
+@@ -278,7 +278,7 @@ bool CGUIWindowPVRGuide::OnMessage(CGUIMessage& message)
+               bReturn = true;
+               break;
+             case ACTION_PLAY:
+-              CPVRGUIActions::GetInstance().PlayRecording(pItem, false, true);
++              CPVRGUIActions::GetInstance().PlayRecording(pItem, true);
+               bReturn = true;
+               break;
+             case ACTION_RECORD:
+@@ -312,7 +312,7 @@ bool CGUIWindowPVRGuide::OnMessage(CGUIMessage& message)
+                 const CFileItemPtr item(epgGridContainer->GetSelectedChannelItem());
+                 if (item)
+                 {
+-                  CPVRGUIActions::GetInstance().SwitchToChannel(item, false, true);
++                  CPVRGUIActions::GetInstance().SwitchToChannel(item, true);
+                   bReturn = true;
+                 }
+               }
+diff --git a/xbmc/pvr/windows/GUIWindowPVRRecordings.cpp b/xbmc/pvr/windows/GUIWindowPVRRecordings.cpp
+index 069d907..4b16b91 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRRecordings.cpp
++++ b/xbmc/pvr/windows/GUIWindowPVRRecordings.cpp
+@@ -208,7 +208,7 @@ bool CGUIWindowPVRRecordings::OnMessage(CGUIMessage &message)
+ 
+               if (message.GetParam1() == ACTION_PLAY)
+               {
+-                CPVRGUIActions::GetInstance().PlayRecording(item, false /* don't play minimized */, true /* check resume */);
++                CPVRGUIActions::GetInstance().PlayRecording(item, true /* check resume */);
+                 bReturn = true;
+               }
+               else
+@@ -220,11 +220,11 @@ bool CGUIWindowPVRRecordings::OnMessage(CGUIMessage &message)
+                     bReturn = true;
+                     break;
+                   case SELECT_ACTION_PLAY_OR_RESUME:
+-                    CPVRGUIActions::GetInstance().PlayRecording(item, false /* don't play minimized */, true /* check resume */);
++                    CPVRGUIActions::GetInstance().PlayRecording(item, true /* check resume */);
+                     bReturn = true;
+                     break;
+                   case SELECT_ACTION_RESUME:
+-                    CPVRGUIActions::GetInstance().ResumePlayRecording(item, false /* don't play minimized */, true /* fall back to play if no resume possible */);
++                    CPVRGUIActions::GetInstance().ResumePlayRecording(item, true /* fall back to play if no resume possible */);
+                     bReturn = true;
+                     break;
+                   case SELECT_ACTION_INFO:
+diff --git a/xbmc/settings/Settings.cpp b/xbmc/settings/Settings.cpp
+index 1a17965..f8c360f 100644
+--- a/xbmc/settings/Settings.cpp
++++ b/xbmc/settings/Settings.cpp
+@@ -234,7 +234,7 @@ const std::string CSettings::SETTING_EPG_EPGUPDATE = "epg.epgupdate";
+ const std::string CSettings::SETTING_EPG_PREVENTUPDATESWHILEPLAYINGTV = "epg.preventupdateswhileplayingtv";
+ const std::string CSettings::SETTING_EPG_IGNOREDBFORCLIENT = "epg.ignoredbforclient";
+ const std::string CSettings::SETTING_EPG_RESETEPG = "epg.resetepg";
+-const std::string CSettings::SETTING_PVRPLAYBACK_PLAYMINIMIZED = "pvrplayback.playminimized";
++const std::string CSettings::SETTING_PVRPLAYBACK_SWITCHTOFULLSCREEN = "pvrplayback.switchtofullscreen";
+ const std::string CSettings::SETTING_PVRPLAYBACK_STARTLAST = "pvrplayback.startlast";
+ const std::string CSettings::SETTING_PVRPLAYBACK_SIGNALQUALITY = "pvrplayback.signalquality";
+ const std::string CSettings::SETTING_PVRPLAYBACK_SCANTIME = "pvrplayback.scantime";
+diff --git a/xbmc/settings/Settings.h b/xbmc/settings/Settings.h
+index 482f61d..fefbaff 100644
+--- a/xbmc/settings/Settings.h
++++ b/xbmc/settings/Settings.h
+@@ -191,7 +191,7 @@ public:
+   static const std::string SETTING_EPG_PREVENTUPDATESWHILEPLAYINGTV;
+   static const std::string SETTING_EPG_IGNOREDBFORCLIENT;
+   static const std::string SETTING_EPG_RESETEPG;
+-  static const std::string SETTING_PVRPLAYBACK_PLAYMINIMIZED;
++  static const std::string SETTING_PVRPLAYBACK_SWITCHTOFULLSCREEN;
+   static const std::string SETTING_PVRPLAYBACK_STARTLAST;
+   static const std::string SETTING_PVRPLAYBACK_SIGNALQUALITY;
+   static const std::string SETTING_PVRPLAYBACK_SCANTIME;

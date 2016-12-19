@@ -1,0 +1,783 @@
+diff --git a/xbmc/epg/Epg.cpp b/xbmc/epg/Epg.cpp
+index 3416c20..af118e3 100644
+--- a/xbmc/epg/Epg.cpp
++++ b/xbmc/epg/Epg.cpp
+@@ -573,7 +573,7 @@ int CEpg::Get(CFileItemList &results) const
+   return results.Size() - iInitialSize;
+ }
+ 
+-int CEpg::Get(CFileItemList &results, const EpgSearchFilter &filter) const
++int CEpg::Get(CFileItemList &results, const CEpgSearchFilter &filter) const
+ {
+   int iInitialSize = results.Size();
+ 
+@@ -584,7 +584,7 @@ int CEpg::Get(CFileItemList &results, const EpgSearchFilter &filter) const
+ 
+   for (std::map<CDateTime, CEpgInfoTagPtr>::const_iterator it = m_tags.begin(); it != m_tags.end(); ++it)
+   {
+-    if (filter.FilterEntry(*it->second))
++    if (filter.FilterEntry(it->second))
+       results.Add(CFileItemPtr(new CFileItem(it->second)));
+   }
+ 
+diff --git a/xbmc/epg/Epg.h b/xbmc/epg/Epg.h
+index 13eb8c0..4c8099b 100644
+--- a/xbmc/epg/Epg.h
++++ b/xbmc/epg/Epg.h
+@@ -233,7 +233,7 @@ namespace EPG
+      * @param filter The filter to apply.
+      * @return The amount of entries that were added.
+      */
+-    int Get(CFileItemList &results, const EpgSearchFilter &filter) const;
++    int Get(CFileItemList &results, const CEpgSearchFilter &filter) const;
+ 
+     /*!
+      * @brief Persist this table in the database.
+diff --git a/xbmc/epg/EpgContainer.cpp b/xbmc/epg/EpgContainer.cpp
+index e922c76..15e1edb 100644
+--- a/xbmc/epg/EpgContainer.cpp
++++ b/xbmc/epg/EpgContainer.cpp
+@@ -770,7 +770,7 @@ const CDateTime CEpgContainer::GetLastEPGDate(void)
+   return returnValue;
+ }
+ 
+-int CEpgContainer::GetEPGSearch(CFileItemList &results, const EpgSearchFilter &filter)
++int CEpgContainer::GetEPGSearch(CFileItemList &results, const CEpgSearchFilter &filter)
+ {
+   int iInitialSize = results.Size();
+ 
+@@ -782,8 +782,8 @@ int CEpgContainer::GetEPGSearch(CFileItemList &results, const EpgSearchFilter &f
+   }
+ 
+   /* remove duplicate entries */
+-  if (filter.m_bPreventRepeats)
+-    EpgSearchFilter::RemoveDuplicates(results);
++  if (filter.ShouldRemoveDuplicates())
++    filter.RemoveDuplicates(results);
+ 
+   return results.Size() - iInitialSize;
+ }
+diff --git a/xbmc/epg/EpgContainer.h b/xbmc/epg/EpgContainer.h
+index 8faec15..2ad4912 100644
+--- a/xbmc/epg/EpgContainer.h
++++ b/xbmc/epg/EpgContainer.h
+@@ -131,7 +131,7 @@ namespace EPG
+      * @param filter The filter to apply.
+      * @return The amount of entries that were added.
+      */
+-    int GetEPGSearch(CFileItemList &results, const EpgSearchFilter &filter);
++    int GetEPGSearch(CFileItemList &results, const CEpgSearchFilter &filter);
+ 
+     /*!
+      * @brief Get the start time of the first entry.
+diff --git a/xbmc/epg/EpgSearchFilter.cpp b/xbmc/epg/EpgSearchFilter.cpp
+index f87d3e4..4ee5b1a 100644
+--- a/xbmc/epg/EpgSearchFilter.cpp
++++ b/xbmc/epg/EpgSearchFilter.cpp
+@@ -33,9 +34,15 @@
+ using namespace EPG;
+ using namespace PVR;
+ 
+-void EpgSearchFilter::Reset()
++
++CEpgSearchFilter::CEpgSearchFilter()
++{
++  Reset();
++}
++
++void CEpgSearchFilter::Reset()
+ {
+-  m_strSearchTerm            = "";
++  m_strSearchTerm.clear();
+   m_bIsCaseSensitive         = false;
+   m_bSearchInDescription     = false;
+   m_iGenreType               = EPG_SEARCH_UNSET;
+@@ -45,86 +52,98 @@ void EpgSearchFilter::Reset()
+   m_startDateTime.SetFromUTCDateTime(g_EpgContainer.GetFirstEPGDate());
+   m_endDateTime.SetFromUTCDateTime(g_EpgContainer.GetLastEPGDate());
+   m_bIncludeUnknownGenres    = false;
+-  m_bPreventRepeats          = false;
++  m_bRemoveDuplicates        = false;
+ 
+   /* pvr specific filters */
+   m_iChannelNumber           = EPG_SEARCH_UNSET;
+-  m_bFTAOnly                 = false;
++  m_bFreeToAirOnly           = false;
+   m_iChannelGroup            = EPG_SEARCH_UNSET;
+   m_bIgnorePresentTimers     = true;
+   m_bIgnorePresentRecordings = true;
+-  m_iUniqueBroadcastId	     = 0;
++  m_iUniqueBroadcastId	     = EPG_TAG_INVALID_UID;
++  m_bIsRadio                = false;
+ }
+ 
+-bool EpgSearchFilter::MatchGenre(const CEpgInfoTag &tag) const
++bool CEpgSearchFilter::MatchGenre(const CEpgInfoTagPtr &tag) const
+ {
+   bool bReturn(true);
+ 
+   if (m_iGenreType != EPG_SEARCH_UNSET)
+   {
+-    bool bIsUnknownGenre(tag.GenreType() > EPG_EVENT_CONTENTMASK_USERDEFINED ||
+-        tag.GenreType() < EPG_EVENT_CONTENTMASK_MOVIEDRAMA);
+-    bReturn = ((m_bIncludeUnknownGenres && bIsUnknownGenre) || tag.GenreType() == m_iGenreType);
++    bool bIsUnknownGenre(tag->GenreType() > EPG_EVENT_CONTENTMASK_USERDEFINED ||
++                         tag->GenreType() < EPG_EVENT_CONTENTMASK_MOVIEDRAMA);
++    bReturn = ((m_bIncludeUnknownGenres && bIsUnknownGenre) || tag->GenreType() == m_iGenreType);
+   }
+ 
+   return bReturn;
+ }
+ 
+-bool EpgSearchFilter::MatchDuration(const CEpgInfoTag &tag) const
++bool CEpgSearchFilter::MatchDuration(const CEpgInfoTagPtr &tag) const
+ {
+   bool bReturn(true);
+ 
+   if (m_iMinimumDuration != EPG_SEARCH_UNSET)
+-    bReturn = (tag.GetDuration() > m_iMinimumDuration * 60);
++    bReturn = (tag->GetDuration() > m_iMinimumDuration * 60);
+ 
+   if (bReturn && m_iMaximumDuration != EPG_SEARCH_UNSET)
+-    bReturn = (tag.GetDuration() < m_iMaximumDuration * 60);
++    bReturn = (tag->GetDuration() < m_iMaximumDuration * 60);
+ 
+   return bReturn;
+ }
+ 
+-bool EpgSearchFilter::MatchStartAndEndTimes(const CEpgInfoTag &tag) const
++bool CEpgSearchFilter::MatchStartAndEndTimes(const CEpgInfoTagPtr &tag) const
+ {
+-  return (tag.StartAsLocalTime() >= m_startDateTime && tag.EndAsLocalTime() <= m_endDateTime);
++  return (tag->StartAsLocalTime() >= m_startDateTime && tag->EndAsLocalTime() <= m_endDateTime);
+ }
+ 
+-bool EpgSearchFilter::MatchSearchTerm(const CEpgInfoTag &tag) const
++void CEpgSearchFilter::SetSearchPhrase(const std::string &strSearchPhrase)
++{
++  // match the exact phrase
++  m_strSearchTerm = "\"";
++  m_strSearchTerm.append(strSearchPhrase);
++  m_strSearchTerm.append("\"");
++}
++
++bool CEpgSearchFilter::MatchSearchTerm(const CEpgInfoTagPtr &tag) const
+ {
+   bool bReturn(true);
+ 
+   if (!m_strSearchTerm.empty())
+   {
+     CTextSearch search(m_strSearchTerm, m_bIsCaseSensitive, SEARCH_DEFAULT_OR);
+-    bReturn = search.Search(tag.Title()) ||
+-        search.Search(tag.PlotOutline());
++    bReturn = search.Search(tag->Title()) ||
++              search.Search(tag->PlotOutline()) ||
++              (m_bSearchInDescription && search.Search(tag->Plot()));
+   }
+ 
+   return bReturn;
+ }
+ 
+-bool EpgSearchFilter::MatchBroadcastId(const CEpgInfoTag &tag) const
++bool CEpgSearchFilter::MatchBroadcastId(const CEpgInfoTagPtr &tag) const
+ {
+-  if (m_iUniqueBroadcastId != 0)
+-    return (tag.UniqueBroadcastID() == m_iUniqueBroadcastId);
++  if (m_iUniqueBroadcastId != EPG_TAG_INVALID_UID)
++    return (tag->UniqueBroadcastID() == m_iUniqueBroadcastId);
+ 
+   return true;
+ }
+ 
+-bool EpgSearchFilter::FilterEntry(const CEpgInfoTag &tag) const
++bool CEpgSearchFilter::FilterEntry(const CEpgInfoTagPtr &tag) const
+ {
+   return (MatchGenre(tag) &&
+       MatchBroadcastId(tag) &&
+       MatchDuration(tag) &&
+       MatchStartAndEndTimes(tag) &&
+-      MatchSearchTerm(tag)) &&
+-      (!tag.HasPVRChannel() ||
++      MatchSearchTerm(tag) &&
++      MatchTimers(tag) &&
++      MatchRecordings(tag)) &&
++      (!tag->HasPVRChannel() ||
+        (MatchChannelType(tag) &&
+         MatchChannelNumber(tag) &&
+         MatchChannelGroup(tag) &&
+-        (!m_bFTAOnly || !tag.ChannelTag()->IsEncrypted())));
++        MatchFreeToAir(tag)));
+ }
+ 
+-int EpgSearchFilter::RemoveDuplicates(CFileItemList &results)
++int CEpgSearchFilter::RemoveDuplicates(CFileItemList &results)
+ {
+   unsigned int iSize = results.Size();
+ 
+@@ -158,12 +175,12 @@ int EpgSearchFilter::RemoveDuplicates(CFileItemList &results)
+   return iSize;
+ }
+ 
+-bool EpgSearchFilter::MatchChannelType(const CEpgInfoTag &tag) const
++bool CEpgSearchFilter::MatchChannelType(const CEpgInfoTagPtr &tag) const
+ {
+-  return (g_PVRManager.IsStarted() && tag.ChannelTag()->IsRadio() == m_bIsRadio);
++  return (g_PVRManager.IsStarted() && tag->ChannelTag()->IsRadio() == m_bIsRadio);
+ }
+ 
+-bool EpgSearchFilter::MatchChannelNumber(const CEpgInfoTag &tag) const
++bool CEpgSearchFilter::MatchChannelNumber(const CEpgInfoTagPtr &tag) const
+ {
+   bool bReturn(true);
+ 
+@@ -173,21 +190,36 @@ bool EpgSearchFilter::MatchChannelNumber(const CEpgInfoTag &tag) const
+     if (!group)
+       group = CPVRManager::GetInstance().ChannelGroups()->GetGroupAllTV();
+ 
+-    bReturn = (m_iChannelNumber == (int) group->GetChannelNumber(tag.ChannelTag()));
++    bReturn = (m_iChannelNumber == (int) group->GetChannelNumber(tag->ChannelTag()));
+   }
+ 
+   return bReturn;
+ }
+ 
+-bool EpgSearchFilter::MatchChannelGroup(const CEpgInfoTag &tag) const
++bool CEpgSearchFilter::MatchChannelGroup(const CEpgInfoTagPtr &tag) const
+ {
+   bool bReturn(true);
+ 
+   if (m_iChannelGroup != EPG_SEARCH_UNSET && g_PVRManager.IsStarted())
+   {
+     CPVRChannelGroupPtr group = g_PVRChannelGroups->GetByIdFromAll(m_iChannelGroup);
+-    bReturn = (group && group->IsGroupMember(tag.ChannelTag()));
++    bReturn = (group && group->IsGroupMember(tag->ChannelTag()));
+   }
+ 
+   return bReturn;
+ }
++
++bool CEpgSearchFilter::MatchFreeToAir(const CEpgInfoTagPtr &tag) const
++{
++  return (!m_bFreeToAirOnly || !tag->ChannelTag()->IsEncrypted());
++}
++
++bool CEpgSearchFilter::MatchTimers(const CEpgInfoTagPtr &tag) const
++{
++  return (!m_bIgnorePresentTimers || !g_PVRTimers->GetTimerForEpgTag(tag));
++}
++
++bool CEpgSearchFilter::MatchRecordings(const CEpgInfoTagPtr &tag) const
++{
++  return (!m_bIgnorePresentRecordings || !g_PVRRecordings->GetRecordingForEpgTag(tag));
++}
+diff --git a/xbmc/epg/EpgSearchFilter.h b/xbmc/epg/EpgSearchFilter.h
+index c6132e6..85551af 100644
+--- a/xbmc/epg/EpgSearchFilter.h
++++ b/xbmc/epg/EpgSearchFilter.h
+@@ -20,42 +20,108 @@
+  */
+ 
+ #include "XBDateTime.h"
++#include "EpgTypes.h"
+ 
+ class CFileItemList;
+ 
+ namespace EPG
+ {
+-  class CEpgInfoTag;
+-
+   #define EPG_SEARCH_UNSET (-1)
+ 
+   /** Filter to apply with on a CEpgInfoTag */
+ 
+-  struct EpgSearchFilter
++  class CEpgSearchFilter
+   {
++  public:
++    CEpgSearchFilter();
++
+     /*!
+      * @brief Clear this filter.
+      */
+-    virtual void Reset();
++    void Reset();
+ 
+     /*!
+      * @brief Check if a tag will be filtered or not.
+      * @param tag The tag to check.
+      * @return True if this tag matches the filter, false if not.
+      */
+-    virtual bool FilterEntry(const CEpgInfoTag &tag) const;
+-
+-    virtual bool MatchGenre(const CEpgInfoTag &tag) const;
+-    virtual bool MatchDuration(const CEpgInfoTag &tag) const;
+-    virtual bool MatchStartAndEndTimes(const CEpgInfoTag &tag) const;
+-    virtual bool MatchSearchTerm(const CEpgInfoTag &tag) const;
+-    virtual bool MatchChannelNumber(const CEpgInfoTag &tag) const;
+-    virtual bool MatchChannelGroup(const CEpgInfoTag &tag) const;
+-    virtual bool MatchBroadcastId(const CEpgInfoTag &tag) const;
+-    virtual bool MatchChannelType(const CEpgInfoTag &tag) const;
++    bool FilterEntry(const CEpgInfoTagPtr &tag) const;
+ 
++    /*!
++     * @brief remove duplicates from a list of epg tags.
++     * @param results the list of epg tags.
++     * @return the number of items in the list after removing duplicates.
++     */
+     static int RemoveDuplicates(CFileItemList &results);
+ 
++    const std::string &GetSearchTerm() const { return m_strSearchTerm; }
++    void SetSearchTerm(const std::string &strSearchTerm) { m_strSearchTerm = strSearchTerm; }
++    void SetSearchPhrase(const std::string &strSearchPhrase);
++
++    bool IsCaseSensitive() const { return m_bIsCaseSensitive; }
++    void SetCaseSensitive(bool bIsCaseSensitive) { m_bIsCaseSensitive = bIsCaseSensitive; }
++
++    bool ShouldSearchInDescription() const { return m_bSearchInDescription; }
++    void SetSearchInDescription(bool bSearchInDescription) {m_bSearchInDescription = bSearchInDescription; }
++
++    int GetGenreType() const { return m_iGenreType; }
++    void SetGenreType(int iGenreType) { m_iGenreType = iGenreType; }
++
++    int GetGenreSubType() const { return m_iGenreSubType; }
++    void SetGenreSubType(int iGenreSubType) { m_iGenreSubType = iGenreSubType; }
++
++    int GetMinimumDuration() const { return m_iMinimumDuration; }
++    void SetMinimumDuration(int iMinimumDuration) { m_iMinimumDuration = iMinimumDuration; }
++
++    int GetMaximumDuration() const { return m_iMaximumDuration; }
++    void SetMaximumDuration(int iMaximumDuration) { m_iMaximumDuration = iMaximumDuration; }
++
++    const CDateTime &GetStartDateTime() const { return m_startDateTime; }
++    void SetStartDateTime(const CDateTime &startDateTime) { m_startDateTime = startDateTime; }
++
++    const CDateTime &GetEndDateTime() const { return m_endDateTime; }
++    void SetEndDateTime(const CDateTime &endDateTime) { m_endDateTime = endDateTime; }
++
++    bool ShouldIncludeUnknownGenres() const { return m_bIncludeUnknownGenres; }
++    void SetIncludeUnknownGenres(bool bIncludeUnknownGenres) { m_bIncludeUnknownGenres = bIncludeUnknownGenres; }
++
++    bool ShouldRemoveDuplicates() const { return m_bRemoveDuplicates; }
++    void SetRemoveDuplicates(bool bRemoveDuplicates) { m_bRemoveDuplicates = bRemoveDuplicates; }
++
++    bool IsRadio() const { return m_bIsRadio; }
++    void SetIsRadio(bool bIsRadio) { m_bIsRadio = bIsRadio; }
++
++    int GetChannelNumber() const { return m_iChannelNumber; }
++    void SetChannelNumber(int iChannelNumber) { m_iChannelNumber = iChannelNumber; }
++
++    bool IsFreeToAirOnly() const { return m_bFreeToAirOnly; }
++    void SetFreeToAirOnly(bool bFreeToAirOnly) { m_bFreeToAirOnly = bFreeToAirOnly; }
++
++    int GetChannelGroup() const { return m_iChannelGroup; }
++    void SetChannelGroup(int iChannelGroup) { m_iChannelGroup = iChannelGroup; }
++
++    bool ShouldIgnorePresentTimers() const { return m_bIgnorePresentTimers; }
++    void SetIgnorePresentTimers(bool bIgnorePresentTimers) { m_bIgnorePresentTimers = bIgnorePresentTimers; }
++
++    bool ShouldIgnorePresentRecordings() const { return m_bIgnorePresentRecordings; }
++    void SetIgnorePresentRecordings(bool bIgnorePresentRecordings) { m_bIgnorePresentRecordings = bIgnorePresentRecordings; }
++
++    unsigned int GetUniqueBroadcastId() const { return m_iUniqueBroadcastId; }
++    void SetUniqueBroadcastId(unsigned int iUniqueBroadcastId) { m_iUniqueBroadcastId = iUniqueBroadcastId; }
++
++  private:
++    bool MatchGenre(const CEpgInfoTagPtr &tag) const;
++    bool MatchDuration(const CEpgInfoTagPtr &tag) const;
++    bool MatchStartAndEndTimes(const CEpgInfoTagPtr &tag) const;
++    bool MatchSearchTerm(const CEpgInfoTagPtr &tag) const;
++    bool MatchChannelNumber(const CEpgInfoTagPtr &tag) const;
++    bool MatchChannelGroup(const CEpgInfoTagPtr &tag) const;
++    bool MatchBroadcastId(const CEpgInfoTagPtr &tag) const;
++    bool MatchChannelType(const CEpgInfoTagPtr &tag) const;
++    bool MatchFreeToAir(const CEpgInfoTagPtr &tag) const;
++    bool MatchTimers(const CEpgInfoTagPtr &tag) const;
++    bool MatchRecordings(const CEpgInfoTagPtr &tag) const;
++
+     std::string   m_strSearchTerm;            /*!< The term to search for */
+     bool          m_bIsCaseSensitive;         /*!< Do a case sensitive search */
+     bool          m_bSearchInDescription;     /*!< Search for strSearchTerm in the description too */
+@@ -66,12 +132,12 @@ namespace EPG
+     CDateTime     m_startDateTime;            /*!< The minimum start time for an entry */
+     CDateTime     m_endDateTime;              /*!< The maximum end time for an entry */
+     bool          m_bIncludeUnknownGenres;    /*!< Include unknown genres or not */
+-    bool          m_bPreventRepeats;          /*!< True to remove repeating events, false if not */
++    bool          m_bRemoveDuplicates;        /*!< True to remove duplicate events, false if not */
+     bool          m_bIsRadio;                 /*!< True to filter radio channels only, false to tv only */
+ 
+     /* PVR specific filters */
+     int           m_iChannelNumber;           /*!< The channel number in the selected channel group */
+-    bool          m_bFTAOnly;                 /*!< Free to air only or not */
++    bool          m_bFreeToAirOnly;           /*!< Include free to air channels only */
+     int           m_iChannelGroup;            /*!< The group this channel belongs to */
+     bool          m_bIgnorePresentTimers;     /*!< True to ignore currently present timers (future recordings), false if not */
+     bool          m_bIgnorePresentRecordings; /*!< True to ignore currently active recordings, false if not */
+diff --git a/xbmc/interfaces/json-rpc/PVROperations.cpp b/xbmc/interfaces/json-rpc/PVROperations.cpp
+index 6fbd6e2..86ccacb 100644
+--- a/xbmc/interfaces/json-rpc/PVROperations.cpp
++++ b/xbmc/interfaces/json-rpc/PVROperations.cpp
+@@ -180,9 +180,8 @@ JSONRPC_STATUS CPVROperations::GetBroadcastDetails(const std::string &method, IT
+   if (!g_PVRManager.IsStarted())
+     return FailedToExecute;
+ 
+-  EpgSearchFilter filter;
+-  filter.Reset();
+-  filter.m_iUniqueBroadcastId = parameterObject["broadcastid"].asUnsignedInteger();
++  CEpgSearchFilter filter;
++  filter.SetUniqueBroadcastId(parameterObject["broadcastid"].asUnsignedInteger());
+ 
+   CFileItemList broadcasts;
+   int resultSize = g_EpgContainer.GetEPGSearch(broadcasts, filter);
+diff --git a/xbmc/pvr/PVRGUIActions.cpp b/xbmc/pvr/PVRGUIActions.cpp
+index 296ff8d..3265b14 100644
+--- a/xbmc/pvr/PVRGUIActions.cpp
++++ b/xbmc/pvr/PVRGUIActions.cpp
+@@ -121,8 +121,9 @@ namespace PVR
+     if (windowToClose)
+       windowToClose->Close();
+ 
++    windowSearch->SetItemToSearch(item);
+     g_windowManager.ActivateWindow(windowSearchId);
+-    return windowSearch->FindSimilar(item);
++    return true;
+   };
+ 
+   bool CPVRGUIActions::ShowTimerSettings(const CPVRTimerInfoTagPtr &timer) const
+diff --git a/xbmc/pvr/dialogs/GUIDialogPVRGuideSearch.cpp b/xbmc/pvr/dialogs/GUIDialogPVRGuideSearch.cpp
+index fa98244..9b8345a 100644
+--- a/xbmc/pvr/dialogs/GUIDialogPVRGuideSearch.cpp
++++ b/xbmc/pvr/dialogs/GUIDialogPVRGuideSearch.cpp
+@@ -70,12 +70,12 @@ void CGUIDialogPVRGuideSearch::UpdateChannelSpin(void)
+ 
+   CPVRChannelGroupPtr group;
+   if (iChannelGroup == EPG_SEARCH_UNSET)
+-    group = g_PVRChannelGroups->GetGroupAll(m_searchFilter->m_bIsRadio);
++    group = g_PVRChannelGroups->GetGroupAll(m_searchFilter->IsRadio());
+   else
+     group = g_PVRChannelGroups->GetByIdFromAll(iChannelGroup);
+ 
+   if (!group)
+-    group = g_PVRChannelGroups->GetGroupAll(m_searchFilter->m_bIsRadio);
++    group = g_PVRChannelGroups->GetGroupAll(m_searchFilter->IsRadio());
+ 
+   std::vector<PVRChannelGroupMember> groupMembers(group->GetMembers());
+   for (std::vector<PVRChannelGroupMember>::const_iterator it = groupMembers.begin(); it != groupMembers.end(); ++it)
+@@ -84,7 +84,7 @@ void CGUIDialogPVRGuideSearch::UpdateChannelSpin(void)
+       labels.push_back(std::make_pair((*it).channel->ChannelName(), (*it).iChannelNumber));
+   }
+ 
+-  SET_CONTROL_LABELS(CONTROL_SPIN_CHANNELS, m_searchFilter->m_iChannelNumber, &labels);
++  SET_CONTROL_LABELS(CONTROL_SPIN_CHANNELS, m_searchFilter->GetChannelNumber(), &labels);
+ }
+ 
+ void CGUIDialogPVRGuideSearch::UpdateGroupsSpin(void)
+@@ -92,11 +92,11 @@ void CGUIDialogPVRGuideSearch::UpdateGroupsSpin(void)
+   std::vector< std::pair<std::string, int> > labels;
+ 
+   /* groups */
+-  std::vector<CPVRChannelGroupPtr> groups = g_PVRChannelGroups->Get(m_searchFilter->m_bIsRadio)->GetMembers();
++  std::vector<CPVRChannelGroupPtr> groups = g_PVRChannelGroups->Get(m_searchFilter->IsRadio())->GetMembers();
+   for (std::vector<CPVRChannelGroupPtr>::const_iterator it = groups.begin(); it != groups.end(); ++it)
+     labels.push_back(std::make_pair((*it)->GroupName(), (*it)->GroupID()));
+ 
+-  SET_CONTROL_LABELS(CONTROL_SPIN_GROUPS, m_searchFilter->m_iChannelGroup, &labels);
++  SET_CONTROL_LABELS(CONTROL_SPIN_GROUPS, m_searchFilter->GetChannelGroup(), &labels);
+ }
+ 
+ void CGUIDialogPVRGuideSearch::UpdateGenreSpin(void)
+@@ -116,7 +116,7 @@ void CGUIDialogPVRGuideSearch::UpdateGenreSpin(void)
+   labels.push_back(std::make_pair(g_localizeStrings.Get(19660), EPG_EVENT_CONTENTMASK_SPECIAL));
+   labels.push_back(std::make_pair(g_localizeStrings.Get(19499), EPG_EVENT_CONTENTMASK_USERDEFINED));
+ 
+-  SET_CONTROL_LABELS(CONTROL_SPIN_GENRE, m_searchFilter->m_iGenreType, &labels);
++  SET_CONTROL_LABELS(CONTROL_SPIN_GENRE, m_searchFilter->GetGenreType(), &labels);
+ }
+ 
+ void CGUIDialogPVRGuideSearch::UpdateDurationSpin(void)
+@@ -128,7 +128,7 @@ void CGUIDialogPVRGuideSearch::UpdateDurationSpin(void)
+   for (int i = 1; i < 12*60/5; ++i)
+     labels.push_back(std::make_pair(StringUtils::Format(g_localizeStrings.Get(14044).c_str(), i*5), i*5));
+ 
+-  SET_CONTROL_LABELS(CONTROL_SPIN_MIN_DURATION, m_searchFilter->m_iMinimumDuration, &labels);
++  SET_CONTROL_LABELS(CONTROL_SPIN_MIN_DURATION, m_searchFilter->GetMinimumDuration(), &labels);
+ 
+   /* maximum duration */
+   labels.clear();
+@@ -137,7 +137,7 @@ void CGUIDialogPVRGuideSearch::UpdateDurationSpin(void)
+   for (int i = 1; i < 12*60/5; ++i)
+     labels.push_back(std::make_pair(StringUtils::Format(g_localizeStrings.Get(14044).c_str(), i*5), i*5));
+ 
+-  SET_CONTROL_LABELS(CONTROL_SPIN_MAX_DURATION, m_searchFilter->m_iMaximumDuration, &labels);
++  SET_CONTROL_LABELS(CONTROL_SPIN_MAX_DURATION, m_searchFilter->GetMaximumDuration(), &labels);
+ }
+ 
+ bool CGUIDialogPVRGuideSearch::OnMessage(CGUIMessage& message)
+@@ -199,12 +199,14 @@ void CGUIDialogPVRGuideSearch::OnWindowLoaded()
+   return CGUIDialog::OnWindowLoaded();
+ }
+ 
+-void CGUIDialogPVRGuideSearch::ReadDateTime(const std::string &strDate, const std::string &strTime, CDateTime &dateTime) const
++CDateTime CGUIDialogPVRGuideSearch::ReadDateTime(const std::string &strDate, const std::string &strTime) const
+ {
++  CDateTime dateTime;
+   int iHours, iMinutes;
+   sscanf(strTime.c_str(), "%d:%d", &iHours, &iMinutes);
+   dateTime.SetFromDBDate(strDate);
+   dateTime.SetDateTime(dateTime.GetYear(), dateTime.GetMonth(), dateTime.GetDay(), iHours, iMinutes, 0);
++  return dateTime;
+ }
+ 
+ bool CGUIDialogPVRGuideSearch::IsRadioSelected(int controlID)
+@@ -233,26 +235,24 @@ void CGUIDialogPVRGuideSearch::OnSearch()
+   if (!m_searchFilter)
+     return;
+ 
+-  m_searchFilter->m_strSearchTerm = GetEditValue(CONTROL_EDIT_SEARCH);
+-
+-  m_searchFilter->m_bSearchInDescription = IsRadioSelected(CONTROL_BTN_INC_DESC);
+-  m_searchFilter->m_bIsCaseSensitive = IsRadioSelected(CONTROL_BTN_CASE_SENS);
+-  m_searchFilter->m_bFTAOnly = IsRadioSelected(CONTROL_BTN_FTA_ONLY);
+-  m_searchFilter->m_bIncludeUnknownGenres = IsRadioSelected(CONTROL_BTN_UNK_GENRE);
+-  m_searchFilter->m_bIgnorePresentRecordings = IsRadioSelected(CONTROL_BTN_IGNORE_REC);
+-  m_searchFilter->m_bIgnorePresentTimers = IsRadioSelected(CONTROL_BTN_IGNORE_TMR);
+-  m_searchFilter->m_bPreventRepeats = IsRadioSelected(CONTROL_SPIN_NO_REPEATS);
+-
+-  m_searchFilter->m_iGenreType = GetSpinValue(CONTROL_SPIN_GENRE);
+-  m_searchFilter->m_iMinimumDuration = GetSpinValue(CONTROL_SPIN_MIN_DURATION);
+-  m_searchFilter->m_iMaximumDuration = GetSpinValue(CONTROL_SPIN_MAX_DURATION);
+-  m_searchFilter->m_iChannelNumber = GetSpinValue(CONTROL_SPIN_CHANNELS);
+-  m_searchFilter->m_iChannelGroup = GetSpinValue(CONTROL_SPIN_GROUPS);
+-
+-  std::string strTmp = GetEditValue(CONTROL_EDIT_START_TIME);
+-  ReadDateTime(GetEditValue(CONTROL_EDIT_START_DATE), strTmp, m_searchFilter->m_startDateTime);
+-  strTmp = GetEditValue(CONTROL_EDIT_STOP_TIME);
+-  ReadDateTime(GetEditValue(CONTROL_EDIT_STOP_DATE), strTmp, m_searchFilter->m_endDateTime);
++  m_searchFilter->SetSearchTerm(GetEditValue(CONTROL_EDIT_SEARCH));
++
++  m_searchFilter->SetSearchInDescription(IsRadioSelected(CONTROL_BTN_INC_DESC));
++  m_searchFilter->SetCaseSensitive(IsRadioSelected(CONTROL_BTN_CASE_SENS));
++  m_searchFilter->SetFreeToAirOnly(IsRadioSelected(CONTROL_BTN_FTA_ONLY));
++  m_searchFilter->SetIncludeUnknownGenres(IsRadioSelected(CONTROL_BTN_UNK_GENRE));
++  m_searchFilter->SetIgnorePresentRecordings(IsRadioSelected(CONTROL_BTN_IGNORE_REC));
++  m_searchFilter->SetIgnorePresentTimers(IsRadioSelected(CONTROL_BTN_IGNORE_TMR));
++  m_searchFilter->SetRemoveDuplicates(IsRadioSelected(CONTROL_SPIN_NO_REPEATS));
++
++  m_searchFilter->SetGenreType(GetSpinValue(CONTROL_SPIN_GENRE));
++  m_searchFilter->SetMinimumDuration(GetSpinValue(CONTROL_SPIN_MIN_DURATION));
++  m_searchFilter->SetMaximumDuration(GetSpinValue(CONTROL_SPIN_MAX_DURATION));
++  m_searchFilter->SetChannelNumber(GetSpinValue(CONTROL_SPIN_CHANNELS));
++  m_searchFilter->SetChannelGroup(GetSpinValue(CONTROL_SPIN_GROUPS));
++
++  m_searchFilter->SetStartDateTime(ReadDateTime(GetEditValue(CONTROL_EDIT_START_DATE), GetEditValue(CONTROL_EDIT_START_TIME)));
++  m_searchFilter->SetEndDateTime(ReadDateTime(GetEditValue(CONTROL_EDIT_STOP_DATE), GetEditValue(CONTROL_EDIT_STOP_TIME)));
+ }
+ 
+ void CGUIDialogPVRGuideSearch::Update()
+@@ -260,37 +260,37 @@ void CGUIDialogPVRGuideSearch::Update()
+   if (!m_searchFilter)
+     return;
+ 
+-  SET_CONTROL_LABEL2(CONTROL_EDIT_SEARCH, m_searchFilter->m_strSearchTerm);
++  SET_CONTROL_LABEL2(CONTROL_EDIT_SEARCH, m_searchFilter->GetSearchTerm());
+   {
+     CGUIMessage msg(GUI_MSG_SET_TYPE, GetID(), CONTROL_EDIT_SEARCH, CGUIEditControl::INPUT_TYPE_TEXT, 16017);
+     OnMessage(msg);
+   }
+ 
+-  SET_CONTROL_SELECTED(GetID(), CONTROL_BTN_CASE_SENS, m_searchFilter->m_bIsCaseSensitive);
+-  SET_CONTROL_SELECTED(GetID(), CONTROL_BTN_INC_DESC, m_searchFilter->m_bSearchInDescription);
+-  SET_CONTROL_SELECTED(GetID(), CONTROL_BTN_FTA_ONLY, m_searchFilter->m_bFTAOnly);
+-  SET_CONTROL_SELECTED(GetID(), CONTROL_BTN_UNK_GENRE, m_searchFilter->m_bIncludeUnknownGenres);
+-  SET_CONTROL_SELECTED(GetID(), CONTROL_BTN_IGNORE_REC, m_searchFilter->m_bIgnorePresentRecordings);
+-  SET_CONTROL_SELECTED(GetID(), CONTROL_BTN_IGNORE_TMR, m_searchFilter->m_bIgnorePresentTimers);
+-  SET_CONTROL_SELECTED(GetID(), CONTROL_SPIN_NO_REPEATS, m_searchFilter->m_bPreventRepeats);
++  SET_CONTROL_SELECTED(GetID(), CONTROL_BTN_CASE_SENS, m_searchFilter->IsCaseSensitive());
++  SET_CONTROL_SELECTED(GetID(), CONTROL_BTN_INC_DESC, m_searchFilter->ShouldSearchInDescription());
++  SET_CONTROL_SELECTED(GetID(), CONTROL_BTN_FTA_ONLY, m_searchFilter->IsFreeToAirOnly());
++  SET_CONTROL_SELECTED(GetID(), CONTROL_BTN_UNK_GENRE, m_searchFilter->ShouldIncludeUnknownGenres());
++  SET_CONTROL_SELECTED(GetID(), CONTROL_BTN_IGNORE_REC, m_searchFilter->ShouldIgnorePresentRecordings());
++  SET_CONTROL_SELECTED(GetID(), CONTROL_BTN_IGNORE_TMR, m_searchFilter->ShouldIgnorePresentTimers());
++  SET_CONTROL_SELECTED(GetID(), CONTROL_SPIN_NO_REPEATS, m_searchFilter->ShouldRemoveDuplicates());
+ 
+   /* Set time fields */
+-  SET_CONTROL_LABEL2(CONTROL_EDIT_START_TIME, m_searchFilter->m_startDateTime.GetAsLocalizedTime("", false));
++  SET_CONTROL_LABEL2(CONTROL_EDIT_START_TIME, m_searchFilter->GetStartDateTime().GetAsLocalizedTime("", false));
+   {
+     CGUIMessage msg(GUI_MSG_SET_TYPE, GetID(), CONTROL_EDIT_START_TIME, CGUIEditControl::INPUT_TYPE_TIME, 14066);
+     OnMessage(msg);
+   }
+-  SET_CONTROL_LABEL2(CONTROL_EDIT_STOP_TIME, m_searchFilter->m_endDateTime.GetAsLocalizedTime("", false));
++  SET_CONTROL_LABEL2(CONTROL_EDIT_STOP_TIME, m_searchFilter->GetEndDateTime().GetAsLocalizedTime("", false));
+   {
+     CGUIMessage msg(GUI_MSG_SET_TYPE, GetID(), CONTROL_EDIT_STOP_TIME, CGUIEditControl::INPUT_TYPE_TIME, 14066);
+     OnMessage(msg);
+   }
+-  SET_CONTROL_LABEL2(CONTROL_EDIT_START_DATE, m_searchFilter->m_startDateTime.GetAsDBDate());
++  SET_CONTROL_LABEL2(CONTROL_EDIT_START_DATE, m_searchFilter->GetStartDateTime().GetAsDBDate());
+   {
+     CGUIMessage msg(GUI_MSG_SET_TYPE, GetID(), CONTROL_EDIT_START_DATE, CGUIEditControl::INPUT_TYPE_DATE, 14067);
+     OnMessage(msg);
+   }
+-  SET_CONTROL_LABEL2(CONTROL_EDIT_STOP_DATE, m_searchFilter->m_endDateTime.GetAsDBDate());
++  SET_CONTROL_LABEL2(CONTROL_EDIT_STOP_DATE, m_searchFilter->GetEndDateTime().GetAsDBDate());
+   {
+     CGUIMessage msg(GUI_MSG_SET_TYPE, GetID(), CONTROL_EDIT_STOP_DATE, CGUIEditControl::INPUT_TYPE_DATE, 14067);
+     OnMessage(msg);
+diff --git a/xbmc/pvr/dialogs/GUIDialogPVRGuideSearch.h b/xbmc/pvr/dialogs/GUIDialogPVRGuideSearch.h
+index 0d7cbfa..27c2803 100644
+--- a/xbmc/pvr/dialogs/GUIDialogPVRGuideSearch.h
++++ b/xbmc/pvr/dialogs/GUIDialogPVRGuideSearch.h
+@@ -24,7 +24,7 @@
+ 
+ namespace EPG
+ {
+-  struct EpgSearchFilter;
++  class CEpgSearchFilter;
+ }
+ 
+ namespace PVR
+@@ -37,7 +37,7 @@ namespace PVR
+     virtual bool OnMessage(CGUIMessage& message);
+     virtual void OnWindowLoaded();
+ 
+-    void SetFilterData(EPG::EpgSearchFilter *searchFilter) { m_searchFilter = searchFilter; }
++    void SetFilterData(EPG::CEpgSearchFilter *searchFilter) { m_searchFilter = searchFilter; }
+     bool IsConfirmed() const { return m_bConfirmed; }
+     bool IsCanceled() const { return m_bCanceled; }
+     void OnSearch();
+@@ -49,7 +49,7 @@ namespace PVR
+     void UpdateGroupsSpin(void);
+     void UpdateGenreSpin(void);
+     void UpdateDurationSpin(void);
+-    void ReadDateTime(const std::string &strDate, const std::string &strTime, CDateTime &dateTime) const;
++    CDateTime ReadDateTime(const std::string &strDate, const std::string &strTime) const;
+     void Update();
+ 
+     bool IsRadioSelected(int controlID);
+@@ -58,6 +58,6 @@ namespace PVR
+ 
+     bool m_bConfirmed;
+     bool m_bCanceled;
+-    EPG::EpgSearchFilter *m_searchFilter;
++    EPG::CEpgSearchFilter *m_searchFilter;
+   };
+ }
+diff --git a/xbmc/pvr/windows/GUIWindowPVRSearch.cpp b/xbmc/pvr/windows/GUIWindowPVRSearch.cpp
+index 18a0ec3..c0b396d 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRSearch.cpp
++++ b/xbmc/pvr/windows/GUIWindowPVRSearch.cpp
+@@ -27,6 +27,7 @@
+ #include "utils/Variant.h"
+ 
+ #include "pvr/PVRGUIActions.h"
++#include "pvr/PVRItem.h"
+ #include "pvr/PVRManager.h"
+ #include "pvr/addons/PVRClients.h"
+ #include "pvr/channels/PVRChannelGroupsContainer.h"
+@@ -53,12 +54,6 @@ void CGUIWindowPVRSearch::GetContextButtons(int itemNumber, CContextButtons &but
+   CGUIWindowPVRBase::GetContextButtons(itemNumber, buttons);
+ }
+ 
+-void CGUIWindowPVRSearch::OnWindowLoaded()
+-{
+-  CGUIMediaWindow::OnWindowLoaded();
+-  m_searchfilter.Reset();
+-}
+-
+ bool CGUIWindowPVRSearch::OnContextButton(int itemNumber, CONTEXT_BUTTON button)
+ {
+   if (itemNumber < 0 || itemNumber >= m_vecItems->Size())
+@@ -69,33 +64,25 @@ bool CGUIWindowPVRSearch::OnContextButton(int itemNumber, CONTEXT_BUTTON button)
+       CGUIMediaWindow::OnContextButton(itemNumber, button);
+ }
+ 
+-bool CGUIWindowPVRSearch::FindSimilar(const CFileItemPtr &item)
++void CGUIWindowPVRSearch::SetItemToSearch(const CFileItemPtr &item)
+ {
+   m_searchfilter.Reset();
+ 
+-  // construct the search term
+-  if (item->IsEPG())
+-    m_searchfilter.m_strSearchTerm = "\"" + item->GetEPGInfoTag()->Title() + "\"";
+-  else if (item->IsPVRChannel())
++  if (item->IsUsablePVRRecording())
+   {
+-    const CEpgInfoTagPtr tag(item->GetPVRChannelInfoTag()->GetEPGNow());
+-    if (tag)
+-      m_searchfilter.m_strSearchTerm = "\"" + tag->Title() + "\"";
++    m_searchfilter.SetSearchPhrase(item->GetPVRRecordingInfoTag()->m_strTitle);
+   }
+-  else if (item->IsUsablePVRRecording())
+-    m_searchfilter.m_strSearchTerm = "\"" + item->GetPVRRecordingInfoTag()->m_strTitle + "\"";
+-  else if (item->IsPVRTimer())
++  else
+   {
+-    const CPVRTimerInfoTagPtr info(item->GetPVRTimerInfoTag());
+-    const CEpgInfoTagPtr tag(info->GetEpgInfoTag());
+-    if (tag)
+-      m_searchfilter.m_strSearchTerm = "\"" + tag->Title() + "\"";
+-    else
+-      m_searchfilter.m_strSearchTerm = "\"" + info->m_strTitle + "\"";
++    const CEpgInfoTagPtr epgTag(CPVRItem(item).GetEpgInfoTag());
++    if (epgTag)
++      m_searchfilter.SetSearchPhrase(epgTag->Title());
+   }
++
+   m_bSearchConfirmed = true;
+-  Refresh(true);
+-  return true;
++
++  if (IsActive())
++    Refresh(true);
+ }
+ 
+ void CGUIWindowPVRSearch::OnPrepareFileItems(CFileItemList &items)
+@@ -111,7 +98,7 @@ void CGUIWindowPVRSearch::OnPrepareFileItems(CFileItemList &items)
+     if (dlgProgress)
+     {
+       dlgProgress->SetHeading(CVariant{194}); // "Searching..."
+-      dlgProgress->SetText(CVariant{m_searchfilter.m_strSearchTerm});
++      dlgProgress->SetText(CVariant{m_searchfilter.GetSearchTerm()});
+       dlgProgress->Open();
+       dlgProgress->Progress();
+     }
+@@ -205,7 +192,7 @@ void CGUIWindowPVRSearch::OpenDialogSearch()
+   dlgSearch->SetFilterData(&m_searchfilter);
+ 
+   /* Set channel type filter */
+-  m_searchfilter.m_bIsRadio = m_bRadio;
++  m_searchfilter.SetIsRadio(m_bRadio);
+ 
+   /* Open dialog window */
+   dlgSearch->Open();
+diff --git a/xbmc/pvr/windows/GUIWindowPVRSearch.h b/xbmc/pvr/windows/GUIWindowPVRSearch.h
+index e9a2812..155ee05 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRSearch.h
++++ b/xbmc/pvr/windows/GUIWindowPVRSearch.h
+@@ -31,16 +31,14 @@ namespace PVR
+     virtual ~CGUIWindowPVRSearch(void) {};
+ 
+     virtual bool OnMessage(CGUIMessage& message)  override;
+-    virtual void OnWindowLoaded() override;
+     virtual void GetContextButtons(int itemNumber, CContextButtons &buttons) override;
+     virtual bool OnContextButton(int itemNumber, CONTEXT_BUTTON button) override;
+ 
+     /*!
+-     * @brief trigger a search for events similar to the given item.
++     * @brief set the item to search similar events for.
+      * @param item the epg event to search similar events for.
+-     * @return True on success (note: empty result set also means success), false otherwise.
+      */
+-    bool FindSimilar(const CFileItemPtr &item);
++    void SetItemToSearch(const CFileItemPtr &item);
+ 
+   protected:
+     virtual void OnPrepareFileItems(CFileItemList &items) override;
+@@ -52,6 +50,6 @@ namespace PVR
+     void OpenDialogSearch();
+ 
+     bool                  m_bSearchConfirmed;
+-    EPG::EpgSearchFilter  m_searchfilter;
++    EPG::CEpgSearchFilter m_searchfilter;
+   };
+ }

@@ -1,0 +1,2842 @@
+diff --git a/Kodi.xcodeproj/project.pbxproj b/Kodi.xcodeproj/project.pbxproj
+index da0f100..c66332f 100644
+--- a/Kodi.xcodeproj/project.pbxproj
++++ b/Kodi.xcodeproj/project.pbxproj
+@@ -3527,8 +3527,8 @@
+ 		9A7368501C401F5F00CA169F /* DirectoryNodeInProgressTvShows.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = DirectoryNodeInProgressTvShows.h; sourceTree = "<group>"; };
+ 		9A999F1B1C67B77600E4E0D5 /* AddonBuilder.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = AddonBuilder.cpp; sourceTree = "<group>"; };
+ 		9A999F1C1C67B77600E4E0D5 /* AddonBuilder.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AddonBuilder.h; sourceTree = "<group>"; };
+-		9AA7E3E61C972CF4000B7863 /* ContextMenus.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = ContextMenus.cpp; path = ../ContextMenus.cpp; sourceTree = "<group>"; };
+-		9AA7E3E71C972CF4000B7863 /* ContextMenus.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ContextMenus.h; path = ../ContextMenus.h; sourceTree = "<group>"; };
++		9AA7E3E61C972CF4000B7863 /* ContextMenus.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = ContextMenus.cpp; sourceTree = "<group>"; };
++		9AA7E3E71C972CF4000B7863 /* ContextMenus.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ContextMenus.h; sourceTree = "<group>"; };
+ 		9ABFE79F1C972D60002F1318 /* ContextMenus.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = ContextMenus.cpp; sourceTree = "<group>"; };
+ 		9ABFE7A01C972D60002F1318 /* ContextMenus.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ContextMenus.h; sourceTree = "<group>"; };
+ 		9AC167B41C5ED478004F0C29 /* MusicFileItemListModifier.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = MusicFileItemListModifier.cpp; sourceTree = "<group>"; };
+@@ -6030,6 +6030,8 @@
+ 				43FAC88812D6364800F67914 /* windows */,
+ 				7C62F24010505BC7002AD2C1 /* Bookmark.cpp */,
+ 				7C62F24110505BC7002AD2C1 /* Bookmark.h */,
++				9AA7E3E61C972CF4000B7863 /* ContextMenus.cpp */,
++				9AA7E3E71C972CF4000B7863 /* ContextMenus.h */,
+ 				E38E17FF0D25F9FA00618676 /* GUIViewStateVideo.cpp */,
+ 				E38E18000D25F9FA00618676 /* GUIViewStateVideo.h */,
+ 				7C87B2CC162CE39600EF897D /* PlayerController.cpp */,
+@@ -6096,8 +6098,6 @@
+ 		43FAC88812D6364800F67914 /* windows */ = {
+ 			isa = PBXGroup;
+ 			children = (
+-				9AA7E3E61C972CF4000B7863 /* ContextMenus.cpp */,
+-				9AA7E3E71C972CF4000B7863 /* ContextMenus.h */,
+ 				E38E18050D25F9FA00618676 /* GUIWindowFullScreen.cpp */,
+ 				E38E18060D25F9FA00618676 /* GUIWindowFullScreen.h */,
+ 				E38E183B0D25F9FA00618676 /* GUIWindowVideoBase.cpp */,
+diff --git a/addons/resource.language.en_gb/resources/strings.po b/addons/resource.language.en_gb/resources/strings.po
+index 9db838a..f51a7d3 100644
+--- a/addons/resource.language.en_gb/resources/strings.po
++++ b/addons/resource.language.en_gb/resources/strings.po
+@@ -936,7 +936,7 @@ msgstr ""
+ #: addons/skin.estuary/1080i/DialogVideoInfo.xml
+ #: xbmc/dialogs/GUIDialogPlayEject.cpp
+ #: xbmc/games/windows/GUIWindowGames.cpp
+-#: xbmc/pvr/PVRContextMenus.cpp
++#: xbmc/video/ContextMenus.cpp
+ #: xbmc/video/windows/GUIWindowVideoBase.cpp
+ #: system/settings/settings.xml
+ msgctxt "#208"
+@@ -5178,6 +5178,7 @@ msgstr ""
+ #: xbmc/Autorun.cpp
+ #: xbmc/pvr/PVRContextMenus.cpp
+ #: xbmc/pvr/PVRGUIActions.cpp
++#: xbmc/video/ContextMenus.cpp
+ #: xbmc/video/windows/GUIWindowVideoBase.cpp
+ msgctxt "#12021"
+ msgid "Play from beginning"
+@@ -5190,8 +5191,7 @@ msgctxt "#12022"
+ msgid "Resume from %s"
+ msgstr ""
+ 
+-#. Label of video/recordings context menu items
+-#: xbmc/video/ContextMenus.cpp
++#. unused?
+ msgctxt "#12023"
+ msgid "Play from beginning"
+ msgstr ""
+@@ -8886,6 +8886,8 @@ msgstr ""
+ 
+ #empty strings from id 18000 to 18999
+ 
++#. Live TV channels 'play' context menu item label
++#: xbmc/video/ContextMenus.cpp
+ msgctxt "#19000"
+ msgid "Switch to channel"
+ msgstr ""
+diff --git a/xbmc/FileItem.cpp b/xbmc/FileItem.cpp
+index d610867..11aa270 100644
+--- a/xbmc/FileItem.cpp
++++ b/xbmc/FileItem.cpp
+@@ -45,6 +45,7 @@
+ #include "pvr/channels/PVRRadioRDSInfoTag.h"
+ #include "pvr/recordings/PVRRecording.h"
+ #include "pvr/timers/PVRTimerInfoTag.h"
++#include "video/Bookmark.h"
+ #include "video/VideoInfoTag.h"
+ #include "threads/SingleLock.h"
+ #include "music/tags/MusicInfoTag.h"
+@@ -850,6 +851,14 @@ bool CFileItem::IsAudio() const
+   return URIUtils::HasExtension(m_strPath, g_advancedSettings.GetMusicExtensions());
+ }
+ 
++bool CFileItem::IsDeleted() const
++{
++  if (HasPVRRecordingInfoTag())
++    return GetPVRRecordingInfoTag()->IsDeleted();
++
++  return false;
++}
++
+ bool CFileItem::IsPicture() const
+ {
+   if(StringUtils::StartsWithNoCase(m_mimetype, "image/"))
+@@ -1397,9 +1406,9 @@ bool CFileItem::IsSamePath(const CFileItem *item) const
+   }
+   if (HasVideoInfoTag() && item->HasVideoInfoTag())
+   {
+-    if (m_videoInfoTag->m_iDbId != -1 && item->m_videoInfoTag->m_iDbId != -1)
+-      return ((m_videoInfoTag->m_iDbId == item->m_videoInfoTag->m_iDbId) &&
+-        (m_videoInfoTag->m_type == item->m_videoInfoTag->m_type));
++    if (GetVideoInfoTag()->m_iDbId != -1 && item->GetVideoInfoTag()->m_iDbId != -1)
++      return ((GetVideoInfoTag()->m_iDbId == item->GetVideoInfoTag()->m_iDbId) &&
++        (GetVideoInfoTag()->m_type == item->GetVideoInfoTag()->m_type));
+   }
+   if (IsMusicDb() && HasMusicInfoTag())
+   {
+@@ -1410,7 +1419,7 @@ bool CFileItem::IsSamePath(const CFileItem *item) const
+   }
+   if (IsVideoDb() && HasVideoInfoTag())
+   {
+-    CFileItem dbItem(m_videoInfoTag->m_strFileNameAndPath, false);
++    CFileItem dbItem(GetVideoInfoTag()->m_strFileNameAndPath, false);
+     if (HasProperty("item_start"))
+       dbItem.SetProperty("item_start", GetProperty("item_start"));
+     return dbItem.IsSamePath(item);
+@@ -1424,7 +1433,7 @@ bool CFileItem::IsSamePath(const CFileItem *item) const
+   }
+   if (item->IsVideoDb() && item->HasVideoInfoTag())
+   {
+-    CFileItem dbItem(item->m_videoInfoTag->m_strFileNameAndPath, false);
++    CFileItem dbItem(item->GetVideoInfoTag()->m_strFileNameAndPath, false);
+     if (item->HasProperty("item_start"))
+       dbItem.SetProperty("item_start", item->GetProperty("item_start"));
+     return IsSamePath(&dbItem);
+@@ -1444,11 +1453,22 @@ void CFileItem::UpdateInfo(const CFileItem &item, bool replaceLabels /*=true*/)
+   if (item.HasVideoInfoTag())
+   { // copy info across
+     //! @todo premiered info is normally stored in m_dateTime by the db
+-    *GetVideoInfoTag() = *item.GetVideoInfoTag();
+-    // preferably use some information from PVR info tag if available
+-    if (m_pvrRecordingInfoTag)
+-      m_pvrRecordingInfoTag->CopyClientInfo(GetVideoInfoTag());
+-    SetOverlayImage(ICON_OVERLAY_UNWATCHED, GetVideoInfoTag()->m_playCount > 0);
++    m_pvrRecordingInfoTag = item.m_pvrRecordingInfoTag;
++
++    if (item.m_videoInfoTag)
++    {
++      if (m_videoInfoTag)
++        *m_videoInfoTag = *item.m_videoInfoTag;
++      else
++        m_videoInfoTag = new CVideoInfoTag(*item.m_videoInfoTag);
++    }
++    else
++    {
++      delete m_videoInfoTag;
++      m_videoInfoTag = nullptr;
++    }
++
++    SetOverlayImage(ICON_OVERLAY_UNWATCHED, GetVideoInfoTag()->GetPlayCount() > 0);
+     SetInvalid();
+   }
+   if (item.HasMusicInfoTag())
+@@ -1493,7 +1513,11 @@ void CFileItem::SetFromVideoInfoTag(const CVideoInfoTag &video)
+     m_bIsFolder = false;
+   }
+ 
+-  *GetVideoInfoTag() = video;
++  if (m_videoInfoTag)
++    *m_videoInfoTag = video;
++  else
++    m_videoInfoTag = new CVideoInfoTag(video);
++
+   if (video.m_iSeason == 0)
+     SetProperty("isspecial", "true");
+   FillInDefaultIcon();
+@@ -3257,14 +3281,29 @@ void CFileItemList::ClearSortState()
+   m_sortDescription.sortAttributes = SortAttributeNone;
+ }
+ 
++bool CFileItem::HasVideoInfoTag() const
++{
++  // Note: CPVRRecording is derived from CVideoInfoTag
++  return m_pvrRecordingInfoTag.get() != nullptr || m_videoInfoTag != nullptr;
++}
++
+ CVideoInfoTag* CFileItem::GetVideoInfoTag()
+ {
+-  if (!m_videoInfoTag)
++  // Note: CPVRRecording is derived from CVideoInfoTag
++  if (m_pvrRecordingInfoTag)
++    return m_pvrRecordingInfoTag.get();
++  else if (!m_videoInfoTag)
+     m_videoInfoTag = new CVideoInfoTag;
+ 
+   return m_videoInfoTag;
+ }
+ 
++const CVideoInfoTag* CFileItem::GetVideoInfoTag() const
++{
++  // Note: CPVRRecording is derived from CVideoInfoTag
++  return m_pvrRecordingInfoTag ? m_pvrRecordingInfoTag.get() : m_videoInfoTag;
++}
++
+ CPictureInfoTag* CFileItem::GetPictureInfoTag()
+ {
+   if (!m_pictureInfoTag)
+@@ -3387,26 +3426,42 @@ int CFileItem::GetVideoContentType() const
+   return type;
+ }
+ 
++CFileItem CFileItem::GetItemToPlay() const
++{
++  if (HasEPGInfoTag())
++  {
++    const CPVRChannelPtr channel(GetEPGInfoTag()->ChannelTag());
++    if (channel)
++      return CFileItem(channel);
++  }
++  return CFileItem(*this);
++}
++
++CBookmark CFileItem::GetResumePoint() const
++{
++  if (HasVideoInfoTag())
++    return GetVideoInfoTag()->GetResumePoint();
++  return CBookmark();
++}
++
+ bool CFileItem::IsResumePointSet() const
+ {
+-  return (HasVideoInfoTag() && GetVideoInfoTag()->m_resumePoint.IsSet()) ||
+-      (m_pvrRecordingInfoTag && m_pvrRecordingInfoTag->GetLastPlayedPosition() > 0);
++  return GetResumePoint().IsSet();
+ }
+ 
+ double CFileItem::GetCurrentResumeTime() const
+ {
+-  if (m_pvrRecordingInfoTag)
+-  {
+-    // This will retrieve 'fresh' resume information from the PVR server
+-    int rc = m_pvrRecordingInfoTag->GetLastPlayedPosition();
+-    if (rc > 0)
+-      return rc;
+-    // Fall through to default value
+-  }
+-  if (HasVideoInfoTag() && GetVideoInfoTag()->m_resumePoint.IsSet())
++  return lrint(GetResumePoint().timeInSeconds);
++}
++
++bool CFileItem::GetCurrentResumeTimeAndPartNumber(int& startOffset, int& partNumber) const
++{
++  CBookmark resumePoint(GetResumePoint());
++  if (resumePoint.IsSet())
+   {
+-    return GetVideoInfoTag()->m_resumePoint.timeInSeconds;
++    startOffset = lrint(resumePoint.timeInSeconds);
++    partNumber = resumePoint.partNumber;
++    return true;
+   }
+-  // Resume from start when resume points are invalid or the PVR server returns an error
+-  return 0;
++  return false;
+ }
+diff --git a/xbmc/FileItem.h b/xbmc/FileItem.h
+index c55e80b..8bf5c82 100644
+--- a/xbmc/FileItem.h
++++ b/xbmc/FileItem.h
+@@ -69,6 +69,8 @@ typedef std::shared_ptr<const IEvent> EventPtr;
+ 
+ class CMediaSource;
+ 
++class CBookmark;
++
+ enum EFileFolderType {
+   EFILEFOLDER_TYPE_ALWAYS     = 1<<0,
+   EFILEFOLDER_TYPE_ONCLICK    = 1<<1,
+@@ -170,6 +172,12 @@ public:
+    */
+   bool IsAudio() const;
+ 
++  /*!
++   \brief Check whether an item is 'deleted' (for example, a trashed pvr recording).
++   \return true if item is 'deleted', false otherwise.
++   */
++  bool IsDeleted() const;
++
+   bool IsCUESheet() const;
+   bool IsInternetStream(const bool bStrictCheck = false) const;
+   bool IsPlayList() const;
+@@ -248,17 +256,11 @@ public:
+     return m_musicInfoTag;
+   }
+ 
+-  inline bool HasVideoInfoTag() const
+-  {
+-    return m_videoInfoTag != NULL;
+-  }
++  bool HasVideoInfoTag() const;
+ 
+   CVideoInfoTag* GetVideoInfoTag();
+ 
+-  inline const CVideoInfoTag* GetVideoInfoTag() const
+-  {
+-    return m_videoInfoTag;
+-  }
++  const CVideoInfoTag* GetVideoInfoTag() const;
+ 
+   inline bool HasEPGInfoTag() const
+   {
+@@ -321,6 +323,12 @@ public:
+   }
+ 
+   /*!
++   \brief return the item to play. will be almost 'this', but can be different (e.g. "Play recording" from PVR EPG grid window)
++   \return the item to play
++   */
++  CFileItem GetItemToPlay() const;
++
++  /*!
+    \brief Test if this item has a valid resume point set.
+    \return True if this item has a resume point and it is set, false otherwise.
+    */
+@@ -332,6 +340,14 @@ public:
+    */
+   double GetCurrentResumeTime() const;
+ 
++  /*!
++   \brief Return the current resume time and part.
++   \param startOffset will be filled with the resume time offset in seconds if item has a resume point set, is unchanged otherwise
++   \param partNumber will be filled with the part number if item has a resume point set, is unchanged otherwise
++   \return True if the item has a resume point set, false otherwise.
++   */
++  bool GetCurrentResumeTimeAndPartNumber(int& startOffset, int& partNumber) const;
++
+   inline bool HasPictureInfoTag() const
+   {
+     return m_pictureInfoTag != NULL;
+@@ -517,6 +533,12 @@ private:
+    */
+   void Initialize();
+ 
++  /*!
++   \brief Return the current resume point for this item.
++   \return The resum point.
++   */
++  CBookmark GetResumePoint() const;
++
+   std::string m_strPath;            ///< complete path to item
+ 
+   SortSpecial m_specialSort;
+diff --git a/xbmc/GUIInfoManager.cpp b/xbmc/GUIInfoManager.cpp
+index d683351..bf38e37 100644
+--- a/xbmc/GUIInfoManager.cpp
++++ b/xbmc/GUIInfoManager.cpp
+@@ -6074,8 +6074,6 @@ std::string CGUIInfoManager::GetLabel(int info, int contextWindow, std::string *
+                    CSettings::GetInstance().GetBool(CSettings::SETTING_EPG_HIDENOINFOAVAILABLE) ?
+                             "" : g_localizeStrings.Get(19055); // no information available
+         }
+-        if (m_currentFile->HasPVRRecordingInfoTag() && !m_currentFile->GetPVRRecordingInfoTag()->m_strTitle.empty())
+-          return m_currentFile->GetPVRRecordingInfoTag()->m_strTitle;
+         if (m_currentFile->HasVideoInfoTag() && !m_currentFile->GetVideoInfoTag()->m_strTitle.empty())
+           return m_currentFile->GetVideoInfoTag()->m_strTitle;
+         if (m_currentFile->HasMusicInfoTag() && !m_currentFile->GetMusicInfoTag()->GetTitle().empty())
+@@ -6458,9 +6456,9 @@ std::string CGUIInfoManager::GetLabel(int info, int contextWindow, std::string *
+         {
+           // Iterate through container and count watched, unwatched and total duration.
+           CFileItemPtr item=items.Get(i);
+-          if (info == CONTAINER_TOTALWATCHED && item->HasVideoInfoTag() && item->GetVideoInfoTag()->m_playCount > 0)
++          if (info == CONTAINER_TOTALWATCHED && item->HasVideoInfoTag() && item->GetVideoInfoTag()->GetPlayCount() > 0)
+             count += 1;
+-          else if (info == CONTAINER_TOTALUNWATCHED && item->HasVideoInfoTag() && item->GetVideoInfoTag()->m_playCount == 0)
++          else if (info == CONTAINER_TOTALUNWATCHED && item->HasVideoInfoTag() && item->GetVideoInfoTag()->GetPlayCount() == 0)
+             count += 1;
+           else if (info == CONTAINER_TOTALTIME && item->HasMusicInfoTag())
+             count += item->GetMusicInfoTag()->GetDuration();
+@@ -8918,95 +8916,6 @@ std::string CGUIInfoManager::GetVideoLabel(int item)
+       }
+     }
+   }
+-  else if (m_currentFile->HasPVRRecordingInfoTag())
+-  {
+-    const CPVRRecordingPtr tag(m_currentFile->GetPVRRecordingInfoTag());
+-
+-    switch (item)
+-    {
+-      case VIDEOPLAYER_TITLE:
+-        return tag->m_strTitle;
+-
+-      case VIDEOPLAYER_GENRE:
+-        return StringUtils::Join(tag->m_genre, g_advancedSettings.m_videoItemSeparator);
+-
+-      case VIDEOPLAYER_PLOT:
+-        return tag->m_strPlot;
+-
+-      case VIDEOPLAYER_PLOT_OUTLINE:
+-        return tag->m_strPlotOutline;
+-
+-      case VIDEOPLAYER_STARTTIME:
+-        return tag->RecordingTimeAsLocalTime().GetAsLocalizedTime("", false);
+-
+-      case VIDEOPLAYER_ENDTIME:
+-        return (tag->RecordingTimeAsLocalTime() + tag->m_duration).GetAsLocalizedTime("", false);
+-
+-      case VIDEOPLAYER_YEAR:
+-        if (tag->HasYear())
+-          return StringUtils::Format("%i", tag->GetYear());
+-        break;
+-
+-      case VIDEOPLAYER_EPISODE:
+-        if (tag->m_iEpisode > 0)
+-        {
+-          if (tag->m_iEpisode == 0) // prefix episode with 'S'
+-            return StringUtils::Format("S%i", tag->m_iEpisode);
+-          else
+-            return StringUtils::Format("%i", tag->m_iEpisode);
+-        }
+-        break;
+-
+-      case VIDEOPLAYER_SEASON:
+-        if (tag->m_iSeason > 0)
+-          return StringUtils::Format("%i", tag->m_iSeason);
+-        break;
+-
+-      case VIDEOPLAYER_EPISODENAME:
+-        return tag->EpisodeName();
+-
+-      case VIDEOPLAYER_CHANNEL_NAME:
+-        return tag->m_strChannelName;
+-
+-      case VIDEOPLAYER_CHANNEL_NUMBER:
+-      {
+-        const CPVRChannelPtr channel(tag->Channel());
+-        if (channel)
+-          return StringUtils::Format("%i", channel->ChannelNumber());
+-        break;
+-      }
+-
+-      case VIDEOPLAYER_SUB_CHANNEL_NUMBER:
+-      {
+-        const CPVRChannelPtr channel(tag->Channel());
+-        if (channel)
+-          return StringUtils::Format("%i", channel->SubChannelNumber());
+-        break;
+-      }
+-
+-      case VIDEOPLAYER_CHANNEL_NUMBER_LBL:
+-      {
+-        const CPVRChannelPtr channel(tag->Channel());
+-        if (channel)
+-          return channel->FormattedChannelNumber();
+-        break;
+-      }
+-
+-      case VIDEOPLAYER_CHANNEL_GROUP:
+-      {
+-        if (!tag->IsRadio())
+-          return g_PVRManager.GetPlayingTVGroupName();
+-        break;
+-      }
+-
+-      case VIDEOPLAYER_PLAYCOUNT:
+-      {
+-        if (tag->m_playCount > 0)
+-          return StringUtils::Format("%i", tag->m_playCount);
+-        break;
+-      }
+-    }
+-  }
+   else if (m_currentFile->HasVideoInfoTag())
+   {
+     switch (item)
+@@ -9140,10 +9049,58 @@ std::string CGUIInfoManager::GetVideoLabel(int item)
+     case VIDEOPLAYER_PLAYCOUNT:
+       {
+         std::string strPlayCount;
+-        if (m_currentFile->GetVideoInfoTag()->m_playCount > 0)
+-          strPlayCount = StringUtils::Format("%i", m_currentFile->GetVideoInfoTag()->m_playCount);
++        if (m_currentFile->GetVideoInfoTag()->GetPlayCount() > 0)
++          strPlayCount = StringUtils::Format("%i", m_currentFile->GetVideoInfoTag()->GetPlayCount());
+         return strPlayCount;
+       }
++    default:
++      {
++        if (m_currentFile->HasPVRRecordingInfoTag())
++        {
++          const CPVRRecordingPtr tag(m_currentFile->GetPVRRecordingInfoTag());
++          switch (item)
++          {
++            case VIDEOPLAYER_STARTTIME:
++              return tag->RecordingTimeAsLocalTime().GetAsLocalizedTime("", false);
++            case VIDEOPLAYER_ENDTIME:
++              return tag->EndTimeAsLocalTime().GetAsLocalizedTime("", false);
++            case VIDEOPLAYER_EPISODENAME:
++              return tag->EpisodeName();
++            case VIDEOPLAYER_CHANNEL_NAME:
++              return tag->m_strChannelName;
++            case VIDEOPLAYER_CHANNEL_NUMBER:
++            {
++              const CPVRChannelPtr channel(tag->Channel());
++              if (channel)
++                return StringUtils::Format("%i", channel->ChannelNumber());
++              break;
++            }
++            case VIDEOPLAYER_SUB_CHANNEL_NUMBER:
++            {
++              const CPVRChannelPtr channel(tag->Channel());
++              if (channel)
++                return StringUtils::Format("%i", channel->SubChannelNumber());
++              break;
++            }
++            case VIDEOPLAYER_CHANNEL_NUMBER_LBL:
++            {
++              const CPVRChannelPtr channel(tag->Channel());
++              if (channel)
++                return channel->FormattedChannelNumber();
++              break;
++            }
++            case VIDEOPLAYER_CHANNEL_GROUP:
++            {
++              if (!tag->IsRadio())
++                return g_PVRManager.GetPlayingTVGroupName();
++              break;
++            }
++            default:
++              break;
++          }
++        }
++        break;
++      }
+     }
+   }
+   else if (g_playlistPlayer.GetCurrentPlaylist() == PLAYLIST_VIDEO)
+@@ -9615,10 +9572,8 @@ bool CGUIInfoManager::GetItemInt(int &value, const CGUIListItem *item, int info)
+     }
+     break;
+   case LISTITEM_PERCENT_PLAYED:
+-    if (item->IsFileItem() && ((const CFileItem *)item)->HasVideoInfoTag() && ((const CFileItem *)item)->GetVideoInfoTag()->m_resumePoint.IsPartWay())
+-      value = (int)(100 * ((const CFileItem *)item)->GetVideoInfoTag()->m_resumePoint.timeInSeconds / ((const CFileItem *)item)->GetVideoInfoTag()->m_resumePoint.totalTimeInSeconds);
+-    else if (item->IsFileItem() && ((const CFileItem *)item)->HasPVRRecordingInfoTag() && ((const CFileItem *)item)->GetPVRRecordingInfoTag()->m_resumePoint.IsPartWay())
+-      value = (int)(100 * ((const CFileItem *)item)->GetPVRRecordingInfoTag()->m_resumePoint.timeInSeconds / ((const CFileItem *)item)->GetPVRRecordingInfoTag()->m_resumePoint.totalTimeInSeconds);
++    if (item->IsFileItem() && ((const CFileItem *)item)->HasVideoInfoTag() && ((const CFileItem *)item)->GetVideoInfoTag()->GetResumePoint().IsPartWay())
++      value = (int)(100 * ((const CFileItem *)item)->GetVideoInfoTag()->GetResumePoint().timeInSeconds / ((const CFileItem *)item)->GetVideoInfoTag()->GetResumePoint().totalTimeInSeconds);
+     else
+       value = 0;
+     return true;
+@@ -9697,8 +9652,6 @@ std::string CGUIInfoManager::GetItemLabel(const CFileItem *item, int info, std::
+           CSettings::GetInstance().GetBool(CSettings::SETTING_EPG_HIDENOINFOAVAILABLE) ?
+                             "" : g_localizeStrings.Get(19055); // no information available
+     }
+-    if (item->HasPVRRecordingInfoTag())
+-      return item->GetPVRRecordingInfoTag()->m_strTitle;
+     if (item->HasEPGInfoTag())
+       return item->GetEPGInfoTag()->Title();
+     if (item->HasPVRTimerInfoTag())
+@@ -9744,10 +9697,8 @@ std::string CGUIInfoManager::GetItemLabel(const CFileItem *item, int info, std::
+     break;
+   case LISTITEM_PLAYCOUNT:
+     {
+-      if (item->HasPVRRecordingInfoTag() && item->GetPVRRecordingInfoTag()->m_playCount > 0)
+-        return StringUtils::Format("%i", item->GetPVRRecordingInfoTag()->m_playCount);
+-      else if (item->HasVideoInfoTag() && item->GetVideoInfoTag()->m_playCount > 0)
+-        return StringUtils::Format("%i", item->GetVideoInfoTag()->m_playCount);
++      if (item->HasVideoInfoTag() && item->GetVideoInfoTag()->GetPlayCount() > 0)
++        return StringUtils::Format("%i", item->GetVideoInfoTag()->GetPlayCount());
+       else if (item->HasMusicInfoTag() && item->GetMusicInfoTag()->GetPlayCount() > 0)
+         return StringUtils::Format("%i", item->GetMusicInfoTag()->GetPlayCount());
+       break;
+@@ -9837,8 +9788,6 @@ std::string CGUIInfoManager::GetItemLabel(const CFileItem *item, int info, std::
+         if (tag && tag->Year() > 0)
+           year = StringUtils::Format("%i", tag->Year());
+       }
+-      if (item->HasPVRRecordingInfoTag() && item->GetPVRRecordingInfoTag()->HasYear())
+-          year = StringUtils::Format("%i", item->GetPVRRecordingInfoTag()->GetYear());
+       return year;
+     }
+   case LISTITEM_PREMIERED:
+@@ -9866,8 +9815,6 @@ std::string CGUIInfoManager::GetItemLabel(const CFileItem *item, int info, std::
+     }
+     break;
+   case LISTITEM_GENRE:
+-    if (item->HasPVRRecordingInfoTag())
+-      return StringUtils::Join(item->GetPVRRecordingInfoTag()->m_genre, g_advancedSettings.m_videoItemSeparator);
+     if (item->HasPVRChannelInfoTag())
+     {
+       CEpgInfoTagPtr epgTag(item->GetPVRChannelInfoTag()->GetEPGNow());
+@@ -9994,11 +9941,6 @@ std::string CGUIInfoManager::GetItemLabel(const CFileItem *item, int info, std::
+         CEpgInfoTagPtr tag(item->GetPVRChannelInfoTag()->GetEPGNow());
+         return tag ? StringUtils::SecondsToTimeString(tag->GetDuration()) : "";
+       }
+-      else if (item->HasPVRRecordingInfoTag())
+-      {
+-        if (item->GetPVRRecordingInfoTag()->GetDuration() > 0)
+-          duration = StringUtils::SecondsToTimeString(item->GetPVRRecordingInfoTag()->GetDuration());
+-      }
+       else if (item->HasEPGInfoTag())
+       {
+         if (item->GetEPGInfoTag()->GetDuration() > 0)
+@@ -10013,7 +9955,7 @@ std::string CGUIInfoManager::GetItemLabel(const CFileItem *item, int info, std::
+       else if (item->HasVideoInfoTag())
+       {
+         if (item->GetVideoInfoTag()->GetDuration() > 0)
+-          duration = StringUtils::Format("%d", item->GetVideoInfoTag()->GetDuration() / 60);
++          duration = StringUtils::SecondsToTimeString(item->GetVideoInfoTag()->GetDuration());
+       }
+       else if (item->HasMusicInfoTag())
+       {
+@@ -10030,8 +9972,6 @@ std::string CGUIInfoManager::GetItemLabel(const CFileItem *item, int info, std::
+     }
+     if (item->HasEPGInfoTag())
+       return item->GetEPGInfoTag()->Plot();
+-    if (item->HasPVRRecordingInfoTag())
+-      return item->GetPVRRecordingInfoTag()->m_strPlot;
+     if (item->HasPVRTimerInfoTag())
+     {
+       const CEpgInfoTagPtr epgTag(item->GetPVRTimerInfoTag()->GetEpgInfoTag());
+@@ -10041,7 +9981,7 @@ std::string CGUIInfoManager::GetItemLabel(const CFileItem *item, int info, std::
+     if (item->HasVideoInfoTag())
+     {
+       if (item->GetVideoInfoTag()->m_type != MediaTypeTvShow && item->GetVideoInfoTag()->m_type != MediaTypeVideoCollection)
+-        if (item->GetVideoInfoTag()->m_playCount == 0 && !CSettings::GetInstance().GetBool(CSettings::SETTING_VIDEOLIBRARY_SHOWUNWATCHEDPLOTS))
++        if (item->GetVideoInfoTag()->GetPlayCount() == 0 && !CSettings::GetInstance().GetBool(CSettings::SETTING_VIDEOLIBRARY_SHOWUNWATCHEDPLOTS))
+           return g_localizeStrings.Get(20370);
+ 
+       return item->GetVideoInfoTag()->m_strPlot;
+@@ -10055,8 +9995,6 @@ std::string CGUIInfoManager::GetItemLabel(const CFileItem *item, int info, std::
+     }
+     if (item->HasEPGInfoTag())
+       return item->GetEPGInfoTag()->PlotOutline();
+-    if (item->HasPVRRecordingInfoTag())
+-      return item->GetPVRRecordingInfoTag()->m_strPlotOutline;
+     if (item->HasPVRTimerInfoTag())
+     {
+       const CEpgInfoTagPtr epgTag(item->GetPVRTimerInfoTag()->GetEpgInfoTag());
+@@ -10098,12 +10036,8 @@ std::string CGUIInfoManager::GetItemLabel(const CFileItem *item, int info, std::
+             iEpisode = tag->EpisodeNumber();
+         }
+       }
+-      else if (item->HasPVRRecordingInfoTag() && item->GetPVRRecordingInfoTag()->m_iEpisode > 0)
+-      {
+-        iSeason = item->GetPVRRecordingInfoTag()->m_iSeason;
+-        iEpisode = item->GetPVRRecordingInfoTag()->m_iEpisode;
+-      }
+-      else if (item->HasVideoInfoTag())
++      else if (item->HasVideoInfoTag() &&
++               item->GetVideoInfoTag()->m_iEpisode > 0)
+       {
+         iSeason = item->GetVideoInfoTag()->m_iSeason;
+         iEpisode = item->GetVideoInfoTag()->m_iEpisode;
+@@ -10136,10 +10070,8 @@ std::string CGUIInfoManager::GetItemLabel(const CFileItem *item, int info, std::
+         if (epgTag && epgTag->SeriesNumber() > 0)
+           iSeason = epgTag->SeriesNumber();
+       }
+-      else if (item->HasPVRRecordingInfoTag() &&
+-               item->GetPVRRecordingInfoTag()->m_iSeason > 0)
+-        iSeason = item->GetPVRRecordingInfoTag()->m_iSeason;
+-      else if (item->HasVideoInfoTag())
++      else if (item->HasVideoInfoTag() &&
++               item->GetVideoInfoTag()->m_iSeason > 0)
+         iSeason = item->GetVideoInfoTag()->m_iSeason;
+ 
+       if (iSeason >= 0)
+@@ -10346,7 +10278,7 @@ std::string CGUIInfoManager::GetItemLabel(const CFileItem *item, int info, std::
+     if (item->HasVideoInfoTag())
+     {
+       auto* tag = item->GetVideoInfoTag();
+-      CDateTimeSpan duration(0, 0, 0, tag->GetDuration() - tag->m_resumePoint.timeInSeconds);
++      CDateTimeSpan duration(0, 0, 0, tag->GetDuration() - tag->GetResumePoint().timeInSeconds);
+       return (CDateTime::GetCurrentDateTime() + duration).GetAsLocalizedTime("", false);
+     }
+     break;
+@@ -10731,10 +10663,8 @@ bool CGUIInfoManager::GetItemBool(const CGUIListItem *item, int condition) const
+     if (item->IsFileItem())
+     {
+       const CFileItem *pItem = static_cast<const CFileItem *>(item);
+-      if (pItem->HasPVRRecordingInfoTag())
+-        return pItem->GetPVRRecordingInfoTag()->m_resumePoint.timeInSeconds > 0;
+-      else if (pItem->HasVideoInfoTag())
+-        return pItem->GetVideoInfoTag()->m_resumePoint.timeInSeconds > 0;
++      if (pItem->HasVideoInfoTag())
++        return pItem->GetVideoInfoTag()->GetResumePoint().timeInSeconds > 0;
+     }
+   }
+   else if (item->IsFileItem())
+diff --git a/xbmc/addons/PVRClient.cpp b/xbmc/addons/PVRClient.cpp
+index d85a00d..a07d20f 100644
+--- a/xbmc/addons/PVRClient.cpp
++++ b/xbmc/addons/PVRClient.cpp
+@@ -288,8 +288,8 @@ void CPVRClient::WriteClientRecordingInfo(const CPVRRecording &xbmcRecording, PV
+   addonRecording.iDuration           = xbmcRecording.GetDuration();
+   addonRecording.iPriority           = xbmcRecording.m_iPriority;
+   addonRecording.iLifetime           = xbmcRecording.m_iLifetime;
+-  addonRecording.iPlayCount          = xbmcRecording.m_playCount;
+-  addonRecording.iLastPlayedPosition = (int)xbmcRecording.m_resumePoint.timeInSeconds;
++  addonRecording.iPlayCount          = xbmcRecording.GetPlayCount();
++  addonRecording.iLastPlayedPosition = (int)xbmcRecording.GetResumePoint().timeInSeconds;
+   addonRecording.bIsDeleted          = xbmcRecording.IsDeleted();
+   strncpy(addonRecording.strDirectory, xbmcRecording.m_strDirectory.c_str(), sizeof(addonRecording.strDirectory) - 1);
+   strncpy(addonRecording.strStreamURL, xbmcRecording.m_strStreamURL.c_str(), sizeof(addonRecording.strStreamURL) - 1);
+diff --git a/xbmc/filesystem/BlurayDirectory.cpp b/xbmc/filesystem/BlurayDirectory.cpp
+index ae628d7..6804bf8 100644
+--- a/xbmc/filesystem/BlurayDirectory.cpp
++++ b/xbmc/filesystem/BlurayDirectory.cpp
+@@ -68,7 +68,7 @@ CFileItemPtr CBlurayDirectory::GetTitle(const BLURAY_TITLE_INFO* title, const st
+   path.SetFileName(buf);
+   item->SetPath(path.Get());
+   int duration = (int)(title->duration / 90000);
+-  item->GetVideoInfoTag()->m_duration = duration;
++  item->GetVideoInfoTag()->SetDuration(duration);
+   item->GetVideoInfoTag()->m_iTrack = title->playlist;
+   buf = StringUtils::Format(label.c_str(), title->playlist);
+   item->m_strTitle = buf;
+diff --git a/xbmc/filesystem/PluginDirectory.cpp b/xbmc/filesystem/PluginDirectory.cpp
+index caff5c3..7dfc51c 100644
+--- a/xbmc/filesystem/PluginDirectory.cpp
++++ b/xbmc/filesystem/PluginDirectory.cpp
+@@ -183,7 +183,7 @@ bool CPluginDirectory::GetPluginResult(const std::string& strPath, CFileItem &re
+     resultItem.SetPath(newDir.m_fileResult->GetPath());
+     resultItem.SetMimeType(newDir.m_fileResult->GetMimeType());
+     resultItem.UpdateInfo(*newDir.m_fileResult);
+-    if (newDir.m_fileResult->HasVideoInfoTag() && newDir.m_fileResult->GetVideoInfoTag()->m_resumePoint.IsSet())
++    if (newDir.m_fileResult->HasVideoInfoTag() && newDir.m_fileResult->GetVideoInfoTag()->GetResumePoint().IsSet())
+       resultItem.m_lStartOffset = STARTOFFSET_RESUME; // resume point set in the resume item, so force resume
+   }
+ 
+diff --git a/xbmc/filesystem/RSSDirectory.cpp b/xbmc/filesystem/RSSDirectory.cpp
+index 3d9477e..02cbfd6 100644
+--- a/xbmc/filesystem/RSSDirectory.cpp
++++ b/xbmc/filesystem/RSSDirectory.cpp
+@@ -198,7 +198,7 @@ static void ParseItemMRSS(CFileItem* item, SResources& resources, TiXmlElement*
+     else if(scheme == "urn:boxee:show-title")
+       vtag->m_strShowTitle = text.c_str();
+     else if(scheme == "urn:boxee:view-count")
+-      vtag->m_playCount = atoi(text.c_str());
++      vtag->SetPlayCount(atoi(text.c_str()));
+     else if(scheme == "urn:boxee:source")
+       item->SetProperty("boxee:provider_source", text);
+     else
+@@ -254,7 +254,7 @@ static void ParseItemItunes(CFileItem* item, SResources& resources, TiXmlElement
+   else if(name == "author")
+     vtag->m_writingCredits.push_back(text);
+   else if(name == "duration")
+-    vtag->m_duration = StringUtils::TimeStringToSeconds(text);
++    vtag->SetDuration(StringUtils::TimeStringToSeconds(text));
+   else if(name == "keywords")
+     item->SetProperty("keywords", text);
+ }
+@@ -353,13 +353,13 @@ static void ParseItemBoxee(CFileItem* item, SResources& resources, TiXmlElement*
+   else if(name == "content_type")
+     item->SetMimeType(text);
+   else if(name == "runtime")
+-    vtag->m_duration = StringUtils::TimeStringToSeconds(text);
++    vtag->SetDuration(StringUtils::TimeStringToSeconds(text));
+   else if(name == "episode")
+     vtag->m_iEpisode = atoi(text.c_str());
+   else if(name == "season")
+     vtag->m_iSeason = atoi(text.c_str());
+   else if(name == "view-count")
+-    vtag->m_playCount = atoi(text.c_str());
++    vtag->SetPlayCount(atoi(text.c_str()));
+   else if(name == "tv-show-title")
+     vtag->m_strShowTitle = text;
+   else if(name == "release-date")
+@@ -375,15 +375,15 @@ static void ParseItemZink(CFileItem* item, SResources& resources, TiXmlElement*
+   else if(name == "season")
+     vtag->m_iSeason = atoi(text.c_str());
+   else if(name == "views")
+-    vtag->m_playCount = atoi(text.c_str());
++    vtag->SetPlayCount(atoi(text.c_str()));
+   else if(name == "airdate")
+     vtag->m_firstAired.SetFromDateString(text);
+   else if(name == "userrating")
+     vtag->SetRating((float)atof(text.c_str()));
+   else if(name == "duration")
+-    vtag->m_duration = atoi(text.c_str());
++    vtag->SetDuration(atoi(text.c_str()));
+   else if(name == "durationstr")
+-    vtag->m_duration = StringUtils::TimeStringToSeconds(text);
++    vtag->SetDuration(StringUtils::TimeStringToSeconds(text));
+ }
+ 
+ static void ParseItemSVT(CFileItem* item, SResources& resources, TiXmlElement* element, const std::string& name, const std::string& xmlns, const std::string& path)
+@@ -538,7 +538,7 @@ static void ParseItem(CFileItem* item, TiXmlElement* root, const std::string& pa
+     CVideoInfoTag* vtag = item->GetVideoInfoTag();
+ 
+     if(item->HasProperty("duration")    && !vtag->GetDuration())
+-      vtag->m_duration = StringUtils::TimeStringToSeconds(item->GetProperty("duration").asString());
++      vtag->SetDuration(StringUtils::TimeStringToSeconds(item->GetProperty("duration").asString()));
+ 
+     if(item->HasProperty("description") && vtag->m_strPlot.empty())
+       vtag->m_strPlot = item->GetProperty("description").asString();
+diff --git a/xbmc/interfaces/AnnouncementManager.cpp b/xbmc/interfaces/AnnouncementManager.cpp
+index 9184e8b..2c78f00 100644
+--- a/xbmc/interfaces/AnnouncementManager.cpp
++++ b/xbmc/interfaces/AnnouncementManager.cpp
+@@ -161,7 +161,7 @@ void CAnnouncementManager::DoAnnounce(AnnouncementFlag flag, const char *sender,
+     if (data.isMember("player") && data["player"].isMember("playerid"))
+       object["player"]["playerid"] = channel->IsRadio() ? PLAYLIST_MUSIC : PLAYLIST_VIDEO;
+   }
+-  else if (item->HasVideoInfoTag())
++  else if (item->HasVideoInfoTag() && !item->HasPVRRecordingInfoTag())
+   {
+     id = item->GetVideoInfoTag()->m_iDbId;
+ 
+diff --git a/xbmc/interfaces/json-rpc/FileItemHandler.cpp b/xbmc/interfaces/json-rpc/FileItemHandler.cpp
+index ac24843..8199b3b 100644
+--- a/xbmc/interfaces/json-rpc/FileItemHandler.cpp
++++ b/xbmc/interfaces/json-rpc/FileItemHandler.cpp
+@@ -278,8 +278,6 @@ void CFileItemHandler::HandleFileItem(const char *ID, bool allowFile, const char
+           object["file"] = item->GetVideoInfoTag()->GetPath().c_str();
+         if (item->HasMusicInfoTag() && !item->GetMusicInfoTag()->GetURL().empty())
+           object["file"] = item->GetMusicInfoTag()->GetURL().c_str();
+-        if (item->HasPVRRecordingInfoTag() && !item->GetPVRRecordingInfoTag()->GetPath().empty())
+-          object["file"] = item->GetPVRRecordingInfoTag()->GetPath().c_str();
+         if (item->HasPVRTimerInfoTag() && !item->GetPVRTimerInfoTag()->m_strFileNameAndPath.empty())
+           object["file"] = item->GetPVRTimerInfoTag()->m_strFileNameAndPath.c_str();
+ 
+diff --git a/xbmc/interfaces/json-rpc/FileOperations.cpp b/xbmc/interfaces/json-rpc/FileOperations.cpp
+index 7580d46..ab0ed83 100644
+--- a/xbmc/interfaces/json-rpc/FileOperations.cpp
++++ b/xbmc/interfaces/json-rpc/FileOperations.cpp
+@@ -240,7 +240,7 @@ JSONRPC_STATUS CFileOperations::SetFileDetails(const std::string &method, ITrans
+     return InvalidParams;
+ 
+   CDateTime lastPlayed = infos.m_lastPlayed;
+-  int playcount = infos.m_playCount;
++  int playcount = infos.GetPlayCount();
+   if (!parameterObject["lastplayed"].isNull())
+   {
+     lastPlayed.Reset();
+@@ -249,7 +249,7 @@ JSONRPC_STATUS CFileOperations::SetFileDetails(const std::string &method, ITrans
+   }
+   if (!parameterObject["playcount"].isNull())
+     playcount = parameterObject["playcount"].asInteger();
+-  if (playcount != infos.m_playCount || lastPlayed != infos.m_lastPlayed)
++  if (playcount != infos.GetPlayCount() || lastPlayed != infos.m_lastPlayed)
+     videodatabase.SetPlayCount(CFileItem(infos), playcount, lastPlayed);
+ 
+   CVideoLibrary::UpdateResumePoint(parameterObject, infos, videodatabase);
+diff --git a/xbmc/interfaces/json-rpc/VideoLibrary.cpp b/xbmc/interfaces/json-rpc/VideoLibrary.cpp
+index 38f5ecc..d911128 100644
+--- a/xbmc/interfaces/json-rpc/VideoLibrary.cpp
++++ b/xbmc/interfaces/json-rpc/VideoLibrary.cpp
+@@ -535,7 +535,7 @@ JSONRPC_STATUS CVideoLibrary::SetMovieDetails(const std::string &method, ITransp
+   std::map<std::string, std::string> artwork;
+   videodatabase.GetArtForItem(infos.m_iDbId, infos.m_type, artwork);
+ 
+-  int playcount = infos.m_playCount;
++  int playcount = infos.GetPlayCount();
+   CDateTime lastPlayed = infos.m_lastPlayed;
+ 
+   std::set<std::string> removedArtwork;
+@@ -548,11 +548,11 @@ JSONRPC_STATUS CVideoLibrary::SetMovieDetails(const std::string &method, ITransp
+   if (!videodatabase.RemoveArtForItem(infos.m_iDbId, MediaTypeMovie, removedArtwork))
+     return InternalError;
+ 
+-  if (playcount != infos.m_playCount || lastPlayed != infos.m_lastPlayed)
++  if (playcount != infos.GetPlayCount() || lastPlayed != infos.m_lastPlayed)
+   {
+     // restore original playcount or the new one won't be announced
+-    int newPlaycount = infos.m_playCount;
+-    infos.m_playCount = playcount;
++    int newPlaycount = infos.GetPlayCount();
++    infos.SetPlayCount(playcount);
+     videodatabase.SetPlayCount(CFileItem(infos), newPlaycount, infos.m_lastPlayed);
+   }
+ 
+@@ -694,7 +694,7 @@ JSONRPC_STATUS CVideoLibrary::SetEpisodeDetails(const std::string &method, ITran
+   std::map<std::string, std::string> artwork;
+   videodatabase.GetArtForItem(infos.m_iDbId, infos.m_type, artwork);
+ 
+-  int playcount = infos.m_playCount;
++  int playcount = infos.GetPlayCount();
+   CDateTime lastPlayed = infos.m_lastPlayed;
+ 
+   std::set<std::string> removedArtwork;
+@@ -707,11 +707,11 @@ JSONRPC_STATUS CVideoLibrary::SetEpisodeDetails(const std::string &method, ITran
+   if (!videodatabase.RemoveArtForItem(infos.m_iDbId, MediaTypeEpisode, removedArtwork))
+     return InternalError;
+ 
+-  if (playcount != infos.m_playCount || lastPlayed != infos.m_lastPlayed)
++  if (playcount != infos.GetPlayCount() || lastPlayed != infos.m_lastPlayed)
+   {
+     // restore original playcount or the new one won't be announced
+-    int newPlaycount = infos.m_playCount;
+-    infos.m_playCount = playcount;
++    int newPlaycount = infos.GetPlayCount();
++    infos.SetPlayCount(playcount);
+     videodatabase.SetPlayCount(CFileItem(infos), newPlaycount, infos.m_lastPlayed);
+   }
+ 
+@@ -741,7 +741,7 @@ JSONRPC_STATUS CVideoLibrary::SetMusicVideoDetails(const std::string &method, IT
+   std::map<std::string, std::string> artwork;
+   videodatabase.GetArtForItem(infos.m_iDbId, infos.m_type, artwork);
+ 
+-  int playcount = infos.m_playCount;
++  int playcount = infos.GetPlayCount();
+   CDateTime lastPlayed = infos.m_lastPlayed;
+ 
+   std::set<std::string> removedArtwork;
+@@ -758,11 +758,11 @@ JSONRPC_STATUS CVideoLibrary::SetMusicVideoDetails(const std::string &method, IT
+   if (!videodatabase.RemoveArtForItem(infos.m_iDbId, MediaTypeMusicVideo, removedArtwork))
+     return InternalError;
+ 
+-  if (playcount != infos.m_playCount || lastPlayed != infos.m_lastPlayed)
++  if (playcount != infos.GetPlayCount()|| lastPlayed != infos.m_lastPlayed)
+   {
+     // restore original playcount or the new one won't be announced
+-    int newPlaycount = infos.m_playCount;
+-    infos.m_playCount = playcount;
++    int newPlaycount = infos.GetPlayCount();
++    infos.SetPlayCount(playcount);
+     videodatabase.SetPlayCount(CFileItem(infos), newPlaycount, infos.m_lastPlayed);
+   }
+ 
+@@ -1079,9 +1079,9 @@ void CVideoLibrary::UpdateVideoTag(const CVariant &parameterObject, CVideoInfoTa
+   if (ParameterNotNull(parameterObject, "title"))
+     details.SetTitle(parameterObject["title"].asString());
+   if (ParameterNotNull(parameterObject, "playcount"))
+-    details.m_playCount = (int)parameterObject["playcount"].asInteger();
++    details.SetPlayCount(static_cast<int>(parameterObject["playcount"].asInteger()));
+   if (ParameterNotNull(parameterObject, "runtime"))
+-    details.m_duration = (int)parameterObject["runtime"].asInteger();
++    details.SetDuration(static_cast<int>(parameterObject["runtime"].asInteger()));
+ 
+   std::vector<std::string> director(details.m_director);
+   UpdateVideoTagField(parameterObject, "director", director, updatedDetails);
+diff --git a/xbmc/interfaces/legacy/InfoTagVideo.cpp b/xbmc/interfaces/legacy/InfoTagVideo.cpp
+index fc1403e..fffd214 100644
+--- a/xbmc/interfaces/legacy/InfoTagVideo.cpp
++++ b/xbmc/interfaces/legacy/InfoTagVideo.cpp
+@@ -149,7 +149,7 @@ namespace XBMCAddon
+ 
+     int InfoTagVideo::getPlayCount()
+     {
+-      return infoTag->m_playCount;
++      return infoTag->GetPlayCount();
+     }
+ 
+     String InfoTagVideo::getLastPlayed()
+diff --git a/xbmc/interfaces/legacy/ListItem.cpp b/xbmc/interfaces/legacy/ListItem.cpp
+index 75f8522..2b8b24b 100644
+--- a/xbmc/interfaces/legacy/ListItem.cpp
++++ b/xbmc/interfaces/legacy/ListItem.cpp
+@@ -203,9 +203,17 @@ namespace XBMCAddon
+         item->SetMimeType(value.c_str());
+       }
+       else if (lowerKey == "totaltime")
+-        item->GetVideoInfoTag()->m_resumePoint.totalTimeInSeconds = (float)atof(value.c_str());
++      {
++        CBookmark resumePoint(item->GetVideoInfoTag()->GetResumePoint());
++        resumePoint.totalTimeInSeconds = (float)atof(value.c_str());
++        item->GetVideoInfoTag()->SetResumePoint(resumePoint);
++      }
+       else if (lowerKey == "resumetime")
+-        item->GetVideoInfoTag()->m_resumePoint.timeInSeconds = (float)atof(value.c_str());
++      {
++        CBookmark resumePoint(item->GetVideoInfoTag()->GetResumePoint());
++        resumePoint.timeInSeconds = (float)atof(value.c_str());
++        item->GetVideoInfoTag()->SetResumePoint(resumePoint);
++      }
+       else if (lowerKey == "specialsort")
+       {
+         if (value == "bottom")
+@@ -231,9 +239,9 @@ namespace XBMCAddon
+         value = StringUtils::Format("%f", item->m_lStartOffset / 75.0);
+       }
+       else if (lowerKey == "totaltime")
+-        value = StringUtils::Format("%f", item->GetVideoInfoTag()->m_resumePoint.totalTimeInSeconds);
++        value = StringUtils::Format("%f", item->GetVideoInfoTag()->GetResumePoint().totalTimeInSeconds);
+       else if (lowerKey == "resumetime")
+-        value = StringUtils::Format("%f", item->GetVideoInfoTag()->m_resumePoint.timeInSeconds);
++        value = StringUtils::Format("%f", item->GetVideoInfoTag()->GetResumePoint().timeInSeconds);
+       else if (lowerKey == "fanart_image")
+         value = item->GetArt("fanart");
+       else
+@@ -355,9 +363,9 @@ namespace XBMCAddon
+           else if (key == "size")
+             item->m_dwSize = (int64_t)strtoll(value.c_str(), NULL, 10);
+           else if (key == "watched") // backward compat - do we need it?
+-            item->GetVideoInfoTag()->m_playCount = strtol(value.c_str(), NULL, 10);
++            item->GetVideoInfoTag()->SetPlayCount(strtol(value.c_str(), NULL, 10));
+           else if (key == "playcount")
+-            item->GetVideoInfoTag()->m_playCount = strtol(value.c_str(), NULL, 10);
++            item->GetVideoInfoTag()->SetPlayCount(strtol(value.c_str(), NULL, 10));
+           else if (key == "overlay")
+           {
+             long overlay = strtol(value.c_str(), NULL, 10);
+@@ -419,7 +427,7 @@ namespace XBMCAddon
+           else if (key == "sorttitle")
+             item->GetVideoInfoTag()->m_strSortTitle = value;
+           else if (key == "duration")
+-            item->GetVideoInfoTag()->m_duration = strtol(value.c_str(), NULL, 10);
++            item->GetVideoInfoTag()->SetDuration(strtol(value.c_str(), NULL, 10));
+           else if (key == "studio")
+             item->GetVideoInfoTag()->m_studio = StringUtils::Split(value, g_advancedSettings.m_videoItemSeparator);            
+           else if (key == "tagline")
+diff --git a/xbmc/network/upnp/UPnP.cpp b/xbmc/network/upnp/UPnP.cpp
+index 2370ee6..08023ac 100644
+--- a/xbmc/network/upnp/UPnP.cpp
++++ b/xbmc/network/upnp/UPnP.cpp
+@@ -243,12 +243,12 @@ public:
+         NPT_String curr_value;
+         NPT_String new_value;
+ 
+-        if (item.GetVideoInfoTag()->m_resumePoint.timeInSeconds != bookmark.timeInSeconds) {
++        if (item.GetVideoInfoTag()->GetResumePoint().timeInSeconds != bookmark.timeInSeconds) {
+             CLog::Log(LOGDEBUG, "UPNP: Updating resume point for item %s", path.c_str());
+             long time = (long)bookmark.timeInSeconds;
+             if (time < 0) time = 0;
+             curr_value.Append(NPT_String::Format("<upnp:lastPlaybackPosition>%ld</upnp:lastPlaybackPosition>",
+-                                                 (long)item.GetVideoInfoTag()->m_resumePoint.timeInSeconds));
++                                                 (long)item.GetVideoInfoTag()->GetResumePoint().timeInSeconds));
+             new_value.Append(NPT_String::Format("<upnp:lastPlaybackPosition>%ld</upnp:lastPlaybackPosition>", time));
+         }
+         if (updatePlayCount) {
+diff --git a/xbmc/network/upnp/UPnPInternal.cpp b/xbmc/network/upnp/UPnPInternal.cpp
+index 26d1eb1..612627d 100644
+--- a/xbmc/network/upnp/UPnPInternal.cpp
++++ b/xbmc/network/upnp/UPnPInternal.cpp
+@@ -336,9 +336,9 @@ PopulateObjectFromTag(CVideoInfoTag&         tag,
+     object.m_Description.description = tag.m_strTagLine.c_str();
+     object.m_Description.long_description = tag.m_strPlot.c_str();
+     object.m_Description.rating = tag.m_strMPAARating.c_str();
+-    object.m_MiscInfo.last_position = (NPT_UInt32)tag.m_resumePoint.timeInSeconds;
++    object.m_MiscInfo.last_position = (NPT_UInt32)tag.GetResumePoint().timeInSeconds;
+     object.m_MiscInfo.last_time = tag.m_lastPlayed.GetAsW3CDateTime().c_str();
+-    object.m_MiscInfo.play_count = tag.m_playCount;
++    object.m_MiscInfo.play_count = tag.GetPlayCount();
+     if (resource) {
+         resource->m_Duration = tag.GetDuration();
+         if (tag.HasStreamDetails()) {
+@@ -527,7 +527,7 @@ BuildObject(CFileItem&                    item,
+                   container->m_ObjectClass.type += ".album.videoAlbum";
+                   container->m_Recorded.series_title = tag.m_strShowTitle.c_str();
+                   container->m_Recorded.episode_number = tag.m_iEpisode;
+-                  container->m_MiscInfo.play_count = tag.m_playCount;
++                  container->m_MiscInfo.play_count = tag.GetPlayCount();
+                   container->m_Title = tag.m_strTitle.c_str();
+                   container->m_Date = tag.GetPremiered().GetAsW3CDate().c_str();
+ 
+@@ -849,16 +849,15 @@ PopulateTagFromObject(CVideoInfoTag&         tag,
+     tag.m_strMPAARating = object.m_Description.rating;
+     tag.m_strShowTitle = object.m_Recorded.series_title;
+     tag.m_lastPlayed.SetFromW3CDateTime((const char*)object.m_MiscInfo.last_time);
+-    tag.m_playCount = object.m_MiscInfo.play_count;
++    tag.SetPlayCount(object.m_MiscInfo.play_count);
+ 
+     if(resource)
+     {
+       if (resource->m_Duration)
+-        tag.m_duration = resource->m_Duration;
++        tag.SetDuration(resource->m_Duration);
+       if (object.m_MiscInfo.last_position > 0 )
+       {
+-        tag.m_resumePoint.totalTimeInSeconds = resource->m_Duration;
+-        tag.m_resumePoint.timeInSeconds = object.m_MiscInfo.last_position;
++        tag.SetResumePoint(object.m_MiscInfo.last_position, resource->m_Duration);
+       }
+       if (!resource->m_Resolution.IsEmpty())
+       {
+@@ -868,7 +867,7 @@ PopulateTagFromObject(CVideoInfoTag&         tag,
+           CStreamDetailVideo* detail = new CStreamDetailVideo;
+           detail->m_iWidth = width;
+           detail->m_iHeight = height;
+-          detail->m_iDuration = tag.m_duration;
++          detail->m_iDuration = tag.GetDuration();
+           tag.m_streamDetails.AddStream(detail);
+         }
+       }
+@@ -979,7 +978,7 @@ CFileItemPtr BuildObject(PLT_MediaObject* entry,
+   // content set on file item list
+   if (pItem->HasVideoInfoTag()) {
+     int episodes = pItem->GetVideoInfoTag()->m_iEpisode;
+-    int played   = pItem->GetVideoInfoTag()->m_playCount;
++    int played   = pItem->GetVideoInfoTag()->GetPlayCount();
+     const std::string& type = pItem->GetVideoInfoTag()->m_type;
+     bool watched(false);
+     if (type == MediaTypeTvShow || type == MediaTypeSeason) {
+@@ -988,7 +987,7 @@ CFileItemPtr BuildObject(PLT_MediaObject* entry,
+       pItem->SetProperty("watchedepisodes", played);
+       pItem->SetProperty("unwatchedepisodes", episodes - played);
+       watched = (episodes && played >= episodes);
+-      pItem->GetVideoInfoTag()->m_playCount = watched ? 1 : 0;
++      pItem->GetVideoInfoTag()->SetPlayCount(watched ? 1 : 0);
+     }
+     else if (type == MediaTypeEpisode || type == MediaTypeMovie)
+       watched = (played > 0);
+diff --git a/xbmc/network/upnp/UPnPServer.cpp b/xbmc/network/upnp/UPnPServer.cpp
+index c27ea8f..90ca9c5 100644
+--- a/xbmc/network/upnp/UPnPServer.cpp
++++ b/xbmc/network/upnp/UPnPServer.cpp
+@@ -359,7 +359,7 @@ CUPnPServer::Build(CFileItemPtr                  item,
+                     // for tvshows and seasons, iEpisode and playCount are
+                     // invalid
+                     item->GetVideoInfoTag()->m_iEpisode = (int)item->GetProperty("totalepisodes").asInteger();
+-                    item->GetVideoInfoTag()->m_playCount = (int)item->GetProperty("watchedepisodes").asInteger();
++                    item->GetVideoInfoTag()->SetPlayCount(static_cast<int>(item->GetProperty("watchedepisodes").asInteger()));
+                 }
+ 
+                 // try to grab title from tag
+diff --git a/xbmc/pvr/PVRContextMenus.cpp b/xbmc/pvr/PVRContextMenus.cpp
+index ffad705..729950c 100644
+--- a/xbmc/pvr/PVRContextMenus.cpp
++++ b/xbmc/pvr/PVRContextMenus.cpp
+@@ -59,6 +59,7 @@ namespace PVR
+ 
+     DECL_CONTEXTMENUITEM(ShowInformation);
+     DECL_STATICCONTEXTMENUITEM(FindSimilar);
++    DECL_STATICCONTEXTMENUITEM(PlayRecording);
+     DECL_STATICCONTEXTMENUITEM(StartRecording);
+     DECL_STATICCONTEXTMENUITEM(StopRecording);
+     DECL_STATICCONTEXTMENUITEM(AddTimerRule);
+@@ -66,11 +67,6 @@ namespace PVR
+     DECL_STATICCONTEXTMENUITEM(DeleteTimerRule);
+     DECL_CONTEXTMENUITEM(EditTimer);
+     DECL_CONTEXTMENUITEM(DeleteTimer);
+-    DECL_CONTEXTMENUITEM(PlayChannel);
+-    DECL_CONTEXTMENUITEM(ResumePlayRecording);
+-    DECL_CONTEXTMENUITEM(PlayRecording);
+-    DECL_STATICCONTEXTMENUITEM(MarkWatched);
+-    DECL_STATICCONTEXTMENUITEM(MarkUnwatched);
+     DECL_STATICCONTEXTMENUITEM(RenameRecording);
+     DECL_CONTEXTMENUITEM(DeleteRecording);
+     DECL_STATICCONTEXTMENUITEM(UndeleteRecording);
+@@ -156,81 +152,8 @@ namespace PVR
+     }
+ 
+     ///////////////////////////////////////////////////////////////////////////////
+-    // Play channel
+-
+-    std::string PlayChannel::GetLabel(const CFileItem &item) const
+-    {
+-      if (item.GetEPGInfoTag())
+-        return g_localizeStrings.Get(19000); /* Switch to channel */
+-
+-      return g_localizeStrings.Get(208); /* Play */
+-    }
+-
+-    bool PlayChannel::IsVisible(const CFileItem &item) const
+-    {
+-      if (item.GetPVRChannelInfoTag())
+-        return true;
+-
+-      if (item.GetEPGInfoTag())
+-        return true;
+-
+-      return false;
+-    }
+-
+-    bool PlayChannel::Execute(const CFileItemPtr &item) const
+-    {
+-      return CPVRGUIActions::GetInstance().SwitchToChannel(
+-        item, CSettings::GetInstance().GetBool(CSettings::SETTING_PVRPLAYBACK_PLAYMINIMIZED), false /* bCheckResume */);
+-    }
+-
+-    ///////////////////////////////////////////////////////////////////////////////
+-    // Resume play recording
+-
+-    std::string ResumePlayRecording::GetLabel(const CFileItem &item) const
+-    {
+-      return CPVRGUIActions::GetInstance().GetResumeLabel(item);
+-    }
+-
+-    bool ResumePlayRecording::IsVisible(const CFileItem &item) const
+-    {
+-      CPVRRecordingPtr recording;
+-
+-      const CEpgInfoTagPtr epg(item.GetEPGInfoTag());
+-      if (epg)
+-        recording = epg->Recording();
+-
+-      if (!recording)
+-        recording = item.GetPVRRecordingInfoTag();
+-
+-      if (recording)
+-        return !recording->IsDeleted() && !CPVRGUIActions::GetInstance().GetResumeLabel(item).empty();
+-
+-      return false;
+-    }
+-
+-    bool ResumePlayRecording::Execute(const CFileItemPtr &item) const
+-    {
+-      item->m_lStartOffset = STARTOFFSET_RESUME; // must always be set if PlayRecording is called with bCheckResume == false
+-      return CPVRGUIActions::GetInstance().PlayRecording(item, false /* bPlayMinimized */, false /* bCheckResume */);
+-    }
+-
+-    ///////////////////////////////////////////////////////////////////////////////
+     // Play recording
+ 
+-    std::string PlayRecording::GetLabel(const CFileItem &item) const
+-    {
+-      const CPVRRecordingPtr recording(item.GetPVRRecordingInfoTag());
+-      if (recording && !recording->IsDeleted())
+-      {
+-        if (CPVRGUIActions::GetInstance().GetResumeLabel(item).empty())
+-          return g_localizeStrings.Get(208); /* Play */
+-        else
+-          return g_localizeStrings.Get(12021); /* Play from beginning */
+-      }
+-
+-      return g_localizeStrings.Get(19687); /* Play recording */
+-    }
+-
+     bool PlayRecording::IsVisible(const CFileItem &item) const
+     {
+       CPVRRecordingPtr recording;
+@@ -239,9 +162,6 @@ namespace PVR
+       if (epg)
+         recording = epg->Recording();
+ 
+-      if (!recording)
+-        recording = item.GetPVRRecordingInfoTag();
+-
+       if (recording)
+         return !recording->IsDeleted();
+ 
+@@ -250,68 +170,7 @@ namespace PVR
+ 
+     bool PlayRecording::Execute(const CFileItemPtr &item) const
+     {
+-      item->m_lStartOffset = 0; // must always be set if PlayRecording is called with bCheckResume == false
+-      return CPVRGUIActions::GetInstance().PlayRecording(item, false /* bPlayMinimized */, false /* bCheckResume */);
+-    }
+-
+-    ///////////////////////////////////////////////////////////////////////////////
+-    // Mark watched
+-
+-    bool MarkWatched::IsVisible(const CFileItem &item) const
+-    {
+-      const CPVRRecordingPtr recording(item.GetPVRRecordingInfoTag());
+-      if (!recording)
+-        return false;
+-
+-      // ".." folders don't have have "mark watched" context menu item
+-      if (item.IsParentFolder())
+-        return false;
+-
+-      // recording folders always have "mark watched" context menu item
+-      if (item.m_bIsFolder)
+-        return true;
+-
+-      if (!recording->IsDeleted())
+-      {
+-        if (recording->m_playCount == 0)
+-          return true;
+-      }
+-      return false;
+-    }
+-
+-    bool MarkWatched::Execute(const CFileItemPtr &item) const
+-    {
+-      return CPVRGUIActions::GetInstance().MarkWatched(item);
+-    }
+-
+-    ///////////////////////////////////////////////////////////////////////////////
+-    // Mark unwatched
+-
+-    bool MarkUnwatched::IsVisible(const CFileItem &item) const
+-    {
+-      const CPVRRecordingPtr recording(item.GetPVRRecordingInfoTag());
+-      if (!recording)
+-        return false;
+-
+-      // ".." folders don't have have "mark unwatched" context menu item
+-      if (item.IsParentFolder())
+-        return false;
+-
+-      // recording folders always have "mark unwatched" context menu item
+-      if (item.m_bIsFolder)
+-        return true;
+-
+-      if (!recording->IsDeleted())
+-      {
+-        if (recording->m_playCount > 0)
+-          return true;
+-      }
+-      return false;
+-    }
+-
+-    bool MarkUnwatched::Execute(const CFileItemPtr &item) const
+-    {
+-      return CPVRGUIActions::GetInstance().MarkUnwatched(item);
++      return CPVRGUIActions::GetInstance().PlayRecording(item, false /* bPlayMinimized */, true /* bCheckResume */);
+     }
+ 
+     ///////////////////////////////////////////////////////////////////////////////
+@@ -669,11 +528,7 @@ namespace PVR
+     {
+       std::make_shared<CONTEXTMENUITEM::ShowInformation>(),
+       std::make_shared<CONTEXTMENUITEM::FindSimilar>(19003), /* Find similar */
+-      std::make_shared<CONTEXTMENUITEM::PlayChannel>(),
+-      std::make_shared<CONTEXTMENUITEM::ResumePlayRecording>(),
+-      std::make_shared<CONTEXTMENUITEM::PlayRecording>(),
+-      std::make_shared<CONTEXTMENUITEM::MarkWatched>(16103), /* Mark as watched */
+-      std::make_shared<CONTEXTMENUITEM::MarkUnwatched>(16104), /* Mark as unwatched */
++      std::make_shared<CONTEXTMENUITEM::PlayRecording>(19687), /* Play recording */
+       std::make_shared<CONTEXTMENUITEM::ToggleTimerState>(),
+       std::make_shared<CONTEXTMENUITEM::AddTimerRule>(19061), /* Add timer */
+       std::make_shared<CONTEXTMENUITEM::EditTimerRule>(19243), /* Edit timer rule */
+diff --git a/xbmc/pvr/PVRGUIActions.cpp b/xbmc/pvr/PVRGUIActions.cpp
+index b966eeb..bfa7ef0 100644
+--- a/xbmc/pvr/PVRGUIActions.cpp
++++ b/xbmc/pvr/PVRGUIActions.cpp
+@@ -487,23 +487,7 @@ namespace PVR
+     const CPVRRecordingPtr recording(CPVRItem(CFileItemPtr(new CFileItem(item))).GetRecording());
+     if (recording && !recording->IsDeleted())
+     {
+-      // First try to find the resume position on the back-end, if that fails use video database
+-      int positionInSeconds = recording->GetLastPlayedPosition();
+-      // If the back-end does report a saved position it will be picked up by FileItem
+-      if (positionInSeconds < 0)
+-      {
+-        CVideoDatabase db;
+-        if (db.Open())
+-        {
+-          CBookmark bookmark;
+-          std::string itemPath(recording->m_strFileNameAndPath);
+-          if (db.GetResumeBookMark(itemPath, bookmark) )
+-            positionInSeconds = lrint(bookmark.timeInSeconds);
+-          db.Close();
+-        }
+-      }
+-
+-      // Suppress resume from 0
++      int positionInSeconds = lrint(recording->GetResumePoint().timeInSeconds);
+       if (positionInSeconds > 0)
+         resumeString = StringUtils::Format(g_localizeStrings.Get(12022).c_str(),
+                                            StringUtils::SecondsToTimeString(positionInSeconds, TIME_FORMAT_HH_MM_SS).c_str());
+@@ -697,17 +681,21 @@ namespace PVR
+     else if (URIUtils::IsPVRRecording(item->GetPath()) && !item->HasPVRRecordingInfoTag())
+       pvrItem = g_PVRRecordings->GetByPath(item->GetPath());
+ 
++    bool bCheckResume = true;
++    if (item->HasProperty("check_resume"))
++      bCheckResume = item->GetProperty("check_resume").asBoolean();
++
+     if (pvrItem->HasPVRChannelInfoTag())
+     {
+       return SwitchToChannel(pvrItem,
+                              CSettings::GetInstance().GetBool(CSettings::SETTING_PVRPLAYBACK_PLAYMINIMIZED),
+-                             true);
++                             bCheckResume);
+     }
+     else if (pvrItem->HasPVRRecordingInfoTag())
+     {
+       return PlayRecording(pvrItem,
+                            CSettings::GetInstance().GetBool(CSettings::SETTING_PVRPLAYBACK_PLAYMINIMIZED),
+-                           true);
++                           bCheckResume);
+     }
+ 
+     return false;
+@@ -739,32 +727,4 @@ namespace PVR
+     return true;
+   }
+ 
+-  bool CPVRGUIActions::MarkWatched(const CFileItemPtr &item) const
+-  {
+-    if (!g_PVRRecordings->IncrementRecordingsPlayCount(item))
+-      return false;
+-
+-    CGUIWindowPVRBase *pvrWindow = dynamic_cast<CGUIWindowPVRBase *>(g_windowManager.GetWindow(g_windowManager.GetActiveWindow()));
+-    if (pvrWindow)
+-      pvrWindow->DoRefresh();
+-    else
+-      CLog::Log(LOGERROR, "CPVRGUIActions - %s - called on non-pvr window. no refresh possible.", __FUNCTION__);
+-
+-    return true;
+-  }
+-
+-  bool CPVRGUIActions::MarkUnwatched(const CFileItemPtr &item) const
+-  {
+-    if (!g_PVRRecordings->SetRecordingsPlayCount(item, 0))
+-      return false;
+-
+-    CGUIWindowPVRBase *pvrWindow = dynamic_cast<CGUIWindowPVRBase *>(g_windowManager.GetWindow(g_windowManager.GetActiveWindow()));
+-    if (pvrWindow)
+-      pvrWindow->DoRefresh();
+-    else
+-      CLog::Log(LOGERROR, "CPVRGUIActions - %s - called on non-pvr window. no refresh possible.", __FUNCTION__);
+-
+-    return true;
+-  }
+-
+ } // namespace PVR
+diff --git a/xbmc/pvr/PVRGUIActions.h b/xbmc/pvr/PVRGUIActions.h
+index 39ba1ae..3fed2ca 100644
+--- a/xbmc/pvr/PVRGUIActions.h
++++ b/xbmc/pvr/PVRGUIActions.h
+@@ -194,20 +194,6 @@ namespace PVR
+     bool PlayRecording(const CFileItemPtr &item, bool bPlayMinimized, bool bCheckResume) const;
+ 
+     /*!
+-     * @brief Mark a recording or a recordings folder as watched.
+-     * @param item containing a recording or a recordings folder.
+-     * @return true, if the recording or the recordings folder was successfully marked as watched, false otherwise.
+-     */
+-    bool MarkWatched(const CFileItemPtr &item) const;
+-
+-    /*!
+-     * @brief Mark a recording or a recordings folder as unwatched.
+-     * @param item containing a recording or a recordings folder.
+-     * @return true, if the recording or the recordings folder was successfully marked as unwatched, false otherwise.
+-     */
+-    bool MarkUnwatched(const CFileItemPtr &item) const;
+-
+-    /*!
+      * @brief Switch channel.
+      * @param item containing a channel or an epg tag.
+      * @param bPlayMinimized controls whether the channel should be played fullscreen or in a window.
+diff --git a/xbmc/pvr/recordings/PVRRecording.cpp b/xbmc/pvr/recordings/PVRRecording.cpp
+index 3a7d057..ac198bd 100644
+--- a/xbmc/pvr/recordings/PVRRecording.cpp
++++ b/xbmc/pvr/recordings/PVRRecording.cpp
+@@ -86,7 +86,6 @@ CPVRRecording::CPVRRecording(const PVR_RECORDING &recording, unsigned int iClien
+     SetYear(recording.iYear);
+   m_iClientId                      = iClientId;
+   m_recordingTime                  = recording.recordingTime + g_advancedSettings.m_iPVRTimeCorrection;
+-  m_duration                       = CDateTimeSpan(0, 0, recording.iDuration / 60, recording.iDuration % 60);
+   m_iPriority                      = recording.iPriority;
+   m_iLifetime                      = recording.iLifetime;
+   // Deleted recording is placed at the root of the deleted view
+@@ -96,9 +95,6 @@ CPVRRecording::CPVRRecording(const PVR_RECORDING &recording, unsigned int iClien
+   m_strStreamURL                   = recording.strStreamURL;
+   m_strChannelName                 = recording.strChannelName;
+   m_genre                          = StringUtils::Split(CEpg::ConvertGenreIdToString(recording.iGenreType, recording.iGenreSubType), g_advancedSettings.m_videoItemSeparator);
+-  m_playCount                      = recording.iPlayCount;
+-  m_resumePoint.timeInSeconds      = recording.iLastPlayedPosition;
+-  m_resumePoint.totalTimeInSeconds = recording.iDuration;
+   m_strIconPath                    = recording.strIconPath;
+   m_strThumbnailPath               = recording.strThumbnailPath;
+   m_strFanartPath                  = recording.strFanartPath;
+@@ -106,6 +102,10 @@ CPVRRecording::CPVRRecording(const PVR_RECORDING &recording, unsigned int iClien
+   m_iEpgEventId                    = recording.iEpgEventId;
+   m_iChannelUid                    = recording.iChannelUid;
+ 
++  CVideoInfoTag::SetPlayCount(recording.iPlayCount);
++  CVideoInfoTag::SetResumePoint(recording.iLastPlayedPosition, recording.iDuration);
++  SetDuration(recording.iDuration);
++
+   //  As the channel a recording was done on (probably long time ago) might no longer be
+   //  available today prefer addon-supplied channel type (tv/radio) over channel attribute.
+   if (recording.channelType != PVR_RECORDING_CHANNEL_TYPE_UNKNOWN)
+@@ -142,7 +142,7 @@ bool CPVRRecording::operator ==(const CPVRRecording& right) const
+        m_iClientId          == right.m_iClientId &&
+        m_strChannelName     == right.m_strChannelName &&
+        m_recordingTime      == right.m_recordingTime &&
+-       m_duration           == right.m_duration &&
++       GetDuration()        == right.GetDuration() &&
+        m_strPlotOutline     == right.m_strPlotOutline &&
+        m_strPlot            == right.m_strPlot &&
+        m_strStreamURL       == right.m_strStreamURL &&
+@@ -175,13 +175,12 @@ void CPVRRecording::Serialize(CVariant& value) const
+   CVideoInfoTag::Serialize(value);
+ 
+   value["channel"] = m_strChannelName;
+-  value["runtime"] = m_duration.GetSecondsTotal();
+   value["lifetime"] = m_iLifetime;
+   value["streamurl"] = m_strStreamURL;
+   value["directory"] = m_strDirectory;
+   value["icon"] = m_strIconPath;
+   value["starttime"] = m_recordingTime.IsValid() ? m_recordingTime.GetAsDBDateTime() : "";
+-  value["endtime"] = m_recordingTime.IsValid() ? (m_recordingTime + m_duration).GetAsDBDateTime() : "";
++  value["endtime"] = m_recordingTime.IsValid() ? EndTimeAsUTC().GetAsDBDateTime() : "";
+   value["recordingid"] = m_iRecordingId;
+   value["isdeleted"] = m_bIsDeleted;
+   value["epgeventid"] = m_iEpgEventId;
+@@ -222,14 +221,6 @@ void CPVRRecording::Reset(void)
+   CVideoInfoTag::Reset();
+ }
+ 
+-int CPVRRecording::GetDuration() const
+-{
+-  return (m_duration.GetDays() * 60*60*24 +
+-      m_duration.GetHours() * 60*60 +
+-      m_duration.GetMinutes() * 60 +
+-      m_duration.GetSeconds());
+-}
+-
+ bool CPVRRecording::Delete(void)
+ {
+   PVR_ERROR error = g_PVRClients->DeleteRecording(*this);
+@@ -284,7 +275,6 @@ bool CPVRRecording::Rename(const std::string &strNewName)
+ bool CPVRRecording::SetPlayCount(int count)
+ {
+   PVR_ERROR error;
+-  m_playCount = count;
+   if (g_PVRClients->SupportsRecordingPlayCount(m_iClientId) &&
+       !g_PVRClients->SetRecordingPlayCount(*this, count, &error))
+   {
+@@ -292,62 +282,60 @@ bool CPVRRecording::SetPlayCount(int count)
+     return false;
+   }
+ 
+-  return true;
++  return CVideoInfoTag::SetPlayCount(count);
+ }
+ 
+-void CPVRRecording::UpdateMetadata(CVideoDatabase &db)
++bool CPVRRecording::SetResumePoint(const CBookmark &resumePoint)
+ {
+-  if (m_bGotMetaData)
+-    return;
+-
+-  bool supportsPlayCount  = g_PVRClients->SupportsRecordingPlayCount(m_iClientId);
+-  bool supportsLastPlayed = g_PVRClients->SupportsLastPlayedPosition(m_iClientId);
+-
+-  if (!supportsPlayCount || !supportsLastPlayed)
++  PVR_ERROR error;
++  if (g_PVRClients->SupportsLastPlayedPosition(m_iClientId) &&
++      !g_PVRClients->SetRecordingLastPlayedPosition(*this, lrint(resumePoint.timeInSeconds), &error))
+   {
+-    if (!supportsPlayCount)
+-      m_playCount = db.GetPlayCount(m_strFileNameAndPath);
+-
+-    if (!supportsLastPlayed)
+-      db.GetResumeBookMark(m_strFileNameAndPath, m_resumePoint);
++    DisplayError(error);
++    return false;
+   }
+ 
+-  m_bGotMetaData = true;
++  return CVideoInfoTag::SetResumePoint(resumePoint);
+ }
+ 
+-bool CPVRRecording::IncrementPlayCount()
++CBookmark CPVRRecording::GetResumePoint() const
+ {
+-  return SetPlayCount(m_playCount + 1);
++  if (g_PVRClients->SupportsLastPlayedPosition(m_iClientId))
++  {
++    int pos = g_PVRClients->GetRecordingLastPlayedPosition(*this);
++    if (pos < 0)
++    {
++      DisplayError(PVR_ERROR_SERVER_ERROR);
++    }
++    else
++    {
++      CBookmark resumePoint(CVideoInfoTag::GetResumePoint());
++      resumePoint.timeInSeconds = pos;
++      CPVRRecording *pThis = const_cast<CPVRRecording*>(this);
++      pThis->CVideoInfoTag::SetResumePoint(resumePoint);
++    }
++  }
++  return CVideoInfoTag::GetResumePoint();
+ }
+ 
+-bool CPVRRecording::SetLastPlayedPosition(int lastplayedposition)
++void CPVRRecording::UpdateMetadata(CVideoDatabase &db)
+ {
+-  PVR_ERROR error;
+-
+-  CBookmark bookmark;
+-  bookmark.timeInSeconds = lastplayedposition;
+-  bookmark.totalTimeInSeconds = (double)GetDuration();
+-  m_resumePoint = bookmark;
++  if (m_bGotMetaData)
++    return;
+ 
+-  if (g_PVRClients->SupportsLastPlayedPosition(m_iClientId) &&
+-      !g_PVRClients->SetRecordingLastPlayedPosition(*this, lastplayedposition, &error))
++  if (!g_PVRClients->SupportsRecordingPlayCount(m_iClientId))
+   {
+-    DisplayError(error);
+-    return false;
++    CVideoInfoTag::SetPlayCount(db.GetPlayCount(m_strFileNameAndPath));
+   }
+-  return true;
+-}
+ 
+-int CPVRRecording::GetLastPlayedPosition() const
+-{
+-  int rc = -1;
+-  if (g_PVRClients->SupportsLastPlayedPosition(m_iClientId))
++  if (!g_PVRClients->SupportsLastPlayedPosition(m_iClientId))
+   {
+-    rc = g_PVRClients->GetRecordingLastPlayedPosition(*this);
+-    if (rc < 0)
+-      DisplayError(PVR_ERROR_SERVER_ERROR);
++    CBookmark resumePoint;
++    if (db.GetResumeBookMark(m_strFileNameAndPath, resumePoint))
++      CVideoInfoTag::SetResumePoint(resumePoint);
+   }
+-  return rc;
++
++  m_bGotMetaData = true;
+ }
+ 
+ std::vector<PVR_EDL_ENTRY> CPVRRecording::GetEdl() const
+@@ -381,7 +369,6 @@ void CPVRRecording::Update(const CPVRRecording &tag)
+   m_iEpisode          = tag.m_iEpisode;
+   SetPremiered(tag.GetPremiered());
+   m_recordingTime     = tag.m_recordingTime;
+-  m_duration          = tag.m_duration;
+   m_iPriority         = tag.m_iPriority;
+   m_iLifetime         = tag.m_iLifetime;
+   m_strDirectory      = tag.m_strDirectory;
+@@ -398,14 +385,9 @@ void CPVRRecording::Update(const CPVRRecording &tag)
+   m_iChannelUid       = tag.m_iChannelUid;
+   m_bRadio            = tag.m_bRadio;
+ 
+-  if (g_PVRClients->SupportsRecordingPlayCount(m_iClientId))
+-    m_playCount       = tag.m_playCount;
+-
+-  if (g_PVRClients->SupportsLastPlayedPosition(m_iClientId))
+-  {
+-    m_resumePoint.timeInSeconds = tag.m_resumePoint.timeInSeconds;
+-    m_resumePoint.totalTimeInSeconds = tag.m_resumePoint.totalTimeInSeconds;
+-  }
++  SetPlayCount(tag.GetPlayCount());
++  SetResumePoint(tag.GetResumePoint());
++  SetDuration(tag.GetDuration());
+ 
+   //Old Method of identifying TV show title and subtitle using m_strDirectory and strPlotOutline (deprecated)
+   std::string strShow = StringUtils::Format("%s - ", g_localizeStrings.Get(20364).c_str());
+@@ -451,18 +433,22 @@ const CDateTime &CPVRRecording::RecordingTimeAsLocalTime(void) const
+   return tmp;
+ }
+ 
+-std::string CPVRRecording::GetTitleFromURL(const std::string &url)
++CDateTime CPVRRecording::EndTimeAsUTC() const
+ {
+-  return CPVRRecordingsPath(url).GetTitle();
++  unsigned int duration = GetDuration();
++  return m_recordingTime + CDateTimeSpan(0, 0, duration / 60, duration % 60);
+ }
+ 
+-void CPVRRecording::CopyClientInfo(CVideoInfoTag *target) const
++CDateTime CPVRRecording::EndTimeAsLocalTime() const
+ {
+-  if (!target)
+-    return;
++  CDateTime ret;
++  ret.SetFromUTCDateTime(EndTimeAsUTC());
++  return ret;
++}
+ 
+-  target->m_playCount   = m_playCount;
+-  target->m_resumePoint = m_resumePoint;
++std::string CPVRRecording::GetTitleFromURL(const std::string &url)
++{
++  return CPVRRecordingsPath(url).GetTitle();
+ }
+ 
+ CPVRChannelPtr CPVRRecording::Channel(void) const
+diff --git a/xbmc/pvr/recordings/PVRRecording.h b/xbmc/pvr/recordings/PVRRecording.h
+index 035fc77..561b47e 100644
+--- a/xbmc/pvr/recordings/PVRRecording.h
++++ b/xbmc/pvr/recordings/PVRRecording.h
+@@ -72,7 +72,6 @@ namespace PVR
+     int           m_iClientId;        /*!< ID of the backend */
+     std::string   m_strRecordingId;   /*!< unique ID of the recording on the client */
+     std::string   m_strChannelName;   /*!< name of the channel this was recorded from */
+-    CDateTimeSpan m_duration;         /*!< duration of this recording */
+     int           m_iPriority;        /*!< priority of this recording */
+     int           m_iLifetime;        /*!< lifetime of this recording */
+     std::string   m_strStreamURL;     /*!< stream URL. if empty use pvr client */
+@@ -103,12 +102,6 @@ namespace PVR
+     void Reset(void);
+ 
+     /*!
+-     * @brief The duration of this recording in seconds.
+-     * @return The duration.
+-     */
+-    int GetDuration() const;
+-
+-    /*!
+      * @brief Delete this recording on the client (if supported).
+      * @return True if it was deleted successfully, false otherwise.
+      */
+@@ -137,26 +130,20 @@ namespace PVR
+      * @param count play count.
+      * @return True if play count was set successfully, false otherwise.
+      */
+-    bool SetPlayCount(int count);
++    bool SetPlayCount(int count) override;
+ 
+     /*!
+-     * @brief Increment this recording's play count on the client (if supported).
+-     * @return True if play count was set successfully, false otherwise.
++     * @brief Set this videos's resume point.
++     * @param resumePoint resume point.
++     * @return True if resume point was set successfully, false otherwise.
+      */
+-    bool IncrementPlayCount();
++    bool SetResumePoint(const CBookmark &resumePoint) override;
+ 
+     /*!
+-     * @brief Set the last watched position of a recording on the backend.
+-     * @param position The last watched position in seconds
+-     * @return True if the last played position was updated successfully, false otherwise
++     * @brief Get this recording's resume point.
++     * @return the resume point.
+      */
+-    bool SetLastPlayedPosition(int lastplayedposition);
+-
+-    /*!
+-     * @brief Retrieve the last watched position of a recording on the backend.
+-     * @return The last watched position in seconds
+-     */
+-    int GetLastPlayedPosition() const;
++    CBookmark GetResumePoint() const override;
+ 
+     /*!
+      * @brief Retrieve the edit decision list (EDL) of a recording on the backend.
+@@ -176,10 +163,31 @@ namespace PVR
+      */
+     void Update(const CPVRRecording &tag);
+ 
++    /*!
++     * @brief Retrieve the recording start as UTC time
++     * @return the recording start time
++     */
+     const CDateTime &RecordingTimeAsUTC(void) const { return m_recordingTime; }
++
++    /*!
++     * @brief Retrieve the recording start as local time
++     * @return the recording start time
++     */
+     const CDateTime &RecordingTimeAsLocalTime(void) const;
+ 
+     /*!
++     * @brief Retrieve the recording end as UTC time
++     * @return the recording end time
++     */
++    CDateTime EndTimeAsUTC() const;
++
++    /*!
++     * @brief Retrieve the recording end as local time
++     * @return the recording end time
++     */
++    CDateTime EndTimeAsLocalTime() const;
++
++    /*!
+      * @brief Retrieve the recording title from the URL path
+      * @param url the URL for the recording
+      * @return Title of the recording
+@@ -187,12 +195,6 @@ namespace PVR
+     static std::string GetTitleFromURL(const std::string &url);
+ 
+     /*!
+-     * @brief Copy some information from the client to the given video info tag
+-     * @param target video info tag to which the information will be copied
+-     */
+-    void CopyClientInfo(CVideoInfoTag *target) const;
+-
+-    /*!
+      * @brief If deleted but can be undeleted it is true
+      */
+     bool IsDeleted() const { return m_bIsDeleted; }
+diff --git a/xbmc/pvr/recordings/PVRRecordings.cpp b/xbmc/pvr/recordings/PVRRecordings.cpp
+index 9cab2e8..d35f6ec 100644
+--- a/xbmc/pvr/recordings/PVRRecordings.cpp
++++ b/xbmc/pvr/recordings/PVRRecordings.cpp
+@@ -135,7 +135,7 @@ void CPVRRecordings::GetSubDirectories(const CPVRRecordingsPath &recParentPath,
+         pFileItem->m_dateTime = current->RecordingTimeAsLocalTime();
+     }
+ 
+-    if (current->m_playCount == 0)
++    if (current->GetPlayCount() == 0)
+       unwatchedFolders.insert(pFileItem);
+   }
+ 
+@@ -334,7 +334,7 @@ bool CPVRRecordings::GetDirectory(const std::string& strPath, CFileItemList &ite
+       // Use the channel icon as a fallback when a thumbnail is not available
+       pFileItem->SetArtFallback("thumb", "icon");
+ 
+-      pFileItem->SetOverlayImage(CGUIListItem::ICON_OVERLAY_UNWATCHED, pFileItem->GetPVRRecordingInfoTag()->m_playCount > 0);
++      pFileItem->SetOverlayImage(CGUIListItem::ICON_OVERLAY_UNWATCHED, pFileItem->GetPVRRecordingInfoTag()->GetPlayCount() > 0);
+ 
+       items.Add(pFileItem);
+     }
+@@ -359,7 +359,7 @@ void CPVRRecordings::GetAll(CFileItemList &items, bool bDeleted)
+     pFileItem->SetLabel2(current->RecordingTimeAsLocalTime().GetAsLocalizedDateTime(true, false));
+     pFileItem->m_dateTime = current->RecordingTimeAsLocalTime();
+     pFileItem->SetPath(current->m_strFileNameAndPath);
+-    pFileItem->SetOverlayImage(CGUIListItem::ICON_OVERLAY_UNWATCHED, pFileItem->GetPVRRecordingInfoTag()->m_playCount > 0);
++    pFileItem->SetOverlayImage(CGUIListItem::ICON_OVERLAY_UNWATCHED, pFileItem->GetPVRRecordingInfoTag()->GetPlayCount() > 0);
+ 
+     items.Add(pFileItem);
+   }
+@@ -494,7 +494,7 @@ CPVRRecordingPtr CPVRRecordings::GetRecordingForEpgTag(const EPG::CEpgInfoTagPtr
+           recording.second->ClientID() == epgTag->ChannelTag()->ClientID() &&
+           recording.second->ChannelUid() == epgTag->ChannelTag()->UniqueID() &&
+           recording.second->RecordingTimeAsUTC() <= epgTag->StartAsUTC() &&
+-          (recording.second->RecordingTimeAsUTC() + recording.second->m_duration) >= epgTag->EndAsUTC())
++          recording.second->EndTimeAsUTC() >= epgTag->EndAsUTC())
+         return recording.second;
+     }
+   }
+@@ -547,10 +547,10 @@ bool CPVRRecordings::ChangeRecordingsPlayCount(const CFileItemPtr &item, int cou
+           recording->SetPlayCount(count);
+ 
+         // Clear resume bookmark
+-        if (recording->m_playCount > 0)
++        if (recording->GetPlayCount() > 0)
+         {
+           m_database.ClearBookMarksOfFile(pItem->GetPath(), CBookmark::RESUME);
+-          recording->SetLastPlayedPosition(0);
++          recording->SetResumePoint(CBookmark());
+         }
+ 
+         if (count == INCREMENT_PLAY_COUNT)
+@@ -565,3 +565,11 @@ bool CPVRRecordings::ChangeRecordingsPlayCount(const CFileItemPtr &item, int cou
+ 
+   return bResult;
+ }
++
++bool CPVRRecordings::MarkWatched(const CFileItemPtr &item, bool bWatched)
++{
++  if (bWatched)
++    return IncrementRecordingsPlayCount(item);
++  else
++    return SetRecordingsPlayCount(item, 0);
++}
+diff --git a/xbmc/pvr/recordings/PVRRecordings.h b/xbmc/pvr/recordings/PVRRecordings.h
+index 941e004..8362979 100644
+--- a/xbmc/pvr/recordings/PVRRecordings.h
++++ b/xbmc/pvr/recordings/PVRRecordings.h
+@@ -103,6 +103,7 @@ namespace PVR
+     bool RenameRecording(CFileItem &item, std::string &strNewName);
+     bool SetRecordingsPlayCount(const CFileItemPtr &item, int count);
+     bool IncrementRecordingsPlayCount(const CFileItemPtr &item);
++    bool MarkWatched(const CFileItemPtr &item, bool bWatched);
+ 
+     bool GetDirectory(const std::string& strPath, CFileItemList &items);
+     CFileItemPtr GetByPath(const std::string &path);
+diff --git a/xbmc/pvr/timers/PVRTimers.cpp b/xbmc/pvr/timers/PVRTimers.cpp
+index dba374b..0a5c47c 100644
+--- a/xbmc/pvr/timers/PVRTimers.cpp
++++ b/xbmc/pvr/timers/PVRTimers.cpp
+@@ -846,7 +846,7 @@ bool CPVRTimers::HasRecordingTimerForRecording(const CPVRRecording &recording) c
+           timersEntry->m_iClientId == recording.ClientID() &&
+           timersEntry->ChannelTag()->UniqueID() == recording.ChannelUid() &&
+           timersEntry->StartAsUTC() <= recording.RecordingTimeAsUTC() &&
+-          timersEntry->EndAsUTC() >= (recording.RecordingTimeAsUTC() + recording.m_duration))
++          timersEntry->EndAsUTC() >= recording.EndTimeAsUTC())
+       {
+         return true;
+       }
+diff --git a/xbmc/utils/GroupUtils.cpp b/xbmc/utils/GroupUtils.cpp
+index 62a7aeb..bd19078 100644
+--- a/xbmc/utils/GroupUtils.cpp
++++ b/xbmc/utils/GroupUtils.cpp
+@@ -127,8 +127,8 @@ bool GroupUtils::Group(GroupBy groupBy, const std::string &baseDir, const CFileI
+           setInfo->m_dateAdded = movieInfo->m_dateAdded;
+ 
+         // handle playcount/watched
+-        setInfo->m_playCount += movieInfo->m_playCount;
+-        if (movieInfo->m_playCount > 0)
++        setInfo->SetPlayCount(setInfo->GetPlayCount() + movieInfo->GetPlayCount());
++        if (movieInfo->GetPlayCount() > 0)
+           iWatched++;
+ 
+         //accumulate the path for a multipath construction
+@@ -143,11 +143,11 @@ bool GroupUtils::Group(GroupBy groupBy, const std::string &baseDir, const CFileI
+       if (ratings > 1)
+         pItem->GetVideoInfoTag()->SetRating(totalRatings / ratings);
+ 
+-      setInfo->m_playCount = iWatched >= (int)set->second.size() ? (setInfo->m_playCount / set->second.size()) : 0;
++      setInfo->SetPlayCount(iWatched >= static_cast<int>(set->second.size()) ? (setInfo->GetPlayCount() / set->second.size()) : 0);
+       pItem->SetProperty("total", (int)set->second.size());
+       pItem->SetProperty("watched", iWatched);
+       pItem->SetProperty("unwatched", (int)set->second.size() - iWatched);
+-      pItem->SetOverlayImage(CGUIListItem::ICON_OVERLAY_UNWATCHED, setInfo->m_playCount > 0);
++      pItem->SetOverlayImage(CGUIListItem::ICON_OVERLAY_UNWATCHED, setInfo->GetPlayCount() > 0);
+ 
+       groupedItems.Add(pItem);
+     }
+diff --git a/xbmc/utils/LabelFormatter.cpp b/xbmc/utils/LabelFormatter.cpp
+index b7e628a..82b4b6f 100644
+--- a/xbmc/utils/LabelFormatter.cpp
++++ b/xbmc/utils/LabelFormatter.cpp
+@@ -308,7 +308,7 @@ std::string CLabelFormatter::GetMaskContent(const CMaskString &mask, const CFile
+     if (music)
+       value = StringUtils::Format("%i", music->GetPlayCount());
+     if (movie)
+-      value = StringUtils::Format("%i", movie->m_playCount);
++      value = StringUtils::Format("%i", movie->GetPlayCount());
+     break;
+   case 'X': // Bitrate
+     if( !item->m_bIsFolder && item->m_dwSize != 0 )
+diff --git a/xbmc/utils/SaveFileStateJob.cpp b/xbmc/utils/SaveFileStateJob.cpp
+index e943c4a..42fddc5 100644
+--- a/xbmc/utils/SaveFileStateJob.cpp
++++ b/xbmc/utils/SaveFileStateJob.cpp
+@@ -82,11 +82,7 @@ bool CSaveFileStateJob::DoWork()
+ 
+             // consider this item as played
+             videodatabase.IncrementPlayCount(m_item);
+-            m_item.GetVideoInfoTag()->m_playCount++;
+-
+-            // PVR: Set recording's play count on the backend (if supported)
+-            if (m_item.HasPVRRecordingInfoTag())
+-              m_item.GetPVRRecordingInfoTag()->IncrementPlayCount();
++            m_item.GetVideoInfoTag()->IncrementPlayCount();
+ 
+             m_item.SetOverlayImage(CGUIListItem::ICON_OVERLAY_UNWATCHED, true);
+             updateListing = true;
+@@ -102,22 +98,14 @@ bool CSaveFileStateJob::DoWork()
+           else
+             videodatabase.UpdateLastPlayed(m_item);
+ 
+-          if (!m_item.HasVideoInfoTag() || m_item.GetVideoInfoTag()->m_resumePoint.timeInSeconds != m_bookmark.timeInSeconds)
++          if (!m_item.HasVideoInfoTag() || m_item.GetVideoInfoTag()->GetResumePoint().timeInSeconds != m_bookmark.timeInSeconds)
+           {
+             if (m_bookmark.timeInSeconds <= 0.0f)
+               videodatabase.ClearBookMarksOfFile(progressTrackingFile, CBookmark::RESUME);
+             else
+               videodatabase.AddBookMarkToFile(progressTrackingFile, m_bookmark, CBookmark::RESUME);
+             if (m_item.HasVideoInfoTag())
+-              m_item.GetVideoInfoTag()->m_resumePoint = m_bookmark;
+-
+-            // PVR: Set/clear recording's resume bookmark on the backend (if supported)
+-            if (m_item.HasPVRRecordingInfoTag())
+-            {
+-              PVR::CPVRRecordingPtr recording = m_item.GetPVRRecordingInfoTag();
+-              recording->SetLastPlayedPosition(m_bookmark.timeInSeconds <= 0.0f ? 0 : (int)m_bookmark.timeInSeconds);
+-              recording->m_resumePoint = m_bookmark;
+-            }
++              m_item.GetVideoInfoTag()->SetResumePoint(m_bookmark);
+ 
+             // UPnP announce resume point changes to clients
+             // however not if playcount is modified as that already announces
+diff --git a/xbmc/video/ContextMenus.cpp b/xbmc/video/ContextMenus.cpp
+index b69fc33..51eb13d 100644
+--- a/xbmc/video/ContextMenus.cpp
++++ b/xbmc/video/ContextMenus.cpp
+@@ -21,6 +21,7 @@
+ #include "ContextMenus.h"
+ #include "Application.h"
+ #include "Autorun.h"
++#include "Util.h"
+ #include "video/dialogs/GUIDialogVideoInfo.h"
+ #include "video/windows/GUIWindowVideoBase.h"
+ 
+@@ -50,16 +51,20 @@ bool CVideoInfo::Execute(const CFileItemPtr& item) const
+ 
+ bool CMarkWatched::IsVisible(const CFileItem& item) const
+ {
+-  if (!item.HasVideoInfoTag())
++  if (item.IsDeleted()) // e.g. trashed pvr recording
+     return false;
+ 
+-  if (item.IsPVRRecording())
+-    return false; // pvr recordings have its own implementation for this
+-
+-  if (item.m_bIsFolder) //Only allow db content to be updated recursively
+-    return item.IsVideoDb();
++  if (item.m_bIsFolder) //Only allow db content and recording folders to be updated recursively
++  {
++    if (item.HasVideoInfoTag())
++      return item.IsVideoDb();
++    else
++      return CUtil::IsTVRecording(item.GetPath());
++  }
++  else if (!item.HasVideoInfoTag())
++    return false;
+ 
+-  return item.GetVideoInfoTag()->m_playCount == 0;
++  return item.GetVideoInfoTag()->GetPlayCount() == 0;
+ }
+ 
+ bool CMarkWatched::Execute(const CFileItemPtr& item) const
+@@ -70,16 +75,20 @@ bool CMarkWatched::Execute(const CFileItemPtr& item) const
+ 
+ bool CMarkUnWatched::IsVisible(const CFileItem& item) const
+ {
+-  if (!item.HasVideoInfoTag())
++  if (item.IsDeleted()) // e.g. trashed pvr recording
+     return false;
+ 
+-  if (item.IsPVRRecording())
+-    return false; // pvr recordings have its own implementation for this
+-
+-  if (item.m_bIsFolder) //Only allow db content to be updated recursively
+-    return item.IsVideoDb();
++  if (item.m_bIsFolder) //Only allow db content and recording folders to be updated recursively
++  {
++    if (item.HasVideoInfoTag())
++      return item.IsVideoDb();
++    else
++      return CUtil::IsTVRecording(item.GetPath());
++  }
++  else if (!item.HasVideoInfoTag())
++    return false;
+ 
+-  return item.GetVideoInfoTag()->m_playCount > 0;
++  return item.GetVideoInfoTag()->GetPlayCount() > 0;
+ }
+ 
+ bool CMarkUnWatched::Execute(const CFileItemPtr& item) const
+@@ -90,65 +99,72 @@ bool CMarkUnWatched::Execute(const CFileItemPtr& item) const
+ 
+ std::string CResume::GetLabel(const CFileItem& item) const
+ {
+-  return CGUIWindowVideoBase::GetResumeString(item);
++  return CGUIWindowVideoBase::GetResumeString(item.GetItemToPlay());
+ }
+ 
+-bool CResume::IsVisible(const CFileItem& item) const
++bool CResume::IsVisible(const CFileItem& itemIn) const
+ {
+-  if (item.IsPVRRecording())
+-    return false; // pvr recordings have its own implementation for this
++  CFileItem item(itemIn.GetItemToPlay());
++  if (item.IsDeleted()) // e.g. trashed pvr recording
++    return false;
+ 
+   return CGUIWindowVideoBase::HasResumeItemOffset(&item);
+ }
+ 
+-static void SetPathAndPlay(CFileItem&& item)
++static void SetPathAndPlay(CFileItem& item)
+ {
+   if (item.IsVideoDb())
+   {
+     item.SetProperty("original_listitem_url", item.GetPath());
+     item.SetPath(item.GetVideoInfoTag()->m_strFileNameAndPath);
+   }
+-  g_application.PlayFile(item, "");
++  item.SetProperty("check_resume", false);
++  g_application.PlayMedia(item, "", PLAYLIST_NONE);
+ }
+ 
+-bool CResume::Execute(const CFileItemPtr& item) const
++bool CResume::Execute(const CFileItemPtr& itemIn) const
+ {
++  CFileItem item(itemIn->GetItemToPlay());
+ #ifdef HAS_DVD_DRIVE
+-  if (item->IsDVD() || item->IsCDDA())
+-    return MEDIA_DETECT::CAutorun::PlayDisc(item->GetPath(), true, false);
++  if (item.IsDVD() || item.IsCDDA())
++    return MEDIA_DETECT::CAutorun::PlayDisc(item.GetPath(), true, false);
+ #endif
+ 
+-  CFileItem cpy(*item);
+-  cpy.m_lStartOffset = STARTOFFSET_RESUME;
+-  SetPathAndPlay(std::move(cpy));
++  item.m_lStartOffset = STARTOFFSET_RESUME;
++  SetPathAndPlay(item);
+   return true;
+ };
+ 
+-std::string CPlay::GetLabel(const CFileItem& item) const
++std::string CPlay::GetLabel(const CFileItem& itemIn) const
+ {
++  CFileItem item(itemIn.GetItemToPlay());
++  if (item.IsLiveTV())
++    return g_localizeStrings.Get(19000); // Switch to channel
+   if (CGUIWindowVideoBase::HasResumeItemOffset(&item))
+-    return g_localizeStrings.Get(12023);
+-  return g_localizeStrings.Get(208);
++    return g_localizeStrings.Get(12021); // Play from beginning
++  return g_localizeStrings.Get(208); // Play
+ }
+ 
+-bool CPlay::IsVisible(const CFileItem& item) const
++bool CPlay::IsVisible(const CFileItem& itemIn) const
+ {
++  CFileItem item(itemIn.GetItemToPlay());
++  if (item.IsDeleted()) // e.g. trashed pvr recording
++    return false;
++
+   if (item.m_bIsFolder)
+     return false; //! @todo implement
+ 
+-  if (item.IsPVRRecording())
+-    return false; // pvr recordings have its own implementation for this
+-
+-  return item.IsVideo() || item.IsDVD() || item.IsCDDA();
++  return item.IsVideo() || item.IsLiveTV() || item.IsDVD() || item.IsCDDA();
+ }
+ 
+-bool CPlay::Execute(const CFileItemPtr& item) const
++bool CPlay::Execute(const CFileItemPtr& itemIn) const
+ {
++  CFileItem item(itemIn->GetItemToPlay());
+ #ifdef HAS_DVD_DRIVE
+-  if (item->IsDVD() || item->IsCDDA())
+-    return MEDIA_DETECT::CAutorun::PlayDisc(item->GetPath(), true, true);
++  if (item.IsDVD() || item.IsCDDA())
++    return MEDIA_DETECT::CAutorun::PlayDisc(item.GetPath(), true, true);
+ #endif
+-  SetPathAndPlay(CFileItem(*item));
++  SetPathAndPlay(item);
+   return true;
+ };
+ 
+diff --git a/xbmc/video/VideoDatabase.cpp b/xbmc/video/VideoDatabase.cpp
+index 2982937..65ea8a7 100644
+--- a/xbmc/video/VideoDatabase.cpp
++++ b/xbmc/video/VideoDatabase.cpp
+@@ -2131,16 +2131,15 @@ bool CVideoDatabase::GetFileInfo(const std::string& strFilenameAndPath, CVideoIn
+     details.m_strPath = m_pDS->fv("path.strPath").get_asString();
+     std::string strFileName = m_pDS->fv("files.strFilename").get_asString();
+     ConstructPath(details.m_strFileNameAndPath, details.m_strPath, strFileName);
+-    details.m_playCount = std::max(details.m_playCount, m_pDS->fv("files.playCount").get_asInt());
++    details.SetPlayCount(std::max(details.GetPlayCount(), m_pDS->fv("files.playCount").get_asInt()));
+     if (!details.m_lastPlayed.IsValid())
+       details.m_lastPlayed.SetFromDBDateTime(m_pDS->fv("files.lastPlayed").get_asString());
+     if (!details.m_dateAdded.IsValid())
+       details.m_dateAdded.SetFromDBDateTime(m_pDS->fv("files.dateAdded").get_asString());
+-    if (!details.m_resumePoint.IsSet())
++    if (!details.GetResumePoint().IsSet())
+     {
+-      details.m_resumePoint.timeInSeconds = m_pDS->fv("bookmark.timeInSeconds").get_asInt();
+-      details.m_resumePoint.totalTimeInSeconds = m_pDS->fv("bookmark.totalTimeInSeconds").get_asInt();
+-      details.m_resumePoint.type = CBookmark::RESUME;
++      details.SetResumePoint(m_pDS->fv("bookmark.timeInSeconds").get_asInt(),
++                             m_pDS->fv("bookmark.totalTimeInSeconds").get_asInt());
+     }
+ 
+     // get streamdetails
+@@ -2596,8 +2595,8 @@ bool CVideoDatabase::UpdateDetailsForTvShow(int idTvShow, CVideoInfoTag &details
+     sql += PrepareSQL(", userrating = %i", details.m_iUserRating);
+   else
+     sql += ", userrating = NULL";  
+-  if (details.m_duration > 0)
+-    sql += PrepareSQL(", duration = %i", details.m_duration);
++  if (details.GetDuration() > 0)
++    sql += PrepareSQL(", duration = %i", details.GetDuration());
+   else
+     sql += ", duration = NULL";
+   sql += PrepareSQL(" WHERE idShow=%i", idTvShow);
+@@ -3691,7 +3690,7 @@ bool CVideoDatabase::GetStreamDetails(CVideoInfoTag& tag) const
+   details.DetermineBestStreams();
+ 
+   if (details.GetVideoDuration() > 0)
+-    tag.m_duration = details.GetVideoDuration();
++    tag.SetDuration(details.GetVideoDuration());
+ 
+   return retVal;
+ }
+@@ -3711,14 +3710,14 @@ bool CVideoDatabase::GetResumePoint(CVideoInfoTag& tag)
+       CFileItemList fileList;
+       const CURL pathToUrl(tag.m_strFileNameAndPath);
+       dir.GetDirectory(pathToUrl, fileList);
+-      tag.m_resumePoint.Reset();
++      tag.SetResumePoint(CBookmark());
+       for (int i = fileList.Size() - 1; i >= 0; i--)
+       {
+         CBookmark bookmark;
+         if (GetResumeBookMark(fileList[i]->GetPath(), bookmark))
+         {
+-          tag.m_resumePoint = bookmark;
+-          tag.m_resumePoint.partNumber = (i+1); /* store part number in here */
++          bookmark.partNumber = (i+1); /* store part number in here */
++          tag.SetResumePoint(bookmark);
+           match = true;
+           break;
+         }
+@@ -3730,10 +3729,7 @@ bool CVideoDatabase::GetResumePoint(CVideoInfoTag& tag)
+       m_pDS2->query( strSQL );
+       if (!m_pDS2->eof())
+       {
+-        tag.m_resumePoint.timeInSeconds = m_pDS2->fv(0).get_asDouble();
+-        tag.m_resumePoint.totalTimeInSeconds = m_pDS2->fv(1).get_asDouble();
+-        tag.m_resumePoint.partNumber = 0; // regular files or non-iso stacks don't need partNumber
+-        tag.m_resumePoint.type = CBookmark::RESUME;
++        tag.SetResumePoint(m_pDS2->fv(0).get_asDouble(), m_pDS2->fv(1).get_asDouble());
+         match = true;
+       }
+       m_pDS2->close();
+@@ -3774,12 +3770,11 @@ CVideoInfoTag CVideoDatabase::GetDetailsForMovie(const dbiplus::sql_record* cons
+   details.m_strPath = record->at(VIDEODB_DETAILS_MOVIE_PATH).get_asString();
+   std::string strFileName = record->at(VIDEODB_DETAILS_MOVIE_FILE).get_asString();
+   ConstructPath(details.m_strFileNameAndPath,details.m_strPath,strFileName);
+-  details.m_playCount = record->at(VIDEODB_DETAILS_MOVIE_PLAYCOUNT).get_asInt();
++  details.SetPlayCount(record->at(VIDEODB_DETAILS_MOVIE_PLAYCOUNT).get_asInt());
+   details.m_lastPlayed.SetFromDBDateTime(record->at(VIDEODB_DETAILS_MOVIE_LASTPLAYED).get_asString());
+   details.m_dateAdded.SetFromDBDateTime(record->at(VIDEODB_DETAILS_MOVIE_DATEADDED).get_asString());
+-  details.m_resumePoint.timeInSeconds = record->at(VIDEODB_DETAILS_MOVIE_RESUME_TIME).get_asInt();
+-  details.m_resumePoint.totalTimeInSeconds = record->at(VIDEODB_DETAILS_MOVIE_TOTAL_TIME).get_asInt();
+-  details.m_resumePoint.type = CBookmark::RESUME;
++  details.SetResumePoint(record->at(VIDEODB_DETAILS_MOVIE_RESUME_TIME).get_asInt(),
++                         record->at(VIDEODB_DETAILS_MOVIE_TOTAL_TIME).get_asInt());
+   details.m_iUserRating = record->at(VIDEODB_DETAILS_MOVIE_USER_RATING).get_asInt();
+   details.SetRating(record->at(VIDEODB_DETAILS_MOVIE_RATING).get_asFloat(), 
+                     record->at(VIDEODB_DETAILS_MOVIE_VOTES).get_asInt(),
+@@ -3861,14 +3856,14 @@ CVideoInfoTag CVideoDatabase::GetDetailsForTvShow(const dbiplus::sql_record* con
+   details.m_lastPlayed.SetFromDBDateTime(record->at(VIDEODB_DETAILS_TVSHOW_LASTPLAYED).get_asString());
+   details.m_iSeason = record->at(VIDEODB_DETAILS_TVSHOW_NUM_SEASONS).get_asInt();
+   details.m_iEpisode = record->at(VIDEODB_DETAILS_TVSHOW_NUM_EPISODES).get_asInt();
+-  details.m_playCount = record->at(VIDEODB_DETAILS_TVSHOW_NUM_WATCHED).get_asInt();
++  details.SetPlayCount(record->at(VIDEODB_DETAILS_TVSHOW_NUM_WATCHED).get_asInt());
+   details.m_strShowTitle = details.m_strTitle;
+   details.m_iUserRating = record->at(VIDEODB_DETAILS_TVSHOW_USER_RATING).get_asInt();
+   details.SetRating(record->at(VIDEODB_DETAILS_TVSHOW_RATING).get_asFloat(), 
+                     record->at(VIDEODB_DETAILS_TVSHOW_VOTES).get_asInt(),
+                     record->at(VIDEODB_DETAILS_TVSHOW_RATING_TYPE).get_asString(), true);
+   details.SetUniqueID(record->at(VIDEODB_DETAILS_TVSHOW_UNIQUEID_VALUE).get_asString(), record->at(VIDEODB_DETAILS_TVSHOW_UNIQUEID_TYPE).get_asString(), true);
+-  details.m_duration = record->at(VIDEODB_DETAILS_TVSHOW_DURATION).get_asInt();
++  details.SetDuration(record->at(VIDEODB_DETAILS_TVSHOW_DURATION).get_asInt());
+ 
+   movieTime += XbmcThreads::SystemClockMillis() - time; time = XbmcThreads::SystemClockMillis();
+ 
+@@ -3900,10 +3895,10 @@ CVideoInfoTag CVideoDatabase::GetDetailsForTvShow(const dbiplus::sql_record* con
+     item->SetProperty("totalseasons", details.m_iSeason);
+     item->SetProperty("totalepisodes", details.m_iEpisode);
+     item->SetProperty("numepisodes", details.m_iEpisode); // will be changed later to reflect watchmode setting
+-    item->SetProperty("watchedepisodes", details.m_playCount);
+-    item->SetProperty("unwatchedepisodes", details.m_iEpisode - details.m_playCount);
++    item->SetProperty("watchedepisodes", details.GetPlayCount());
++    item->SetProperty("unwatchedepisodes", details.m_iEpisode - details.GetPlayCount());
+   }
+-  details.m_playCount = (details.m_iEpisode <= details.m_playCount) ? 1 : 0;
++  details.SetPlayCount((details.m_iEpisode <= details.GetPlayCount()) ? 1 : 0);
+ 
+   return details;
+ }
+@@ -3930,7 +3925,7 @@ CVideoInfoTag CVideoDatabase::GetDetailsForEpisode(const dbiplus::sql_record* co
+   details.m_strPath = record->at(VIDEODB_DETAILS_EPISODE_PATH).get_asString();
+   std::string strFileName = record->at(VIDEODB_DETAILS_EPISODE_FILE).get_asString();
+   ConstructPath(details.m_strFileNameAndPath,details.m_strPath,strFileName);
+-  details.m_playCount = record->at(VIDEODB_DETAILS_EPISODE_PLAYCOUNT).get_asInt();
++  details.SetPlayCount(record->at(VIDEODB_DETAILS_EPISODE_PLAYCOUNT).get_asInt());
+   details.m_lastPlayed.SetFromDBDateTime(record->at(VIDEODB_DETAILS_EPISODE_LASTPLAYED).get_asString());
+   details.m_dateAdded.SetFromDBDateTime(record->at(VIDEODB_DETAILS_EPISODE_DATEADDED).get_asString());
+   details.m_strMPAARating = record->at(VIDEODB_DETAILS_EPISODE_TVSHOW_MPAA).get_asString();
+@@ -3940,10 +3935,8 @@ CVideoInfoTag CVideoDatabase::GetDetailsForEpisode(const dbiplus::sql_record* co
+   details.SetPremieredFromDBDate(record->at(VIDEODB_DETAILS_EPISODE_TVSHOW_AIRED).get_asString());
+   details.m_iIdShow = record->at(VIDEODB_DETAILS_EPISODE_TVSHOW_ID).get_asInt();
+   details.m_iIdSeason = record->at(VIDEODB_DETAILS_EPISODE_SEASON_ID).get_asInt();
+-
+-  details.m_resumePoint.timeInSeconds = record->at(VIDEODB_DETAILS_EPISODE_RESUME_TIME).get_asInt();
+-  details.m_resumePoint.totalTimeInSeconds = record->at(VIDEODB_DETAILS_EPISODE_TOTAL_TIME).get_asInt();
+-  details.m_resumePoint.type = CBookmark::RESUME;
++  details.SetResumePoint(record->at(VIDEODB_DETAILS_EPISODE_RESUME_TIME).get_asInt(),
++                         record->at(VIDEODB_DETAILS_EPISODE_TOTAL_TIME).get_asInt());
+   details.m_iUserRating = record->at(VIDEODB_DETAILS_EPISODE_USER_RATING).get_asInt();
+   details.SetRating(record->at(VIDEODB_DETAILS_EPISODE_RATING).get_asFloat(), 
+                     record->at(VIDEODB_DETAILS_EPISODE_VOTES).get_asInt(), 
+@@ -3999,12 +3992,11 @@ CVideoInfoTag CVideoDatabase::GetDetailsForMusicVideo(const dbiplus::sql_record*
+   details.m_strPath = record->at(VIDEODB_DETAILS_MUSICVIDEO_PATH).get_asString();
+   std::string strFileName = record->at(VIDEODB_DETAILS_MUSICVIDEO_FILE).get_asString();
+   ConstructPath(details.m_strFileNameAndPath,details.m_strPath,strFileName);
+-  details.m_playCount = record->at(VIDEODB_DETAILS_MUSICVIDEO_PLAYCOUNT).get_asInt();
++  details.SetPlayCount(record->at(VIDEODB_DETAILS_MUSICVIDEO_PLAYCOUNT).get_asInt());
+   details.m_lastPlayed.SetFromDBDateTime(record->at(VIDEODB_DETAILS_MUSICVIDEO_LASTPLAYED).get_asString());
+   details.m_dateAdded.SetFromDBDateTime(record->at(VIDEODB_DETAILS_MUSICVIDEO_DATEADDED).get_asString());
+-  details.m_resumePoint.timeInSeconds = record->at(VIDEODB_DETAILS_MUSICVIDEO_RESUME_TIME).get_asInt();
+-  details.m_resumePoint.totalTimeInSeconds = record->at(VIDEODB_DETAILS_MUSICVIDEO_TOTAL_TIME).get_asInt();
+-  details.m_resumePoint.type = CBookmark::RESUME;
++  details.SetResumePoint(record->at(VIDEODB_DETAILS_MUSICVIDEO_RESUME_TIME).get_asInt(),
++                         record->at(VIDEODB_DETAILS_MUSICVIDEO_TOTAL_TIME).get_asInt());
+   details.m_iUserRating = record->at(VIDEODB_DETAILS_MUSICVIDEO_USER_RATING).get_asInt();
+   std::string premieredString = record->at(VIDEODB_DETAILS_MUSICVIDEO_PREMIERED).get_asString();
+   if (premieredString.size() == 4)
+@@ -5222,12 +5214,10 @@ bool CVideoDatabase::GetPlayCounts(const std::string &strPath, CFileItemList &it
+       CFileItemPtr item = items.Get(path);
+       if (item)
+       {
+-        item->GetVideoInfoTag()->m_playCount = m_pDS->fv(1).get_asInt();
+-        if (!item->GetVideoInfoTag()->m_resumePoint.IsSet())
++        item->GetVideoInfoTag()->SetPlayCount(m_pDS->fv(1).get_asInt());
++        if (!item->GetVideoInfoTag()->GetResumePoint().IsSet())
+         {
+-          item->GetVideoInfoTag()->m_resumePoint.timeInSeconds = m_pDS->fv(2).get_asInt();
+-          item->GetVideoInfoTag()->m_resumePoint.totalTimeInSeconds = m_pDS->fv(3).get_asInt();
+-          item->GetVideoInfoTag()->m_resumePoint.type = CBookmark::RESUME;
++          item->GetVideoInfoTag()->SetResumePoint(m_pDS->fv(2).get_asInt(), m_pDS->fv(3).get_asInt());
+         }
+       }
+       m_pDS->next();
+@@ -5353,7 +5343,7 @@ void CVideoDatabase::SetPlayCount(const CFileItem &item, int count, const CDateT
+       if (g_application.IsVideoScanning())
+         data["transaction"] = true;
+       // Only provide the "playcount" value if it has actually changed
+-      if (item.GetVideoInfoTag()->m_playCount != count)
++      if (item.GetVideoInfoTag()->GetPlayCount() != count)
+         data["playcount"] = count;
+       ANNOUNCEMENT::CAnnouncementManager::GetInstance().Announce(ANNOUNCEMENT::VideoLibrary, "xbmc", "OnUpdate", CFileItemPtr(new CFileItem(item)), data);
+     }
+@@ -5637,7 +5627,7 @@ bool CVideoDatabase::GetNavCommon(const std::string& strBaseDir, CFileItemList&
+ 
+         pItem->m_bIsFolder = true;
+         if (idContent == VIDEODB_CONTENT_MOVIES || idContent == VIDEODB_CONTENT_MUSICVIDEOS)
+-          pItem->GetVideoInfoTag()->m_playCount = i.second.second;
++          pItem->GetVideoInfoTag()->SetPlayCount(i.second.second);
+         if (!items.Contains(pItem->GetPath()))
+         {
+           pItem->SetLabelPreformated(true);
+@@ -5663,7 +5653,7 @@ bool CVideoDatabase::GetNavCommon(const std::string& strBaseDir, CFileItemList&
+         if (idContent == VIDEODB_CONTENT_MOVIES || idContent == VIDEODB_CONTENT_MUSICVIDEOS)
+         { // fv(3) is the number of videos watched, fv(2) is the total number.  We set the playcount
+           // only if the number of videos watched is equal to the total number (i.e. every video watched)
+-          pItem->GetVideoInfoTag()->m_playCount = (m_pDS->fv(3).get_asInt() == m_pDS->fv(2).get_asInt()) ? 1 : 0;
++          pItem->GetVideoInfoTag()->SetPlayCount((m_pDS->fv(3).get_asInt() == m_pDS->fv(2).get_asInt()) ? 1 : 0);
+         }
+         items.Add(pItem);
+         m_pDS->next();
+@@ -6067,7 +6057,7 @@ bool CVideoDatabase::GetPeopleNav(const std::string& strBaseDir, CFileItemList&
+         pItem->SetPath(itemUrl.ToString());
+ 
+         pItem->m_bIsFolder=true;
+-        pItem->GetVideoInfoTag()->m_playCount = i.second.playcount;
++        pItem->GetVideoInfoTag()->SetPlayCount(i.second.playcount);
+         pItem->GetVideoInfoTag()->m_strPictureURL.ParseString(i.second.thumb);
+         pItem->GetVideoInfoTag()->m_iDbId = i.first;
+         pItem->GetVideoInfoTag()->m_type = type;
+@@ -6096,7 +6086,7 @@ bool CVideoDatabase::GetPeopleNav(const std::string& strBaseDir, CFileItemList&
+           {
+             // fv(4) is the number of videos watched, fv(3) is the total number.  We set the playcount
+             // only if the number of videos watched is equal to the total number (i.e. every video watched)
+-            pItem->GetVideoInfoTag()->m_playCount = (m_pDS->fv(4).get_asInt() == m_pDS->fv(3).get_asInt()) ? 1 : 0;
++            pItem->GetVideoInfoTag()->SetPlayCount((m_pDS->fv(4).get_asInt() == m_pDS->fv(3).get_asInt()) ? 1 : 0);
+           }
+           pItem->GetVideoInfoTag()->m_relevance = m_pDS->fv(3).get_asInt();
+           if (idContent == VIDEODB_CONTENT_MUSICVIDEOS)
+@@ -6232,7 +6222,7 @@ bool CVideoDatabase::GetYearsNav(const std::string& strBaseDir, CFileItemList& i
+ 
+         pItem->m_bIsFolder=true;
+         if (idContent == VIDEODB_CONTENT_MOVIES || idContent == VIDEODB_CONTENT_MUSICVIDEOS)
+-          pItem->GetVideoInfoTag()->m_playCount = i.second.second;
++          pItem->GetVideoInfoTag()->SetPlayCount(i.second.second);
+         items.Add(pItem);
+       }
+     }
+@@ -6268,7 +6258,7 @@ bool CVideoDatabase::GetYearsNav(const std::string& strBaseDir, CFileItemList& i
+         {
+           // fv(2) is the number of videos watched, fv(1) is the total number.  We set the playcount
+           // only if the number of videos watched is equal to the total number (i.e. every video watched)
+-          pItem->GetVideoInfoTag()->m_playCount = (m_pDS->fv(2).get_asInt() == m_pDS->fv(1).get_asInt()) ? 1 : 0;
++          pItem->GetVideoInfoTag()->SetPlayCount((m_pDS->fv(2).get_asInt() == m_pDS->fv(1).get_asInt()) ? 1 : 0);
+         }
+ 
+         // take care of dupes ..
+@@ -6432,8 +6422,8 @@ bool CVideoDatabase::GetSeasonsByWhere(const std::string& strBaseDir, const Filt
+         pItem->SetProperty("unwatchedepisodes", totalEpisodes - watchedEpisodes);
+         if (iSeason == 0)
+           pItem->SetProperty("isspecial", true);
+-        pItem->GetVideoInfoTag()->m_playCount = (totalEpisodes == watchedEpisodes) ? 1 : 0;
+-        pItem->SetOverlayImage(CGUIListItem::ICON_OVERLAY_UNWATCHED, (pItem->GetVideoInfoTag()->m_playCount > 0) && (pItem->GetVideoInfoTag()->m_iEpisode > 0));
++        pItem->GetVideoInfoTag()->SetPlayCount((totalEpisodes == watchedEpisodes) ? 1 : 0);
++        pItem->SetOverlayImage(CGUIListItem::ICON_OVERLAY_UNWATCHED, (pItem->GetVideoInfoTag()->GetPlayCount() > 0) && (pItem->GetVideoInfoTag()->m_iEpisode > 0));
+ 
+         items.Add(pItem);
+       }
+@@ -6679,7 +6669,7 @@ bool CVideoDatabase::GetMoviesByWhere(const std::string& strBaseDir, const Filte
+         itemUrl.AppendPath(path);
+         pItem->SetPath(itemUrl.ToString());
+ 
+-        pItem->SetOverlayImage(CGUIListItem::ICON_OVERLAY_UNWATCHED,movie.m_playCount > 0);
++        pItem->SetOverlayImage(CGUIListItem::ICON_OVERLAY_UNWATCHED,movie.GetPlayCount() > 0);
+         items.Add(pItem);
+       }
+     }
+@@ -6787,7 +6777,7 @@ bool CVideoDatabase::GetTvShowsByWhere(const std::string& strBaseDir, const Filt
+         itemUrl.AppendPath(path);
+         pItem->SetPath(itemUrl.ToString());
+ 
+-        pItem->SetOverlayImage(CGUIListItem::ICON_OVERLAY_UNWATCHED, (pItem->GetVideoInfoTag()->m_playCount > 0) && (pItem->GetVideoInfoTag()->m_iEpisode > 0));
++        pItem->SetOverlayImage(CGUIListItem::ICON_OVERLAY_UNWATCHED, (pItem->GetVideoInfoTag()->GetPlayCount() > 0) && (pItem->GetVideoInfoTag()->m_iEpisode > 0));
+         items.Add(pItem);
+       }
+     }
+@@ -6921,7 +6911,7 @@ bool CVideoDatabase::GetEpisodesByWhere(const std::string& strBaseDir, const Fil
+         itemUrl.AppendPath(path);
+         pItem->SetPath(itemUrl.ToString());
+ 
+-        pItem->SetOverlayImage(CGUIListItem::ICON_OVERLAY_UNWATCHED, movie.m_playCount > 0);
++        pItem->SetOverlayImage(CGUIListItem::ICON_OVERLAY_UNWATCHED, movie.GetPlayCount() > 0);
+         pItem->m_dateTime = movie.m_firstAired;
+         items.Add(pItem);
+       }
+@@ -7753,7 +7743,7 @@ bool CVideoDatabase::GetMusicVideosByWhere(const std::string &baseDir, const Fil
+         itemUrl.AppendPath(path);
+         item->SetPath(itemUrl.ToString());
+ 
+-        item->SetOverlayImage(CGUIListItem::ICON_OVERLAY_UNWATCHED, musicvideo.m_playCount > 0);
++        item->SetOverlayImage(CGUIListItem::ICON_OVERLAY_UNWATCHED, musicvideo.GetPlayCount() > 0);
+         items.Add(item);
+       }
+     }
+diff --git a/xbmc/video/VideoInfoScanner.cpp b/xbmc/video/VideoInfoScanner.cpp
+index eccedf4..b6bb6b8 100644
+--- a/xbmc/video/VideoInfoScanner.cpp
++++ b/xbmc/video/VideoInfoScanner.cpp
+@@ -1283,11 +1283,11 @@ namespace VIDEO
+     }
+ 
+     if (g_advancedSettings.m_bVideoLibraryImportWatchedState || libraryImport)
+-      m_database.SetPlayCount(*pItem, movieDetails.m_playCount, movieDetails.m_lastPlayed);
++      m_database.SetPlayCount(*pItem, movieDetails.GetPlayCount(), movieDetails.m_lastPlayed);
+ 
+     if ((g_advancedSettings.m_bVideoLibraryImportResumePoint || libraryImport) &&
+-        movieDetails.m_resumePoint.IsSet())
+-      m_database.AddBookMarkToFile(pItem->GetPath(), movieDetails.m_resumePoint, CBookmark::RESUME);
++        movieDetails.GetResumePoint().IsSet())
++      m_database.AddBookMarkToFile(pItem->GetPath(), movieDetails.GetResumePoint(), CBookmark::RESUME);
+ 
+     m_database.Close();
+ 
+diff --git a/xbmc/video/VideoInfoTag.cpp b/xbmc/video/VideoInfoTag.cpp
+index f79451e..9a6712b 100644
+--- a/xbmc/video/VideoInfoTag.cpp
++++ b/xbmc/video/VideoInfoTag.cpp
+@@ -187,7 +187,7 @@ bool CVideoInfoTag::Save(TiXmlNode *node, const std::string &tag, bool savePathI
+     movie->InsertEndChild(*doc.RootElement());
+   }
+   XMLUtils::SetString(movie, "mpaa", m_strMPAARating);
+-  XMLUtils::SetInt(movie, "playcount", m_playCount);
++  XMLUtils::SetInt(movie, "playcount", GetPlayCount());
+   XMLUtils::SetDate(movie, "lastplayed", m_lastPlayed);
+   if (savePathInfo)
+   {
+@@ -367,7 +367,7 @@ void CVideoInfoTag::Archive(CArchive& ar)
+     ar << m_strShowTitle;
+     ar << m_strAlbum;
+     ar << m_artist;
+-    ar << m_playCount;
++    ar << GetPlayCount();
+     ar << m_lastPlayed;
+     ar << m_iTop250;
+     ar << m_iSeason;
+@@ -578,7 +578,7 @@ void CVideoInfoTag::Serialize(CVariant& value) const
+   value["showtitle"] = m_strShowTitle;
+   value["album"] = m_strAlbum;
+   value["artist"] = m_artist;
+-  value["playcount"] = m_playCount;
++  value["playcount"] = GetPlayCount();
+   value["lastplayed"] = m_lastPlayed.IsValid() ? m_lastPlayed.GetAsDBDateTime() : StringUtils::Empty;
+   value["top250"] = m_iTop250;
+   value["year"] = m_premiered.GetYear();
+@@ -666,7 +666,7 @@ void CVideoInfoTag::ToSortable(SortItem& sortable, Field field) const
+   case FieldTvShowTitle:              sortable[FieldTvShowTitle] = m_strShowTitle; break;
+   case FieldAlbum:                    sortable[FieldAlbum] = m_strAlbum; break;
+   case FieldArtist:                   sortable[FieldArtist] = m_artist; break;
+-  case FieldPlaycount:                sortable[FieldPlaycount] = m_playCount; break;
++  case FieldPlaycount:                sortable[FieldPlaycount] = GetPlayCount(); break;
+   case FieldLastPlayed:               sortable[FieldLastPlayed] = m_lastPlayed.IsValid() ? m_lastPlayed.GetAsDBDateTime() : StringUtils::Empty; break;
+   case FieldTop250:                   sortable[FieldTop250] = m_iTop250; break;
+   case FieldYear:                     sortable[FieldYear] = m_premiered.GetYear(); break;
+@@ -1204,6 +1204,11 @@ bool CVideoInfoTag::IsEmpty() const
+           m_strPath.empty());
+ }
+ 
++void CVideoInfoTag::SetDuration(int duration)
++{
++  m_duration = duration;
++}
++
+ unsigned int CVideoInfoTag::GetDuration() const
+ {
+   /*
+@@ -1217,6 +1222,11 @@ unsigned int CVideoInfoTag::GetDuration() const
+   return m_duration;
+ }
+ 
++unsigned int CVideoInfoTag::GetStaticDuration() const
++{
++  return m_duration;
++}
++
+ unsigned int CVideoInfoTag::GetDurationFromMinuteString(const std::string &runtime)
+ {
+   unsigned int duration = (unsigned int)str2uint64(runtime);
+@@ -1505,3 +1515,40 @@ std::vector<std::string> CVideoInfoTag::Trim(std::vector<std::string>&& items)
+   });
+   return items;
+ }
++
++int CVideoInfoTag::GetPlayCount() const
++{
++  return m_playCount;
++}
++
++bool CVideoInfoTag::SetPlayCount(int count)
++{
++  m_playCount = count;
++  return true;
++}
++
++bool CVideoInfoTag::IncrementPlayCount()
++{
++  SetPlayCount(m_playCount + 1); // note: not just m_playCount++; call the possibly overridden SetPlayCount
++  return true;
++}
++
++CBookmark CVideoInfoTag::GetResumePoint() const
++{
++  return m_resumePoint;
++}
++
++bool CVideoInfoTag::SetResumePoint(const CBookmark &resumePoint)
++{
++  m_resumePoint = resumePoint;
++  return true;
++}
++
++bool CVideoInfoTag::SetResumePoint(double timeInSeconds, double totalTimeInSeconds)
++{
++  CBookmark resumePoint;
++  resumePoint.timeInSeconds = timeInSeconds;
++  resumePoint.totalTimeInSeconds = totalTimeInSeconds;
++  resumePoint.type = CBookmark::RESUME;
++  return SetResumePoint(resumePoint); // note: not just m_resumePoint = resumePoint; call the possibly overridden SetResumePoint
++}
+diff --git a/xbmc/video/VideoInfoTag.h b/xbmc/video/VideoInfoTag.h
+index 8b60ee3..90391da 100644
+--- a/xbmc/video/VideoInfoTag.h
++++ b/xbmc/video/VideoInfoTag.h
+@@ -105,11 +105,21 @@ public:
+     return m_strFileNameAndPath;
+   };
+ 
++  /*! \brief set the duration in seconds
++   \param duration the duration to set
++   */
++  void SetDuration(int duration);
++
+   /*! \brief retrieve the duration in seconds.
+    Prefers the duration from stream details if available.
+    */
+   unsigned int GetDuration() const;
+ 
++  /*! \brief retrieve the duration in seconds.
++   Ignores the duration from stream details even if available.
++   */
++  unsigned int GetStaticDuration() const;
++
+   /*! \brief get the duration in seconds from a minute string
+    \param runtime the runtime string from a scraper or similar
+    \return the time in seconds, if decipherable.
+@@ -159,6 +169,46 @@ public:
+   void SetNamedSeasons(std::map<int, std::string> namedSeasons);
+   void SetUserrating(int userrating);
+ 
++  /*!
++   * @brief Get this videos's play count.
++   * @return the play count.
++   */
++  virtual int GetPlayCount() const;
++
++  /*!
++   * @brief Set this videos's play count.
++   * @param count play count.
++   * @return True if play count was set successfully, false otherwise.
++   */
++  virtual bool SetPlayCount(int count);
++
++  /*!
++   * @brief Increment this videos's play count.
++   * @return True if play count was increased successfully, false otherwise.
++   */
++  virtual bool IncrementPlayCount();
++
++  /*!
++   * @brief Get this videos's resume point.
++   * @return the resume point.
++   */
++  virtual CBookmark GetResumePoint() const;
++
++  /*!
++   * @brief Set this videos's resume point.
++   * @param resumePoint resume point.
++   * @return True if resume point was set successfully, false otherwise.
++   */
++  virtual bool SetResumePoint(const CBookmark &resumePoint);
++
++  /*!
++   * @brief Set this videos's resume point.
++   * @param timeInSeconds the time of the resume point
++   * @param totalTimeInSeconds the total time of the video
++   * @return True if resume point was set successfully, false otherwise.
++   */
++  bool SetResumePoint(double timeInSeconds, double totalTimeInSeconds);
++
+   std::string m_basePath; // the base path of the video, for folder-based lookups
+   int m_parentPathID;      // the parent path id where the base path of the video lies
+   std::vector<std::string> m_director;
+@@ -196,7 +246,6 @@ public:
+   CDateTime m_lastPlayed;
+   std::vector<std::string> m_showLink;
+   std::map<int, std::string> m_namedSeasons;
+-  int m_playCount;
+   int m_iTop250;
+   int m_iSeason;
+   int m_iEpisode;
+@@ -215,13 +264,14 @@ public:
+   int m_iIdSeason;
+   CFanart m_fanart;
+   CStreamDetails m_streamDetails;
+-  CBookmark m_resumePoint;
+   CDateTime m_dateAdded;
+   MediaType m_type;
+-  int m_duration; ///< duration in seconds
+   int m_relevance; // Used for actors' number of appearances
+   int m_parsedDetails;
+ 
++  // TODO: cannot be private, because of 'struct SDbTableOffsets'
++  unsigned int m_duration; ///< duration in seconds
++
+ private:
+   /* \brief Parse our native XML format for video info.
+    See Load for a description of the available tag types.
+@@ -237,6 +287,9 @@ private:
+   std::map<std::string, std::string> m_uniqueIDs;
+   std::string Trim(std::string &&value);
+   std::vector<std::string> Trim(std::vector<std::string> &&items);
++
++  int m_playCount;
++  CBookmark m_resumePoint;
+ };
+ 
+ typedef std::vector<CVideoInfoTag> VECMOVIES;
+diff --git a/xbmc/video/VideoThumbLoader.cpp b/xbmc/video/VideoThumbLoader.cpp
+index ae1b99e..3828202 100644
+--- a/xbmc/video/VideoThumbLoader.cpp
++++ b/xbmc/video/VideoThumbLoader.cpp
+@@ -165,10 +165,9 @@ bool CThumbExtractor::DoWork()
+ 
+       // overwrite the runtime value if the one from streamdetails is available
+       if (info->m_iDbId > 0
+-          && info->m_duration > 0
+-          && static_cast<size_t>(info->m_duration) != info->GetDuration())
++          && info->GetStaticDuration() != info->GetDuration())
+       {
+-        info->m_duration = info->GetDuration();
++        info->SetDuration(info->GetDuration());
+ 
+         // store the updated information in the database
+         db.SetDetailsForItem(info->m_iDbId, info->m_type, *info, m_item.GetArt());
+diff --git a/xbmc/video/dialogs/GUIDialogVideoInfo.cpp b/xbmc/video/dialogs/GUIDialogVideoInfo.cpp
+index eb5e1e8..fede2c9 100644
+--- a/xbmc/video/dialogs/GUIDialogVideoInfo.cpp
++++ b/xbmc/video/dialogs/GUIDialogVideoInfo.cpp
+@@ -380,7 +380,7 @@ void CGUIDialogVideoInfo::Update()
+   // setup plot text area
+   std::string strTmp = m_movieItem->GetVideoInfoTag()->m_strPlot;
+   if (m_movieItem->GetVideoInfoTag()->m_type != MediaTypeTvShow)
+-    if (m_movieItem->GetVideoInfoTag()->m_playCount == 0 && !CSettings::GetInstance().GetBool(CSettings::SETTING_VIDEOLIBRARY_SHOWUNWATCHEDPLOTS))
++    if (m_movieItem->GetVideoInfoTag()->GetPlayCount() == 0 && !CSettings::GetInstance().GetBool(CSettings::SETTING_VIDEOLIBRARY_SHOWUNWATCHEDPLOTS))
+       strTmp = g_localizeStrings.Get(20370);
+ 
+   StringUtils::Trim(strTmp);
+@@ -415,7 +415,7 @@ void CGUIDialogVideoInfo::Update()
+   }
+ 
+   // Check for resumability
+-  if (m_movieItem->GetVideoInfoTag()->m_resumePoint.timeInSeconds > 0.0)
++  if (m_movieItem->GetVideoInfoTag()->GetResumePoint().timeInSeconds > 0.0)
+     CONTROL_ENABLE(CONTROL_BTN_RESUME);
+   else
+     CONTROL_DISABLE(CONTROL_BTN_RESUME);
+@@ -477,7 +477,7 @@ void CGUIDialogVideoInfo::OnSearch(std::string& strSearch)
+     for (int i = 0; i < items.Size(); i++)
+     {
+       if (items[i]->HasVideoInfoTag() &&
+-          items[i]->GetVideoInfoTag()->m_playCount > 0)
++          items[i]->GetVideoInfoTag()->GetPlayCount() > 0)
+         items[i]->SetLabel2(g_localizeStrings.Get(16102));
+ 
+       loader.LoadItem(items[i].get());
+diff --git a/xbmc/video/jobs/VideoLibraryMarkWatchedJob.cpp b/xbmc/video/jobs/VideoLibraryMarkWatchedJob.cpp
+index c0e26a1..e86306a 100644
+--- a/xbmc/video/jobs/VideoLibraryMarkWatchedJob.cpp
++++ b/xbmc/video/jobs/VideoLibraryMarkWatchedJob.cpp
+@@ -27,6 +27,8 @@
+ #ifdef HAS_UPNP
+ #include "network/upnp/UPnP.h"
+ #endif
++#include "pvr/PVRManager.h"
++#include "pvr/recordings/PVRRecordings.h"
+ #include "profiles/ProfilesManager.h"
+ #include "utils/URIUtils.h"
+ #include "video/VideoDatabase.h"
+@@ -66,7 +68,7 @@ bool CVideoLibraryMarkWatchedJob::Work(CVideoDatabase &db)
+   for (int i = 0; i < items.Size(); i++)
+   {
+     CFileItemPtr item = items.Get(i);
+-    if (item->HasVideoInfoTag() && m_mark == (item->GetVideoInfoTag()->m_playCount > 0))
++    if (item->HasVideoInfoTag() && m_mark == (item->GetVideoInfoTag()->GetPlayCount() > 0))
+       continue;
+ 
+ #ifdef HAS_UPNP
+@@ -74,6 +76,9 @@ bool CVideoLibraryMarkWatchedJob::Work(CVideoDatabase &db)
+       continue;
+ #endif
+ 
++    if (item->HasPVRRecordingInfoTag() && PVR::g_PVRRecordings->MarkWatched(item, m_mark))
++      continue;
++
+     markItems.push_back(item);
+   }
+ 
+diff --git a/xbmc/video/windows/GUIWindowVideoBase.cpp b/xbmc/video/windows/GUIWindowVideoBase.cpp
+index c1d692e..67e9104 100644
+--- a/xbmc/video/windows/GUIWindowVideoBase.cpp
++++ b/xbmc/video/windows/GUIWindowVideoBase.cpp
+@@ -504,8 +504,8 @@ void CGUIWindowVideoBase::AddItemToPlayList(const CFileItemPtr &pItem, CFileItem
+         }
+       }
+       else if (items[i]->HasVideoInfoTag() &&
+-       ((unwatchedOnly && items[i]->GetVideoInfoTag()->m_playCount > 0) ||
+-        (watchedOnly && items[i]->GetVideoInfoTag()->m_playCount <= 0)))
++       ((unwatchedOnly && items[i]->GetVideoInfoTag()->GetPlayCount() > 0) ||
++        (watchedOnly && items[i]->GetVideoInfoTag()->GetPlayCount() <= 0)))
+         continue;
+ 
+       AddItemToPlayList(items[i], queuedItems);
+@@ -557,8 +557,8 @@ void CGUIWindowVideoBase::AddItemToPlayList(const CFileItemPtr &pItem, CFileItem
+ 
+ void CGUIWindowVideoBase::GetResumeItemOffset(const CFileItem *item, int& startoffset, int& partNumber)
+ {
+-  // do not resume livetv
+-  if (item->IsLiveTV())
++  // do not resume Live TV and 'deleted' items (e.g. trashed pvr recordings)
++  if (item->IsLiveTV() || item->IsDeleted())
+     return;
+ 
+   startoffset = 0;
+@@ -566,10 +566,9 @@ void CGUIWindowVideoBase::GetResumeItemOffset(const CFileItem *item, int& starto
+ 
+   if (!item->IsNFO() && !item->IsPlayList())
+   {
+-    if (item->HasVideoInfoTag() && item->GetVideoInfoTag()->m_resumePoint.IsSet())
++    if (item->GetCurrentResumeTimeAndPartNumber(startoffset, partNumber))
+     {
+-      startoffset = (int)(item->GetVideoInfoTag()->m_resumePoint.timeInSeconds*75);
+-      partNumber = item->GetVideoInfoTag()->m_resumePoint.partNumber;
++      startoffset *= 75;
+     }
+     else
+     {
+@@ -650,7 +649,7 @@ bool CGUIWindowVideoBase::OnFileAction(int iItem, int action, std::string player
+       if (!resumeString.empty())
+       {
+         choices.Add(SELECT_ACTION_RESUME, resumeString);
+-        choices.Add(SELECT_ACTION_PLAY, 12021);   // Start from beginning
++        choices.Add(SELECT_ACTION_PLAY, 12021);   // Play from beginning
+       }
+       else
+         choices.Add(SELECT_ACTION_PLAY, 208);   // Play
+@@ -770,7 +769,7 @@ bool CGUIWindowVideoBase::ShowResumeMenu(CFileItem &item)
+     { // prompt user whether they wish to resume
+       CContextButtons choices;
+       choices.Add(1, resumeString);
+-      choices.Add(2, 12021); // start from the beginning
++      choices.Add(2, 12021); // Play from beginning
+       int retVal = CGUIDialogContextMenu::ShowAndGetChoice(choices);
+       if (retVal < 0)
+         return false; // don't do anything
+@@ -799,7 +798,7 @@ bool CGUIWindowVideoBase::OnResumeItem(int iItem, const std::string &player)
+   {
+     CContextButtons choices;
+     choices.Add(SELECT_ACTION_RESUME, resumeString);
+-    choices.Add(SELECT_ACTION_PLAY, 12021);   // Start from beginning
++    choices.Add(SELECT_ACTION_PLAY, 12021);   // Play from beginning
+     int value = CGUIDialogContextMenu::ShowAndGetChoice(choices);
+     if (value < 0)
+       return true;
+@@ -924,7 +923,7 @@ bool CGUIWindowVideoBase::OnPlayStackPart(int iItem)
+       {
+         CContextButtons choices;
+         choices.Add(SELECT_ACTION_RESUME, resumeString);
+-        choices.Add(SELECT_ACTION_PLAY, 12021);   // Start from beginning
++        choices.Add(SELECT_ACTION_PLAY, 12021);   // Play from beginning
+         int value = CGUIDialogContextMenu::ShowAndGetChoice(choices);
+         if (value == SELECT_ACTION_RESUME)
+           GetResumeItemOffset(parts[selectedFile].get(), stack->m_lStartOffset, stack->m_lStartPartNumber);
+diff --git a/xbmc/video/windows/GUIWindowVideoNav.cpp b/xbmc/video/windows/GUIWindowVideoNav.cpp
+index 850c1b5..621281b 100644
+--- a/xbmc/video/windows/GUIWindowVideoNav.cpp
++++ b/xbmc/video/windows/GUIWindowVideoNav.cpp
+@@ -97,7 +97,7 @@ bool CGUIWindowVideoNav::OnAction(const CAction &action)
+ 
+     if (pItem && pItem->HasVideoInfoTag())
+     {
+-      CVideoLibraryQueue::GetInstance().MarkAsWatched(pItem, pItem->GetVideoInfoTag()->m_playCount == 0);
++      CVideoLibraryQueue::GetInstance().MarkAsWatched(pItem, pItem->GetVideoInfoTag()->GetPlayCount() == 0);
+       return true;
+     }
+   }
+@@ -247,7 +247,7 @@ int CGUIWindowVideoNav::GetFirstUnwatchedItemIndex(bool includeAllSeasons, bool
+ 
+     // Is the season unwatched, and is its season number lower than the currently identified
+     // first unwatched season
+-    if (pTag->m_playCount == 0 && pTag->m_iSeason < iUnwatchedSeason)
++    if (pTag->GetPlayCount() == 0 && pTag->m_iSeason < iUnwatchedSeason)
+     {
+       iUnwatchedSeason = pTag->m_iSeason;
+       iIndex = i;
+@@ -272,7 +272,7 @@ int CGUIWindowVideoNav::GetFirstUnwatchedItemIndex(bool includeAllSeasons, bool
+ 
+       // Does the episode belong to the unwatched season and Is the episode unwatched, and is its epsiode number 
+       // lower than the currently identified first unwatched episode
+-      if (pTag->m_iSeason == iUnwatchedSeason && pTag->m_playCount == 0 && pTag->m_iEpisode < iUnwatchedEpisode)
++      if (pTag->m_iSeason == iUnwatchedSeason && pTag->GetPlayCount() == 0 && pTag->m_iEpisode < iUnwatchedEpisode)
+       {
+         iUnwatchedEpisode = pTag->m_iEpisode;
+         iIndex = i;
+@@ -592,13 +592,9 @@ void CGUIWindowVideoNav::LoadVideoInfo(CFileItemList &items, CVideoDatabase &dat
+         fetchedPlayCounts = true;
+       }
+       
+-      // preferably use some information from PVR info tag if available
+-      if (pItem->HasPVRRecordingInfoTag())
+-        pItem->GetPVRRecordingInfoTag()->CopyClientInfo(pItem->GetVideoInfoTag());
+-
+       // set the watched overlay
+       if (pItem->IsVideo())
+-        pItem->SetOverlayImage(CGUIListItem::ICON_OVERLAY_UNWATCHED, pItem->HasVideoInfoTag() && pItem->GetVideoInfoTag()->m_playCount > 0);
++        pItem->SetOverlayImage(CGUIListItem::ICON_OVERLAY_UNWATCHED, pItem->HasVideoInfoTag() && pItem->GetVideoInfoTag()->GetPlayCount() > 0);
+     }
+   }
+ }
+@@ -1257,8 +1253,8 @@ bool CGUIWindowVideoNav::ApplyWatchedFilter(CFileItemList &items)
+     if (filterWatched)
+     {
+       if(!item->IsParentFolder() && // Don't delete the go to parent folder
+-         ((watchMode == WatchedModeWatched   && item->GetVideoInfoTag()->m_playCount == 0) ||
+-          (watchMode == WatchedModeUnwatched && item->GetVideoInfoTag()->m_playCount > 0)))
++         ((watchMode == WatchedModeWatched   && item->GetVideoInfoTag()->GetPlayCount() == 0) ||
++          (watchMode == WatchedModeUnwatched && item->GetVideoInfoTag()->GetPlayCount() > 0)))
+       {
+         items.Remove(i);
+         i--;
+diff --git a/xbmc/video/windows/GUIWindowVideoPlaylist.cpp b/xbmc/video/windows/GUIWindowVideoPlaylist.cpp
+index f0ab2b4..b5caa96 100644
+--- a/xbmc/video/windows/GUIWindowVideoPlaylist.cpp
++++ b/xbmc/video/windows/GUIWindowVideoPlaylist.cpp
+@@ -338,7 +338,7 @@ bool CGUIWindowVideoPlaylist::OnPlayMedia(int iItem, const std::string &player)
+       CFileItemPtr pPlaylistItem = g_playlistPlayer.GetPlaylist(PLAYLIST_VIDEO)[iItem];
+       pPlaylistItem->m_lStartOffset = pItem->m_lStartOffset;
+       if (pPlaylistItem->HasVideoInfoTag() && pItem->HasVideoInfoTag())
+-        pPlaylistItem->GetVideoInfoTag()->m_resumePoint = pItem->GetVideoInfoTag()->m_resumePoint;
++        pPlaylistItem->GetVideoInfoTag()->SetResumePoint(pItem->GetVideoInfoTag()->GetResumePoint());
+     }
+     // now play item
+     g_playlistPlayer.Play(iItem, player);
+diff --git a/xbmc/video/windows/VideoFileItemListModifier.cpp b/xbmc/video/windows/VideoFileItemListModifier.cpp
+index ccb6244..d83858b 100644
+--- a/xbmc/video/windows/VideoFileItemListModifier.cpp
++++ b/xbmc/video/windows/VideoFileItemListModifier.cpp
+@@ -97,7 +97,7 @@ void CVideoFileItemListModifier::AddQueuingFolder(CFileItemList& items)
+     }
+     pItem->GetVideoInfoTag()->m_strTitle = strLabel;
+     pItem->GetVideoInfoTag()->m_iEpisode = watched + unwatched;
+-    pItem->GetVideoInfoTag()->m_playCount = (unwatched == 0) ? 1 : 0;
++    pItem->GetVideoInfoTag()->SetPlayCount((unwatched == 0) ? 1 : 0);
+     CVideoDatabase db;
+     if (db.Open())
+     {

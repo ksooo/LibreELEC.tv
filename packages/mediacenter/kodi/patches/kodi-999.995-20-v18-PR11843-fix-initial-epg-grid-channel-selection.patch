@@ -1,0 +1,175 @@
+diff --git a/xbmc/epg/GUIEPGGridContainer.cpp b/xbmc/epg/GUIEPGGridContainer.cpp
+index 84d8ea3..2048c92 100644
+--- a/xbmc/epg/GUIEPGGridContainer.cpp
++++ b/xbmc/epg/GUIEPGGridContainer.cpp
+@@ -1015,7 +1015,7 @@ void CGUIEPGGridContainer::OnRight()
+   }
+ }
+ 
+-void CGUIEPGGridContainer::SetChannel(const std::string &channel)
++bool CGUIEPGGridContainer::SetChannel(const std::string &channel)
+ {
+   for (int iIndex = 0; iIndex < m_gridModel->ChannelItemsSize(); iIndex++)
+   {
+@@ -1023,12 +1023,13 @@ void CGUIEPGGridContainer::SetChannel(const std::string &channel)
+     if (strPath == channel)
+     {
+       GoToChannel(iIndex);
+-      break;
++      return true;
+     }
+   }
++  return false;
+ }
+ 
+-void CGUIEPGGridContainer::SetChannel(const CPVRChannelPtr &channel)
++bool CGUIEPGGridContainer::SetChannel(const CPVRChannelPtr &channel)
+ {
+   for (int iIndex = 0; iIndex < m_gridModel->ChannelItemsSize(); iIndex++)
+   {
+@@ -1036,9 +1037,10 @@ void CGUIEPGGridContainer::SetChannel(const CPVRChannelPtr &channel)
+     if (iChannelId == channel->ChannelID())
+     {
+       GoToChannel(iIndex);
+-      break;
++      return true;
+     }
+   }
++  return false;
+ }
+ 
+ void CGUIEPGGridContainer::SetChannel(int channel)
+diff --git a/xbmc/epg/GUIEPGGridContainer.h b/xbmc/epg/GUIEPGGridContainer.h
+index 04b3f8e..1c417ed 100644
+--- a/xbmc/epg/GUIEPGGridContainer.h
++++ b/xbmc/epg/GUIEPGGridContainer.h
+@@ -82,8 +82,8 @@ namespace EPG
+     void GoToEnd();
+     void GoToNow();
+     void SetTimelineItems(const std::unique_ptr<CFileItemList> &items, const CDateTime &gridStart, const CDateTime &gridEnd);
+-    void SetChannel(const PVR::CPVRChannelPtr &channel);
+-    void SetChannel(const std::string &channel);
++    bool SetChannel(const PVR::CPVRChannelPtr &channel);
++    bool SetChannel(const std::string &channel);
+     void ResetCoordinates();
+ 
+   protected:
+diff --git a/xbmc/pvr/windows/GUIWindowPVRGuide.cpp b/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
+index 4990003..6550338 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
++++ b/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
+@@ -45,7 +45,8 @@ using namespace EPG;
+ CGUIWindowPVRGuide::CGUIWindowPVRGuide(bool bRadio) :
+   CGUIWindowPVRBase(bRadio, bRadio ? WINDOW_RADIO_GUIDE : WINDOW_TV_GUIDE, "MyPVRGuide.xml"),
+   CPVRChannelNumberInputHandler(1000),
+-  m_cachedChannelGroup(new CPVRChannelGroup)
++  m_cachedChannelGroup(new CPVRChannelGroup),
++  m_bChannelSelectionRestored(false)
+ {
+   m_bRefreshTimelineItems = false;
+   g_EpgContainer.RegisterObserver(this);
+@@ -67,7 +68,7 @@ void CGUIWindowPVRGuide::Init()
+   CGUIEPGGridContainer *epgGridContainer = GetGridControl();
+   if (epgGridContainer)
+   {
+-    epgGridContainer->SetChannel(GetSelectedItemPath(m_bRadio));
++    m_bChannelSelectionRestored = epgGridContainer->SetChannel(GetSelectedItemPath(m_bRadio));
+     epgGridContainer->GoToNow();
+   }
+ 
+@@ -102,6 +103,8 @@ void CGUIWindowPVRGuide::OnDeinitWindow(int nextWindowID)
+   StopRefreshTimelineItemsThread();
+   m_bRefreshTimelineItems = false;
+ 
++  m_bChannelSelectionRestored = false;
++
+   CGUIWindowPVRBase::OnDeinitWindow(nextWindowID);
+ }
+ 
+@@ -158,7 +161,7 @@ void CGUIWindowPVRGuide::GetContextButtons(int itemNumber, CContextButtons &butt
+ 
+ void CGUIWindowPVRGuide::UpdateSelectedItemPath()
+ {
+-  CGUIEPGGridContainer *epgGridContainer = (CGUIEPGGridContainer*) GetControl(m_viewControl.GetCurrentControl());
++  CGUIEPGGridContainer *epgGridContainer = GetGridControl();
+   if (epgGridContainer)
+   {
+     CPVRChannelPtr channel(epgGridContainer->GetSelectedChannel());
+@@ -174,6 +177,20 @@ void CGUIWindowPVRGuide::UpdateButtons(void)
+   SET_CONTROL_LABEL(CONTROL_LABEL_HEADER2, GetChannelGroup()->GroupName());
+ }
+ 
++bool CGUIWindowPVRGuide::Update(const std::string &strDirectory, bool updateFilterPath /* = true */)
++{
++  bool bReturn = CGUIWindowPVRBase::Update(strDirectory, updateFilterPath);
++
++  if (bReturn && !m_bChannelSelectionRestored)
++  {
++    CGUIEPGGridContainer* epgGridContainer = GetGridControl();
++    if (epgGridContainer)
++      m_bChannelSelectionRestored = epgGridContainer->SetChannel(GetSelectedItemPath(m_bRadio));
++  }
++
++  return bReturn;
++}
++
+ bool CGUIWindowPVRGuide::GetDirectory(const std::string &strDirectory, CFileItemList &items)
+ {
+   bool bRefresh = false;
+@@ -478,7 +495,7 @@ bool CGUIWindowPVRGuide::OnContextButtonBegin(CFileItem *item, CONTEXT_BUTTON bu
+ 
+   if (button == CONTEXT_BUTTON_BEGIN)
+   {
+-    CGUIEPGGridContainer* epgGridContainer = (CGUIEPGGridContainer*) GetControl(m_viewControl.GetCurrentControl());
++    CGUIEPGGridContainer* epgGridContainer = GetGridControl();
+     epgGridContainer->GoToBegin();
+     bReturn = true;
+   }
+@@ -492,7 +509,7 @@ bool CGUIWindowPVRGuide::OnContextButtonEnd(CFileItem *item, CONTEXT_BUTTON butt
+ 
+   if (button == CONTEXT_BUTTON_END)
+   {
+-    CGUIEPGGridContainer* epgGridContainer = (CGUIEPGGridContainer*) GetControl(m_viewControl.GetCurrentControl());
++    CGUIEPGGridContainer* epgGridContainer = GetGridControl();
+     epgGridContainer->GoToEnd();
+     bReturn = true;
+   }
+@@ -506,7 +523,7 @@ bool CGUIWindowPVRGuide::OnContextButtonNow(CFileItem *item, CONTEXT_BUTTON butt
+ 
+   if (button == CONTEXT_BUTTON_NOW)
+   {
+-    CGUIEPGGridContainer* epgGridContainer = (CGUIEPGGridContainer*) GetControl(m_viewControl.GetCurrentControl());
++    CGUIEPGGridContainer* epgGridContainer = GetGridControl();
+     epgGridContainer->GoToNow();
+     bReturn = true;
+   }
+@@ -524,7 +541,7 @@ void CGUIWindowPVRGuide::OnInputDone()
+       const CEpgInfoTagPtr tag(event->GetEPGInfoTag());
+       if (tag->HasPVRChannel() && tag->PVRChannelNumber() == iChannelNumber)
+       {
+-        CGUIEPGGridContainer* epgGridContainer = dynamic_cast<CGUIEPGGridContainer*>(GetControl(m_viewControl.GetCurrentControl()));
++        CGUIEPGGridContainer* epgGridContainer = GetGridControl();
+         if (epgGridContainer)
+         {
+           epgGridContainer->SetChannel(tag->ChannelTag());
+diff --git a/xbmc/pvr/windows/GUIWindowPVRGuide.h b/xbmc/pvr/windows/GUIWindowPVRGuide.h
+index f4c5ffc..365f2da 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRGuide.h
++++ b/xbmc/pvr/windows/GUIWindowPVRGuide.h
+@@ -51,6 +51,7 @@ namespace PVR
+     virtual void UpdateButtons(void) override;
+     virtual void Notify(const Observable &obs, const ObservableMessage msg) override;
+     virtual void SetInvalid() override;
++    bool Update(const std::string &strDirectory, bool updateFilterPath = true) override;
+ 
+     bool RefreshTimelineItems();
+ 
+@@ -83,6 +84,8 @@ namespace PVR
+ 
+     CPVRChannelGroupPtr m_cachedChannelGroup;
+     std::unique_ptr<CFileItemList> m_newTimeline;
++
++    bool m_bChannelSelectionRestored;
+   };
+ 
+   class CPVRRefreshTimelineItemsThread : public CThread

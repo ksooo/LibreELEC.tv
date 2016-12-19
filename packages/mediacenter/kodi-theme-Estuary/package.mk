@@ -32,7 +32,7 @@ PKG_IS_ADDON="no"
 PKG_AUTORECONF="no"
 
 make_target() {
-  :
+  rm -rf $INSTALL/usr/share/kodi/addons/skin.estuary
 }
 
 makeinstall_target() {

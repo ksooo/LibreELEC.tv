@@ -1,0 +1,103 @@
+diff --git a/addons/resource.language.en_gb/resources/strings.po b/addons/resource.language.en_gb/resources/strings.po
+index a95bad8..7de18ea 100644
+--- a/addons/resource.language.en_gb/resources/strings.po
++++ b/addons/resource.language.en_gb/resources/strings.po
+@@ -9506,7 +9506,11 @@ msgctxt "#19095"
+ msgid "Timer rule creation failed. The PVR add-on does not support a suitable timer rule type."
+ msgstr ""
+ 
+-#empty string with id 19096
++#. label of a value for default epg event select action, where the action is choosen depending on whether the event is in the past, now or in the future
++#: system/settings/settings.xml
++msgctxt "#19096"
++msgid "\"Smart select\""
++msgstr ""
+ 
+ #. label of the help text for the timer name edit field in PVR timer settings dialog
+ #: xbmc/pvr/dialogs/GUIDialogPVRTimerSettings.cpp
+@@ -18989,7 +18993,7 @@ msgstr ""
+ 
+ #: system/settings/settings.xml
+ msgctxt "#36424"
+-msgid "Select what will happen when an item is selected in the guide: [Show context menu] Will trigger the context menu from where you can choose further actions; [Switch to channel] Will instantly tune to the related channel; [Show information] Will display a detailed information with plot and further options; [Record] Will create a recording timer for the selected item."
++msgid "Select what will happen when an item is selected in the guide: [Show context menu] Will trigger the context menu from where you can choose further actions; [Switch to channel] Will instantly tune to the related channel; [Show information] Will display a detailed information with plot and further options; [Record] Will create a recording timer for the selected item. [\"Smart select\"] The action is choosen dynamically, depending on whether the event is in the past, now or in the future."
+ msgstr ""
+ 
+ #: system/settings/settings.xml
+diff --git a/system/settings/settings.xml b/system/settings/settings.xml
+index cab84f1..a60b2b6 100644
+--- a/system/settings/settings.xml
++++ b/system/settings/settings.xml
+@@ -1325,13 +1325,14 @@
+         </setting>
+         <setting id="epg.selectaction" type="integer" label="22079" help="36424">
+           <level>1</level>
+-          <default>2</default> <!-- EPG_SELECT_ACTION_INFO -->
++          <default>5</default> <!-- EPG_SELECT_ACTION_SMART_SELECT -->
+           <constraints>
+             <options>
+               <option label="36425">0</option> <!-- EPG_SELECT_ACTION_CONTEXT_MENU -->
+               <option label="36426">1</option> <!-- EPG_SELECT_ACTION_SWITCH -->
+               <option label="36427">2</option> <!-- EPG_SELECT_ACTION_INFO -->
+               <option label="36428">3</option> <!-- EPG_SELECT_ACTION_RECORD -->
++              <option label="19096">5</option> <!-- EPG_SELECT_ACTION_SMART_SELECT -->
+             </options>
+           </constraints>
+           <control type="list" format="string" />
+diff --git a/xbmc/pvr/windows/GUIWindowPVRBase.h b/xbmc/pvr/windows/GUIWindowPVRBase.h
+index e646703..2b1e6fb 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRBase.h
++++ b/xbmc/pvr/windows/GUIWindowPVRBase.h
+@@ -50,6 +50,7 @@ namespace PVR
+     EPG_SELECT_ACTION_INFO           = 2,
+     EPG_SELECT_ACTION_RECORD         = 3,
+     EPG_SELECT_ACTION_PLAY_RECORDING = 4,
++    EPG_SELECT_ACTION_SMART_SELECT   = 5
+   };
+ 
+   class CGUIWindowPVRBase : public CGUIMediaWindow, public Observer
+diff --git a/xbmc/pvr/windows/GUIWindowPVRGuide.cpp b/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
+index 883ef43..4990003 100644
+--- a/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
++++ b/xbmc/pvr/windows/GUIWindowPVRGuide.cpp
+@@ -280,6 +280,40 @@ bool CGUIWindowPVRGuide::OnMessage(CGUIMessage& message)
+                   CPVRGUIActions::GetInstance().ToggleTimer(pItem);
+                   bReturn = true;
+                   break;
++                case EPG_SELECT_ACTION_SMART_SELECT:
++                {
++                  const CEpgInfoTagPtr tag(pItem->GetEPGInfoTag());
++                  if (tag)
++                  {
++                    const CDateTime start(tag->StartAsUTC());
++                    const CDateTime end(tag->EndAsUTC());
++                    const CDateTime now(CDateTime::GetUTCDateTime());
++
++                    if (start <= now && now <= end)
++                    {
++                      // current event
++                      CPVRGUIActions::GetInstance().SwitchToChannel(pItem, true);
++                    }
++                    else if (now < start)
++                    {
++                      // future event
++                      if (tag->HasTimer())
++                        CPVRGUIActions::GetInstance().EditTimer(pItem);
++                      else
++                        CPVRGUIActions::GetInstance().AddTimer(pItem, false);
++                    }
++                    else
++                    {
++                      // past event
++                      if (tag->HasRecording())
++                        CPVRGUIActions::GetInstance().PlayRecording(pItem, true);
++                      else
++                        CPVRGUIActions::GetInstance().ShowEPGInfo(pItem);
++                    }
++                    bReturn = true;
++                  }
++                  break;
++                }
+               }
+               break;
+             case ACTION_SHOW_INFO:
