@@ -1,0 +1,21 @@
+diff --git a/src/libcec/CECClient.cpp b/src/libcec/CECClient.cpp
+index b777faa..b4bf90c 100644
+--- a/src/libcec/CECClient.cpp
++++ b/src/libcec/CECClient.cpp
+@@ -232,6 +232,8 @@ void CCECClient::SetPhysicalAddress(const libcec_configuration &configuration)
+   if (!bPASet && CLibCEC::IsValidPhysicalAddress(configuration.iPhysicalAddress))
+     bPASet = SetPhysicalAddress(configuration.iPhysicalAddress);
+ 
++// disable auto detect; it does not work for me.
++#if 0
+   // try to autodetect the address
+   if (!bPASet && m_processor->CECInitialised())
+   {
+@@ -240,6 +242,7 @@ void CCECClient::SetPhysicalAddress(const libcec_configuration &configuration)
+       SetDevicePhysicalAddress(m_configuration.iPhysicalAddress);
+     m_configuration.bAutodetectAddress = bPASet ? 1 : 0;
+   }
++#endif
+ 
+   // use the base device + hdmi port settings
+   if (!bPASet)
