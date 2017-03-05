@@ -1,0 +1,121 @@
+diff --git a/xbmc/weather/WeatherJob.cpp b/xbmc/weather/WeatherJob.cpp
+index f1b629b81a..828812add7 100644
+--- a/xbmc/weather/WeatherJob.cpp
++++ b/xbmc/weather/WeatherJob.cpp
+@@ -32,6 +32,7 @@
+ #include "ServiceBroker.h"
+ #include "settings/lib/Setting.h"
+ #include "settings/Settings.h"
++#include "threads/SystemClock.h"
+ #include "utils/log.h"
+ #include "utils/POUtils.h"
+ #include "utils/StringUtils.h"
+@@ -55,14 +56,48 @@ CWeatherJob::CWeatherJob(int location)
+ }
+ 
+ bool CWeatherJob::DoWork()
++{
++  // In case of error, retry max 5 times, but unconditionally stop after 5 minutes
++  int nTries = 5;
++  XbmcThreads::EndTime timeout(5 * 60 * 1000);
++
++  while (!ShouldCancel(0, 0) && (nTries > 0))
++  {
++    if (timeout.IsTimePast())
++    {
++      CLog::Log(LOGERROR, "WEATHER: timeout while downloading data!");
++      return false;
++    }
++
++    CLog::Log(LOGNOTICE, "WEATHER: downloading, tries left: %d", nTries);
++    nTries--;
++
++    if (UpdateData())
++      return true;
++
++    if (!ShouldCancel(0, 0) && (nTries > 0))
++      Sleep(5000);
++  }
++
++  CLog::Log(LOGERROR, "WEATHER: no data after max retries!");
++  return false;
++}
++
++bool CWeatherJob::UpdateData()
+ {
+   // wait for the network
+   if (!CServiceBroker::GetNetwork().IsAvailable())
++  {
++    CLog::Log(LOGERROR, "WEATHER: No network!");
+     return false;
++  }
+ 
+   AddonPtr addon;
+   if (!CServiceBroker::GetAddonMgr().GetAddon(CServiceBroker::GetSettings().GetString(CSettings::SETTING_WEATHER_ADDON), addon, ADDON_SCRIPT_WEATHER))
++  {
++    CLog::Log(LOGERROR, "WEATHER: No addon!");
+     return false;
++  }
+ 
+   // initialize our sys.argv variables
+   std::vector<std::string> argv;
+@@ -89,10 +124,21 @@ bool CWeatherJob::DoWork()
+     // and send a message that we're done
+     CGUIMessage msg(GUI_MSG_NOTIFY_ALL,0,0,GUI_MSG_WEATHER_FETCHED);
+     g_windowManager.SendThreadMessage(msg);
++
++    /* Check for success. Not perfect, but no way to get the return code from script execution. */
++    if (m_info.currentConditions.empty() || m_info.currentConditions == "N/A")
++    {
++      CLog::Log(LOGERROR, "WEATHER: No data after weather download!");
++      return false;
++    }
+   }
+   else
++  {
+     CLog::Log(LOGERROR, "WEATHER: Weather download failed!");
++    return false;
++  }
+ 
++  CLog::Log(LOGNOTICE, "WEATHER: Weather download okay!");
+   return true;
+ }
+ 
+diff --git a/xbmc/weather/WeatherJob.h b/xbmc/weather/WeatherJob.h
+index 2a705d1acb..63353c11d1 100644
+--- a/xbmc/weather/WeatherJob.h
++++ b/xbmc/weather/WeatherJob.h
+@@ -33,6 +33,8 @@ public:
+ 
+   const CWeatherInfo &GetInfo() const;
+ private:
++  bool UpdateData();
++
+   static std::string ConstructPath(std::string in);
+   void LocalizeOverview(std::string &str);
+   void LocalizeOverviewToken(std::string &str);
+diff --git a/xbmc/weather/WeatherManager.cpp b/xbmc/weather/WeatherManager.cpp
+index 7261d5a4b9..2e6697095e 100644
+--- a/xbmc/weather/WeatherManager.cpp
++++ b/xbmc/weather/WeatherManager.cpp
+@@ -45,10 +45,17 @@ CWeatherManager::~CWeatherManager(void) = default;
+ 
+ std::string CWeatherManager::BusyInfo(int info) const
+ {
+-  if (info == WEATHER_IMAGE_CURRENT_ICON)
+-    return URIUtils::AddFileToFolder(ICON_ADDON_PATH, "na.png");
++  if (m_info.lastUpdateTime.empty())
++  {
++    /* No data present. Show placeholder ("n/a", "busy", ...) */
++    if (info == WEATHER_IMAGE_CURRENT_ICON)
++      return URIUtils::AddFileToFolder(ICON_ADDON_PATH, "na.png");
++
++    return CInfoLoader::BusyInfo(info);
++  }
+ 
+-  return CInfoLoader::BusyInfo(info);
++  /* Use outdated data - better than just a placeholder */
++  return TranslateInfo(info);
+ }
+ 
+ std::string CWeatherManager::TranslateInfo(int info) const

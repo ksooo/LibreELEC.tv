@@ -1,0 +1,13 @@
+diff --git a/xbmc/filesystem/AddonsDirectory.cpp b/xbmc/filesystem/AddonsDirectory.cpp
+index dbdac8dc65..38fd6090d1 100644
+--- a/xbmc/filesystem/AddonsDirectory.cpp
++++ b/xbmc/filesystem/AddonsDirectory.cpp
+@@ -655,7 +655,7 @@ static void RootDirectory(CFileItemList& items)
+     items.Add(item);
+   }
+   {
+-    CFileItemPtr item(new CFileItem("addons://install/", false));
++    CFileItemPtr item(new CFileItem("addons://install/", true));
+     item->SetLabel(g_localizeStrings.Get(24041));
+     item->SetIconImage("DefaultAddonsZip.png");
+     items.Add(item);

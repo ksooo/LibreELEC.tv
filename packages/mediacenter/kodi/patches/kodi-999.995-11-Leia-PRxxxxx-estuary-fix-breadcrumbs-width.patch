@@ -1,0 +1,87 @@
+diff --git a/addons/skin.estuary/xml/Includes.xml b/xml/Includes.xml
+index b7d3de2..89a1542 100644
+--- a/addons/skin.estuary/xml/Includes.xml
++++ b/xml/Includes.xml
+@@ -910,7 +910,7 @@
+ 						<label>$INFO[Container.FolderName, / ]</label>
+ 						<include>BreadcrumbsLabel</include>
+ 						<visible>![Container.Content() + Window.IsActive(videos)]</visible>
+-						<visible>![Window.IsActive(MyPVRChannels.xml) | Window.IsActive(MyPVRTimers.xml) | Window.IsActive(MyPVRRecordings.xml) | Window.IsActive(MyPVRSearch.xml)]</visible>
++						<visible>![Window.IsActive(MyMusicPlaylistEditor.xml) | Window.IsActive(MyPics.xml) | Window.IsActive(MyMusicNav.xml) | Window.IsActive(MyPVRChannels.xml) | Window.IsActive(MyPVRTimers.xml) | Window.IsActive(MyPVRRecordings.xml) | Window.IsActive(MyPVRSearch.xml)]</visible>
+ 					</control>
+ 					<control type="label">
+ 						<label>$INFO[Container.PluginCategory, / ]</label>
+@@ -1085,7 +1085,7 @@
+ 		<shadowcolor>text_shadow</shadowcolor>
+ 		<top>7</top>
+ 		<height>100</height>
+-		<width>auto</width>
++		<width min="1" max="900">auto</width>
+ 	</include>
+ 	<include name="ColoredBackgroundImages">
+ 		<control type="image">
+diff --git a/addons/skin.estuary/xml/MyMusicNav.xml b/xml/MyMusicNav.xml
+index 2b200bd..3a85ab0 100644
+--- a/addons/skin.estuary/xml/MyMusicNav.xml
++++ b/xml/MyMusicNav.xml
+@@ -22,7 +22,7 @@
+ 				<include>ListThumbInfoPanel</include>
+ 			</control>
+ 			<include content="TopBar">
+-				<param name="breadcrumbs_label" value="$LOCALIZE[2]" />
++				<param name="breadcrumbs_label" value="$VAR[BreadcrumbsMusicVar]" />
+ 			</include>
+ 			<include content="BottomBar">
+ 				<param name="info_visible" value="true" />
+diff --git a/addons/skin.estuary/xml/MyMusicPlaylistEditor.xml b/xml/MyMusicPlaylistEditor.xml
+index 1ee80de..bb18848 100644
+--- a/addons/skin.estuary/xml/MyMusicPlaylistEditor.xml
++++ b/xml/MyMusicPlaylistEditor.xml
+@@ -89,7 +89,7 @@
+ 			</control>
+ 		</control>
+ 		<include content="TopBar">
+-			<param name="breadcrumbs_label" value="$LOCALIZE[10503][COLOR=button_focus][/COLOR]" />
++			<param name="breadcrumbs_label" value="$VAR[BreadcrumbsMusicPlaylistEditorVar]" />
+ 		</include>
+ 		<include>BottomBar</include>
+ 		<include content="BottomBarTwoListInfo">
+diff --git a/addons/skin.estuary/xml/MyPics.xml b/xml/MyPics.xml
+index f5edb42..ec026fb 100644
+--- a/addons/skin.estuary/xml/MyPics.xml
++++ b/xml/MyPics.xml
+@@ -197,7 +197,7 @@
+ 				<include>ListThumbInfoPanel</include>
+ 			</control>
+ 			<include content="TopBar">
+-				<param name="breadcrumbs_label" value="$LOCALIZE[1213]" />
++				<param name="breadcrumbs_label" value="$VAR[BreadcrumbsPicsVar]" />
+ 			</include>
+ 			<include content="BottomBar">
+ 				<param name="info_visible" value="true" />
+diff --git a/addons/skin.estuary/xml/Variables.xml b/xml/Variables.xml
+index 3871668..80fd7bf 100644
+--- a/addons/skin.estuary/xml/Variables.xml
++++ b/xml/Variables.xml
+@@ -316,10 +316,19 @@
+ 		<value condition="Integer.IsGreater(ListItem.Playcount,0)">$INFO[ListItem.Overlay]</value>
+ 	</variable>
+ 	<!-- Breadcrumbs -->
++	<variable name="BreadcrumbsMusicPlaylistEditorVar">
++		<value>$LOCALIZE[10503] / $INFO[Container.FolderName]</value>
++	</variable>
++	<variable name="BreadcrumbsPicsVar">
++		<value>$LOCALIZE[1213] / $INFO[Container.FolderName]</value>
++	</variable>
++	<variable name="BreadcrumbsMusicVar">
++		<value>$LOCALIZE[2] / $INFO[Container.FolderName]</value>
++	</variable>
+ 	<variable name="BreadcrumbsVideoVar">
+ 		<value condition="Container.Content(movies) | String.StartsWith(container.folderpath,library://video/movies/) | String.StartsWith(container.folderpath,videodb://movies)">$LOCALIZE[20342]</value>
+-		<value condition="Container.Content(musicvideos) | String.StartsWith(container.folderpath,library://video/musicvideos/) | String.StartsWith(container.folderpath,videodb://musicvideos)">$LOCALIZE[20389]</value>
+-		<value condition="Container.Content(tvshows) | String.StartsWith(container.folderpath,library://video/tvshows/) | String.StartsWith(container.folderpath,videodb://tvshows)">$LOCALIZE[20343]</value>
++		<value condition="Container.Content(musicvideos) | String.StartsWith(container.folderpath,library://video/musicvideos/) | String.StartsWith(container.folderpath,videodb://musicvideos)">$LOCALIZE[20389] / $INFO[Container.FolderName]</value>
++		<value condition="Container.Content(tvshows) | String.StartsWith(container.folderpath,library://video/tvshows/) | String.StartsWith(container.folderpath,videodb://tvshows)">$LOCALIZE[20343] / $INFO[Container.FolderName]</value>
+ 		<value condition="Container.Content(seasons)">$LOCALIZE[20343]</value>
+ 		<value condition="Container.Content(episodes)">$LOCALIZE[20343]</value>
+ 		<value>$LOCALIZE[3]</value>
