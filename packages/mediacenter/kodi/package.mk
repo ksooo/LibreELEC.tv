@@ -17,8 +17,7 @@
 ################################################################################
 
 PKG_NAME="kodi"
-PKG_VERSION="a8fe8e3"
-PKG_SHA256="de78083caa9afe295cbeab9596b3266385f1cd568fa1b085a9f2ddf696d941a5"
+PKG_VERSION="49dc1784c3d127881f71e4853a99024f0ec82296"
 PKG_ARCH="any"
 PKG_LICENSE="GPL"
 PKG_SITE="http://www.kodi.tv"
@@ -29,6 +28,8 @@ PKG_SECTION="mediacenter"
 PKG_SHORTDESC="kodi: Kodi Mediacenter"
 PKG_LONGDESC="Kodi Media Center (which was formerly named Xbox Media Center or XBMC) is a free and open source cross-platform media player and home entertainment system software with a 10-foot user interface designed for the living-room TV. Its graphical user interface allows the user to easily manage video, photos, podcasts, and music from a computer, optical disk, local network, and the internet using a remote control."
 PKG_AUTORECONF="no"
+
+#DEBUG="yes"
 
 get_graphicdrivers
 

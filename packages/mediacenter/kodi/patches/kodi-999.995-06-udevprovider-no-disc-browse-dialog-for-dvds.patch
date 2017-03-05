@@ -1,0 +1,15 @@
+diff --git a/xbmc/storage/linux/UDevProvider.cpp b/xbmc/storage/linux/UDevProvider.cpp
+index 6fda5a5..feec1c7 100644
+--- a/xbmc/storage/linux/UDevProvider.cpp
++++ b/xbmc/storage/linux/UDevProvider.cpp
+@@ -269,7 +269,9 @@ bool CUDevProvider::PumpDriveChangeEvents(IStorageEventsCallback *callback)
+       }
+       // browse disk dialog is not wanted for blu-rays
+       const char *bd = udev_device_get_property_value(dev, "ID_CDROM_MEDIA_BD");
+-      if (strcmp(action, "change") == 0 && !(bd && strcmp(bd, "1") == 0))
++      // browse disk dialog is not wanted for dvds
++      const char *dvd = udev_device_get_property_value(dev, "ID_CDROM_MEDIA_DVD");
++      if (strcmp(action, "change") == 0 && !(bd && strcmp(bd, "1") == 0) && !(dvd && strcmp(dvd, "1") == 0))
+       {
+         const char *optical = udev_device_get_property_value(dev, "ID_CDROM");
+         if (mountpoint && (optical && strcmp(optical, "1") == 0))
