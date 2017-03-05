@@ -1,0 +1,28 @@
+diff --git a/xbmc/cores/VideoPlayer/VideoPlayer.cpp b/xbmc/cores/VideoPlayer/VideoPlayer.cpp
+index 3c6f31d..5c3aaf0 100644
+--- a/xbmc/cores/VideoPlayer/VideoPlayer.cpp
++++ b/xbmc/cores/VideoPlayer/VideoPlayer.cpp
+@@ -4536,6 +4536,11 @@ bool CVideoPlayer::OnAction(const CAction &action)
+             return true;
+           }
+         }
++        if (!CServiceBroker::GetPVRManager().GetCurrentChannel())
++        {
++          // If this is a recording, then handle the actions in the next block
++          break;
++        }
+         bool bPreview(action.GetID() == ACTION_MOVE_UP && // only up/down shows a preview, all others do switch
+                       CServiceBroker::GetSettings().GetBool(CSettings::SETTING_PVRPLAYBACK_CONFIRMCHANNELSWITCH));
+ 
+@@ -4589,6 +4594,11 @@ bool CVideoPlayer::OnAction(const CAction &action)
+             return true;
+           }
+         }
++        if (!CServiceBroker::GetPVRManager().GetCurrentChannel())
++        {
++          // If this is a recording, then handle the actions in the next block
++          break;
++        }
+         bool bPreview(action.GetID() == ACTION_MOVE_DOWN && // only up/down shows a preview, all others do switch
+                       CServiceBroker::GetSettings().GetBool(CSettings::SETTING_PVRPLAYBACK_CONFIRMCHANNELSWITCH));
+ 

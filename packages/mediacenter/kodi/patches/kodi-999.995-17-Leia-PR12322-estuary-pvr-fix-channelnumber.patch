@@ -1,0 +1,22 @@
+diff --git a/addons/skin.estuary/xml/DialogSeekBar.xml b/addons/skin.estuary/xml/DialogSeekBar.xml
+index e537889..9469f87 100644
+--- a/addons/skin.estuary/xml/DialogSeekBar.xml
++++ b/addons/skin.estuary/xml/DialogSeekBar.xml
+@@ -200,6 +200,17 @@
+ 				<texture>$INFO[Player.Art(thumb)]</texture>
+ 			</control>
+ 			<control type="label">
++				<left>20</left>
++				<width>220</width>
++				<top>-80</top>
++				<height>25</height>
++				<label>$INFO[VideoPlayer.ChannelNumberLabel]</label>
++				<shadowcolor>black</shadowcolor>
++				<align>center</align>
++				<font>WeatherTemp</font>
++				<aligny>center</aligny>
++			</control>
++			<control type="label">
+ 				<right>20</right>
+ 				<width>800</width>
+ 				<top>190</top>

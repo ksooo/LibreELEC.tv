@@ -1,0 +1,50 @@
+diff --git a/xbmc/listproviders/DirectoryProvider.cpp b/xbmc/listproviders/DirectoryProvider.cpp
+index 8b754ea..717dd34 100644
+--- a/xbmc/listproviders/DirectoryProvider.cpp
++++ b/xbmc/listproviders/DirectoryProvider.cpp
+@@ -35,6 +35,7 @@
+ #include "music/MusicThumbLoader.h"
+ #include "pictures/PictureThumbLoader.h"
+ #include "pvr/PVRManager.h"
++#include "pvr/dialogs/GUIDialogPVRGuideInfo.h"
+ #include "pvr/dialogs/GUIDialogPVRRecordingInfo.h"
+ #include "settings/Settings.h"
+ #include "threads/SingleLock.h"
+@@ -396,6 +397,11 @@ bool CDirectoryProvider::OnInfo(const CGUIListItemPtr& item)
+     CGUIDialogPVRRecordingInfo::ShowFor(fileItem);
+     return true;
+   }
++  else if (fileItem->HasPVRChannelInfoTag())
++  {
++    CGUIDialogPVRGuideInfo::ShowFor(fileItem);
++    return true;
++  }
+   else if (fileItem->HasVideoInfoTag())
+   {
+     auto mediaType = fileItem->GetVideoInfoTag()->m_type;
+diff --git a/xbmc/pvr/dialogs/GUIDialogPVRGuideInfo.cpp b/xbmc/pvr/dialogs/GUIDialogPVRGuideInfo.cpp
+index f3432c3..3e47312 100644
+--- a/xbmc/pvr/dialogs/GUIDialogPVRGuideInfo.cpp
++++ b/xbmc/pvr/dialogs/GUIDialogPVRGuideInfo.cpp
+@@ -257,3 +257,8 @@ void CGUIDialogPVRGuideInfo::OnInitWindow()
+   if (bHideAddTimer)
+     SET_CONTROL_HIDDEN(CONTROL_BTN_ADD_TIMER);
+ }
++
++void CGUIDialogPVRGuideInfo::ShowFor(const CFileItemPtr& item)
++{
++  CServiceBroker::GetPVRManager().GUIActions()->ShowEPGInfo(item);
++}
+diff --git a/xbmc/pvr/dialogs/GUIDialogPVRGuideInfo.h b/xbmc/pvr/dialogs/GUIDialogPVRGuideInfo.h
+index ade05aa..21e3862 100644
+--- a/xbmc/pvr/dialogs/GUIDialogPVRGuideInfo.h
++++ b/xbmc/pvr/dialogs/GUIDialogPVRGuideInfo.h
+@@ -37,6 +37,8 @@ namespace PVR
+ 
+     void SetProgInfo(const CPVREpgInfoTagPtr &tag);
+ 
++    static void ShowFor(const CFileItemPtr& item);
++
+   protected:
+     void OnInitWindow() override;
+ 

@@ -1,0 +1,13 @@
+diff --git a/xbmc/pvr/recordings/PVRRecording.cpp b/xbmc/pvr/recordings/PVRRecording.cpp
+index 9404250..47e5070 100644
+--- a/xbmc/pvr/recordings/PVRRecording.cpp
++++ b/xbmc/pvr/recordings/PVRRecording.cpp
+@@ -279,7 +279,7 @@ bool CPVRRecording::IncrementPlayCount()
+ {
+   PVR_ERROR error;
+   if (CServiceBroker::GetPVRManager().Clients()->SupportsRecordingPlayCount(m_iClientId) &&
+-      !CServiceBroker::GetPVRManager().Clients()->SetRecordingPlayCount(*this, CVideoInfoTag::GetPlayCount(), &error))
++      !CServiceBroker::GetPVRManager().Clients()->SetRecordingPlayCount(*this, CVideoInfoTag::GetPlayCount() + 1, &error))
+     return false;
+ 
+   return CVideoInfoTag::IncrementPlayCount();

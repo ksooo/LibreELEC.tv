@@ -1,0 +1,41 @@
+diff --git a/addons/skin.estuary/xml/DialogSeekBar.xml b/addons/skin.estuary/xml/DialogSeekBar.xml
+index 2aa3951..e537889 100644
+--- a/addons/skin.estuary/xml/DialogSeekBar.xml
++++ b/addons/skin.estuary/xml/DialogSeekBar.xml
+@@ -209,21 +209,11 @@
+ 				<aligny>center</aligny>
+ 				<visible>VideoPlayer.HasEpg</visible>
+ 			</control>
+-			<control type="label">
+-				<left>260</left>
+-				<right>50</right>
+-				<top>20</top>
+-				<height>25</height>
+-				<label>$INFO[VideoPlayer.Title]$INFO[VideoPlayer.EpisodeName, (,)]</label>
+-				<align>left</align>
+-				<font>font36_title</font>
+-				<aligny>center</aligny>
+-			</control>
+ 			<control type="textbox">
+ 				<left>260</left>
+-				<top>55</top>
++				<top>20</top>
+ 				<right>50</right>
+-				<height>120</height>
++				<height>155</height>
+ 				<label fallback="416">$INFO[VideoPlayer.Plot]</label>
+ 				<align>justify</align>
+ 				<autoscroll delay="5000" repeat="7500" time="5000"></autoscroll>
+diff --git a/addons/skin.estuary/xml/Variables.xml b/addons/skin.estuary/xml/Variables.xml
+index 3871668..c5b4a69 100644
+--- a/addons/skin.estuary/xml/Variables.xml
++++ b/addons/skin.estuary/xml/Variables.xml
+@@ -264,7 +264,7 @@
+ 		<value condition="Window.IsActive(visualisation) + Integer.IsGreater(Playlist.Length,1)">$LOCALIZE[554] $INFO[Playlist.Position] / $INFO[Playlist.Length]</value>
+ 		<value condition="VideoPlayer.Content(musicvideos)">$INFO[VideoPlayer.Artist]$INFO[VideoPlayer.Album, - ]</value>
+ 		<value condition="VideoPlayer.Content(episodes)">$INFO[VideoPlayer.Season,[COLOR button_focus]S,[/COLOR]]$INFO[VideoPlayer.Episode,[COLOR button_focus]E,: [/COLOR]]$INFO[VideoPlayer.TVShowTitle]</value>
+-		<value condition="VideoPlayer.Content(LiveTV) | PVR.IsPlayingRecording">$INFO[VideoPlayer.ChannelNumberLabel,([COLOR=blue],[/COLOR]) ]$INFO[VideoPlayer.ChannelName]</value>
++		<value condition="VideoPlayer.Content(LiveTV) | PVR.IsPlayingRecording">$INFO[VideoPlayer.ChannelNumberLabel,([COLOR=blue],[/COLOR]) ]$INFO[VideoPlayer.ChannelName] $INFO[VideoPlayer.EpisodeName, - ]</value>
+ 		<value>$INFO[VideoPlayer.Genre]</value>
+ 	</variable>
+ 	<variable name="AddonsFanartVar">

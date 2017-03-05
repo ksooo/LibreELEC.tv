@@ -34,13 +34,13 @@ index 8f62079..a54682a 100644
    if (CAddonMgr::GetInstance().ServicesHasStarted())
    {
      if (CAddonMgr::GetInstance().GetAddon(id, addon, ADDON_SERVICE))
-@@ -379,6 +391,11 @@ void OnDisabled(const std::string& id)
-     if (CAddonMgr::GetInstance().GetAddon(id, addon, ADDON_SERVICE, false))
+@@ -372,6 +384,11 @@ void OnDisabled(const std::string& id)
+     if (CAddonMgr::GetInstance().GetAddon(id, addon, ADDON_SERVICE))
        std::static_pointer_cast<CService>(addon)->Stop();
    }
 +
 +  // OE: systemctl stop & disable on addon disable
-+  if (CAddonMgr::GetInstance().GetAddon(id, addon, ADDON_SERVICE, false))
++  if (CAddonMgr::GetInstance().GetAddon(id, addon, ADDON_SERVICE))
 +    CallOEWrapper(addon->ID(), true);
 +  // OE
  }

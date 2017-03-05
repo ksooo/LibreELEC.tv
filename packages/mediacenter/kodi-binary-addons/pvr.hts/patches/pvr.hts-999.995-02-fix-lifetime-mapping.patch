@@ -1,0 +1,296 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 0c7715f..9e6bf78 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -65,6 +65,7 @@ set(HTS_SOURCES_TVHEADEND_UTILITIES
+                 src/tvheadend/utilities/Utilities.h
+                 src/tvheadend/utilities/Logger.h
+                 src/tvheadend/utilities/Logger.cpp
++                src/tvheadend/utilities/LifetimeMapper.h
+                 src/tvheadend/utilities/AsyncState.cpp
+                 src/tvheadend/utilities/AsyncState.h)
+                 
+diff --git a/pvr.hts/addon.xml.in b/pvr.hts/addon.xml.in
+index bad8373..3d2f6be 100644
+--- a/pvr.hts/addon.xml.in
++++ b/pvr.hts/addon.xml.in
+@@ -1,7 +1,7 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+ <addon
+   id="pvr.hts"
+-  version="4.0.15"
++  version="4.0.17"
+   name="Tvheadend HTSP Client"
+   provider-name="Adam Sutton, Sam Stenvall, Lars Op den Kamp, Kai Sommerfeld">
+   <requires>@ADDON_DEPENDS@</requires>
+@@ -183,7 +183,7 @@
+     <disclaimer lang="vi_VN">Đây là phần mềm không ổn định! Các tác giả không chịu trách nhiệm đối với bản ghi âm thất bại, giờ không chính xác, giờ lãng phí, hoặc bất kỳ tác dụng không mong muốn khác..</disclaimer>
+     <disclaimer lang="zh_CN">这是不稳定版的软件！作者不对录像失败、错误定时造成时间浪费或其它不良影响负责。</disclaimer>
+     <disclaimer lang="zh_TW">這是測試版軟體！其原創作者並無法對於以下情況負責，包含：錄影失敗，不正確的定時設定，多餘時數，或任何產生的其它不良影響...</disclaimer>
+-    <news>Added support for 'default' recording priority setting value</news>
++    <news>Fixed timer/recordings lifetime special values mapping ("until space needed", "forever").</news>
+     <platform>@PLATFORM@</platform>
+   </extension>
+ </addon>
+diff --git a/src/AutoRecordings.cpp b/src/AutoRecordings.cpp
+index eff021a..824e4b2 100644
+--- a/src/AutoRecordings.cpp
++++ b/src/AutoRecordings.cpp
+@@ -25,6 +25,7 @@
+ #include "tvheadend/Settings.h"
+ #include "tvheadend/utilities/Utilities.h"
+ #include "tvheadend/utilities/Logger.h"
++#include "tvheadend/utilities/LifetimeMapper.h"
+ 
+ using namespace P8PLATFORM;
+ using namespace tvheadend;
+@@ -211,7 +212,7 @@ PVR_ERROR AutoRecordings::SendAutorecAddOrUpdate(const PVR_TIMER &timer, bool up
+   }
+   else
+   {
+-    htsmsg_add_u32(m, "retention", timer.iLifetime);            // remove from tvh database
++    htsmsg_add_u32(m, "retention", LifetimeMapper::KodiToTvh(timer.iLifetime)); // remove from tvh database
+ 
+     if (timer.iClientChannelUid >= 0)
+       htsmsg_add_u32(m, "channelId", timer.iClientChannelUid);  // channelId is unsigned for < htspv25, not sending = any
+diff --git a/src/HTSPTypes.h b/src/HTSPTypes.h
+index ad455d9..ace9543 100644
+--- a/src/HTSPTypes.h
++++ b/src/HTSPTypes.h
+@@ -82,7 +82,6 @@ typedef enum {
+   DVR_RET_1YEAR     = 366,
+   DVR_RET_2YEARS    = 731,
+   DVR_RET_3YEARS    = 1096,
+-  DVR_RET_ONREMOVE  = INT32_MAX-1,  // the server will delete the db entry when the actual recording gets deleted (retention only)
+   DVR_RET_SPACE     = INT32_MAX-1,  // the server may delete this recording if space for a new recording is needed (removal only)
+   DVR_RET_FOREVER   = INT32_MAX     // the server should never delete this recording or database entry, only the user can do this
+ } dvr_retention_t;
+diff --git a/src/TimeRecordings.cpp b/src/TimeRecordings.cpp
+index afab48a..893f7b4 100644
+--- a/src/TimeRecordings.cpp
++++ b/src/TimeRecordings.cpp
+@@ -24,6 +24,7 @@
+ #include "Tvheadend.h"
+ #include "tvheadend/utilities/Utilities.h"
+ #include "tvheadend/utilities/Logger.h"
++#include "tvheadend/utilities/LifetimeMapper.h"
+ 
+ using namespace P8PLATFORM;
+ using namespace tvheadend;
+@@ -182,7 +183,7 @@ PVR_ERROR TimeRecordings::SendTimerecAddOrUpdate(const PVR_TIMER &timer, bool up
+   }
+   else
+   {
+-    htsmsg_add_u32(m, "retention", timer.iLifetime);          // remove from tvh database
++    htsmsg_add_u32(m, "retention", LifetimeMapper::KodiToTvh(timer.iLifetime)); // remove from tvh database
+     htsmsg_add_u32(m, "channelId", timer.iClientChannelUid);  // channelId is unsigned for < htspv25
+   }
+ 
+diff --git a/src/Tvheadend.cpp b/src/Tvheadend.cpp
+index 55c936e..f972baa 100644
+--- a/src/Tvheadend.cpp
++++ b/src/Tvheadend.cpp
+@@ -26,6 +26,7 @@
+ #include "Tvheadend.h"
+ #include "tvheadend/utilities/Utilities.h"
+ #include "tvheadend/utilities/Logger.h"
++#include "tvheadend/utilities/LifetimeMapper.h"
+ 
+ using namespace std;
+ using namespace ADDON;
+@@ -672,7 +673,7 @@ struct TimerType : PVR_TIMER_TYPE
+     iPreventDuplicateEpisodesSize    = dupEpisodesValues.size();
+     iPreventDuplicateEpisodesDefault = Settings::GetInstance().GetDvrDupdetect();
+     iLifetimesSize                   = lifetimeValues.size();
+-    iLifetimesDefault                = Settings::GetInstance().GetDvrLifetime();
++    iLifetimesDefault                = LifetimeMapper::TvhToKodi(Settings::GetInstance().GetDvrLifetime());
+ 
+     strncpy(strDescription, description.c_str(), sizeof(strDescription) - 1);
+ 
+@@ -737,23 +738,23 @@ PVR_ERROR CTvheadend::GetTimerTypes ( PVR_TIMER_TYPE types[], int *size )
+   /* PVR_Timer.iLifetime values and presentation.*/
+   std::vector< std::pair<int, std::string> > lifetimeValues;
+ 
+-  lifetimeValues.push_back(std::make_pair(DVR_RET_1DAY,    XBMC->GetLocalizedString(30375)));
+-  lifetimeValues.push_back(std::make_pair(DVR_RET_3DAY,    XBMC->GetLocalizedString(30376)));
+-  lifetimeValues.push_back(std::make_pair(DVR_RET_5DAY,    XBMC->GetLocalizedString(30377)));
+-  lifetimeValues.push_back(std::make_pair(DVR_RET_1WEEK,   XBMC->GetLocalizedString(30378)));
+-  lifetimeValues.push_back(std::make_pair(DVR_RET_2WEEK,   XBMC->GetLocalizedString(30379)));
+-  lifetimeValues.push_back(std::make_pair(DVR_RET_3WEEK,   XBMC->GetLocalizedString(30380)));
+-  lifetimeValues.push_back(std::make_pair(DVR_RET_1MONTH,  XBMC->GetLocalizedString(30381)));
+-  lifetimeValues.push_back(std::make_pair(DVR_RET_2MONTH,  XBMC->GetLocalizedString(30382)));
+-  lifetimeValues.push_back(std::make_pair(DVR_RET_3MONTH,  XBMC->GetLocalizedString(30383)));
+-  lifetimeValues.push_back(std::make_pair(DVR_RET_6MONTH,  XBMC->GetLocalizedString(30384)));
+-  lifetimeValues.push_back(std::make_pair(DVR_RET_1YEAR,   XBMC->GetLocalizedString(30385)));
+-  lifetimeValues.push_back(std::make_pair(DVR_RET_2YEARS,  XBMC->GetLocalizedString(30386)));
+-  lifetimeValues.push_back(std::make_pair(DVR_RET_3YEARS,  XBMC->GetLocalizedString(30387)));
++  lifetimeValues.push_back(std::make_pair(LifetimeMapper::TvhToKodi(DVR_RET_1DAY),    XBMC->GetLocalizedString(30375)));
++  lifetimeValues.push_back(std::make_pair(LifetimeMapper::TvhToKodi(DVR_RET_3DAY),    XBMC->GetLocalizedString(30376)));
++  lifetimeValues.push_back(std::make_pair(LifetimeMapper::TvhToKodi(DVR_RET_5DAY),    XBMC->GetLocalizedString(30377)));
++  lifetimeValues.push_back(std::make_pair(LifetimeMapper::TvhToKodi(DVR_RET_1WEEK),   XBMC->GetLocalizedString(30378)));
++  lifetimeValues.push_back(std::make_pair(LifetimeMapper::TvhToKodi(DVR_RET_2WEEK),   XBMC->GetLocalizedString(30379)));
++  lifetimeValues.push_back(std::make_pair(LifetimeMapper::TvhToKodi(DVR_RET_3WEEK),   XBMC->GetLocalizedString(30380)));
++  lifetimeValues.push_back(std::make_pair(LifetimeMapper::TvhToKodi(DVR_RET_1MONTH),  XBMC->GetLocalizedString(30381)));
++  lifetimeValues.push_back(std::make_pair(LifetimeMapper::TvhToKodi(DVR_RET_2MONTH),  XBMC->GetLocalizedString(30382)));
++  lifetimeValues.push_back(std::make_pair(LifetimeMapper::TvhToKodi(DVR_RET_3MONTH),  XBMC->GetLocalizedString(30383)));
++  lifetimeValues.push_back(std::make_pair(LifetimeMapper::TvhToKodi(DVR_RET_6MONTH),  XBMC->GetLocalizedString(30384)));
++  lifetimeValues.push_back(std::make_pair(LifetimeMapper::TvhToKodi(DVR_RET_1YEAR),   XBMC->GetLocalizedString(30385)));
++  lifetimeValues.push_back(std::make_pair(LifetimeMapper::TvhToKodi(DVR_RET_2YEARS),  XBMC->GetLocalizedString(30386)));
++  lifetimeValues.push_back(std::make_pair(LifetimeMapper::TvhToKodi(DVR_RET_3YEARS),  XBMC->GetLocalizedString(30387)));
+   if (m_conn.GetProtocol() >= 25)
+   {
+-    lifetimeValues.push_back(std::make_pair(DVR_RET_SPACE,   XBMC->GetLocalizedString(30373)));
+-    lifetimeValues.push_back(std::make_pair(DVR_RET_FOREVER, XBMC->GetLocalizedString(30374)));
++    lifetimeValues.push_back(std::make_pair(LifetimeMapper::TvhToKodi(DVR_RET_SPACE),   XBMC->GetLocalizedString(30373)));
++    lifetimeValues.push_back(std::make_pair(LifetimeMapper::TvhToKodi(DVR_RET_FOREVER), XBMC->GetLocalizedString(30374)));
+   }
+ 
+   unsigned int TIMER_ONCE_MANUAL_ATTRIBS
+@@ -1067,9 +1068,9 @@ PVR_ERROR CTvheadend::AddTimer ( const PVR_TIMER &timer )
+     htsmsg_add_s64(m, "stopExtra",  timer.iMarginEnd);
+ 
+     if (m_conn.GetProtocol() >= 25)
+-      htsmsg_add_u32(m, "removal",   timer.iLifetime);  // remove from disk
++      htsmsg_add_u32(m, "removal",   LifetimeMapper::KodiToTvh(timer.iLifetime));  // remove from disk
+     else
+-      htsmsg_add_u32(m, "retention", timer.iLifetime);  // remove from tvh database
++      htsmsg_add_u32(m, "retention", LifetimeMapper::KodiToTvh(timer.iLifetime));  // remove from tvh database
+ 
+     htsmsg_add_u32(m, "priority",   timer.iPriority);
+ 
+@@ -1204,9 +1205,9 @@ PVR_ERROR CTvheadend::UpdateTimer ( const PVR_TIMER &timer )
+     htsmsg_add_s64(m, "stopExtra",    timer.iMarginEnd);
+ 
+     if (m_conn.GetProtocol() >= 25)
+-      htsmsg_add_u32(m, "removal",    timer.iLifetime); // remove from disk
++      htsmsg_add_u32(m, "removal",    LifetimeMapper::KodiToTvh(timer.iLifetime)); // remove from disk
+     else
+-      htsmsg_add_u32(m, "retention",  timer.iLifetime); // remove from tvh database
++      htsmsg_add_u32(m, "retention",  LifetimeMapper::KodiToTvh(timer.iLifetime)); // remove from tvh database
+ 
+     htsmsg_add_u32(m, "priority",     timer.iPriority);
+ 
+diff --git a/src/tvheadend/entity/Recording.h b/src/tvheadend/entity/Recording.h
+index 2ffffa8..bd39f92 100644
+--- a/src/tvheadend/entity/Recording.h
++++ b/src/tvheadend/entity/Recording.h
+@@ -26,6 +26,7 @@
+ #include <string>
+ #include "xbmc_pvr_types.h"
+ #include "Entity.h"
++#include "../utilities/LifetimeMapper.h"
+ 
+ // Timer types
+ #define TIMER_ONCE_MANUAL             (PVR_TIMER_TYPE_NONE + 1)
+@@ -186,8 +187,7 @@ namespace tvheadend
+       const std::string& GetError() const { return m_error; }
+       void SetError(const std::string &error) { m_error = error; }
+ 
+-      // Lifetime = the smallest value
+-      uint32_t GetLifetime() const { return m_lifetime; }
++      int GetLifetime() const { return utilities::LifetimeMapper::TvhToKodi(m_lifetime); }
+       void SetLifetime(uint32_t lifetime) { m_lifetime = lifetime; }
+ 
+       uint32_t GetPriority() const { return m_priority; }
+diff --git a/src/tvheadend/entity/RecordingBase.cpp b/src/tvheadend/entity/RecordingBase.cpp
+index e08dda9..561e919 100644
+--- a/src/tvheadend/entity/RecordingBase.cpp
++++ b/src/tvheadend/entity/RecordingBase.cpp
+@@ -23,6 +23,8 @@
+ 
+ #include "RecordingBase.h"
+ 
++#include "../utilities/LifetimeMapper.h"
++
+ using namespace tvheadend::entity;
+ 
+ RecordingBase::RecordingBase(const std::string &id /*= ""*/) :
+@@ -86,9 +88,9 @@ void RecordingBase::SetDaysOfWeek(uint32_t daysOfWeek)
+   m_daysOfWeek = daysOfWeek;
+ }
+ 
+-uint32_t RecordingBase::GetLifetime() const
++int RecordingBase::GetLifetime() const
+ {
+-  return m_lifetime;
++  return utilities::LifetimeMapper::TvhToKodi(m_lifetime);
+ }
+ 
+ void RecordingBase::SetLifetime(uint32_t lifetime)
+diff --git a/src/tvheadend/entity/RecordingBase.h b/src/tvheadend/entity/RecordingBase.h
+index 3e81152..f5604a7 100644
+--- a/src/tvheadend/entity/RecordingBase.h
++++ b/src/tvheadend/entity/RecordingBase.h
+@@ -47,7 +47,7 @@ namespace tvheadend
+       int GetDaysOfWeek() const;
+       void SetDaysOfWeek(uint32_t daysOfWeek);
+ 
+-      uint32_t GetLifetime() const;
++      int GetLifetime() const;
+       void SetLifetime(uint32_t retention);
+ 
+       uint32_t GetPriority() const;
+diff --git a/src/tvheadend/utilities/LifetimeMapper.h b/src/tvheadend/utilities/LifetimeMapper.h
+new file mode 100644
+index 0000000..1b40c2b
+--- /dev/null
++++ b/src/tvheadend/utilities/LifetimeMapper.h
+@@ -0,0 +1,58 @@
++#pragma once
++
++/*
++ *      Copyright (C) 2017 Team Kodi
++ *      http://kodi.tv
++ *
++ *  This Program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation; either version 2, or (at your option)
++ *  any later version.
++ *
++ *  This Program is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with XBMC; see the file COPYING.  If not, write to
++ *  the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
++ *  http://www.gnu.org/copyleft/gpl.html
++ *
++ */
++
++#include "../../HTSPTypes.h"
++
++namespace tvheadend
++{
++  namespace utilities
++  {
++    /**
++     * Maps "lifetime" values from Kodi to Tvheadend and vica versa
++     */
++    class LifetimeMapper
++    {
++    public:
++      static int TvhToKodi(uint32_t tvhLifetime)
++      {
++        // pvr addon api: addon defined special values must be less than zero
++        if (tvhLifetime == DVR_RET_SPACE)
++          return -2;
++        else if (tvhLifetime == DVR_RET_FOREVER)
++          return -1;
++        else
++          return tvhLifetime; // lifetime in days
++      }
++
++      static uint32_t KodiToTvh(int kodiLifetime)
++      {
++        if (kodiLifetime == -2)
++          return DVR_RET_SPACE;
++        else if (kodiLifetime == -1)
++          return DVR_RET_FOREVER;
++        else
++          return kodiLifetime; // lifetime in days
++      }
++    };
++  }
++}

@@ -1,0 +1,436 @@
+diff --git a/pvr.hts/addon.xml.in b/pvr.hts/addon.xml.in
+index b5227a5..0b58832 100644
+--- a/pvr.hts/addon.xml.in
++++ b/pvr.hts/addon.xml.in
+@@ -1,7 +1,7 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+ <addon
+   id="pvr.hts"
+-  version="4.0.10"
++  version="4.0.15"
+   name="Tvheadend HTSP Client"
+   provider-name="Adam Sutton, Sam Stenvall, Lars Op den Kamp, Kai Sommerfeld">
+   <requires>@ADDON_DEPENDS@</requires>
+@@ -183,6 +183,7 @@
+     <disclaimer lang="vi_VN">Đây là phần mềm không ổn định! Các tác giả không chịu trách nhiệm đối với bản ghi âm thất bại, giờ không chính xác, giờ lãng phí, hoặc bất kỳ tác dụng không mong muốn khác..</disclaimer>
+     <disclaimer lang="zh_CN">这是不稳定版的软件！作者不对录像失败、错误定时造成时间浪费或其它不良影响负责。</disclaimer>
+     <disclaimer lang="zh_TW">這是測試版軟體！其原創作者並無法對於以下情況負責，包含：錄影失敗，不正確的定時設定，多餘時數，或任何產生的其它不良影響...</disclaimer>
++    <news>Added support for 'default' recording priority setting value</news>
+     <platform>@PLATFORM@</platform>
+   </extension>
+ </addon>
+diff --git a/pvr.hts/resources/language/resource.language.en_gb/strings.po b/pvr.hts/resources/language/resource.language.en_gb/strings.po
+index 54da0c9..e888f5e 100644
+--- a/pvr.hts/resources/language/resource.language.en_gb/strings.po
++++ b/pvr.hts/resources/language/resource.language.en_gb/strings.po
+@@ -236,7 +236,13 @@ msgctxt "#30367"
+ msgid "This rule only: Record max once per day"
+ msgstr ""
+ 
+-#empty strings from id 30368 to 30372
++#. Recording priority representation
++#: src/Tvheadend.cpp
++msgctxt "#30368"
++msgid "Default"
++msgstr ""
++
++#empty strings from id 30369 to 30372
+ 
+ #. Recording lifetime representation
+ #: src/Tvheadend.cpp
+@@ -401,3 +407,13 @@ msgstr ""
+ msgctxt "#30502"
+ msgid "Streaming profile %s is not available"
+ msgstr ""
++
++#empty strings from id 30503 to 30509
++
++msgctxt "#30510"
++msgid "Recordings"
++msgstr ""
++
++msgctxt "#30511"
++msgid "Server based play status"
++msgstr ""
+diff --git a/pvr.hts/resources/settings.xml b/pvr.hts/resources/settings.xml
+index a7d7924..f54037a 100644
+--- a/pvr.hts/resources/settings.xml
++++ b/pvr.hts/resources/settings.xml
+@@ -37,5 +37,8 @@
+     
+     <setting label="30200" type="lsep"/>
+     <setting id="trace_debug" type="bool" label="30201" default="false"/>
++    
++    <setting label="30510" type="lsep"/>
++    <setting id="dvr_playstatus" type="bool" label="30511" default="true"/>
+   </category>
+ </settings>
+diff --git a/src/HTSPTypes.h b/src/HTSPTypes.h
+index 16c9ddc..ad455d9 100644
+--- a/src/HTSPTypes.h
++++ b/src/HTSPTypes.h
+@@ -35,7 +35,8 @@ typedef enum {
+   DVR_PRIO_NORMAL      = 2,
+   DVR_PRIO_LOW         = 3,
+   DVR_PRIO_UNIMPORTANT = 4,
+-  DVR_PRIO_NOT_SET     = 5
++  DVR_PRIO_NOT_SET     = 5,
++  DVR_PRIO_DEFAULT     = 6
+ } dvr_prio_t;
+ 
+ typedef enum {
+@@ -92,6 +93,13 @@ typedef enum {
+   CHANNEL_TYPE_RADIO = 2
+ } channel_type_t;
+ 
++typedef enum {
++  HTSP_DVR_PLAYCOUNT_RESET = 0,
++  HTSP_DVR_PLAYCOUNT_SET   = 1,
++  HTSP_DVR_PLAYCOUNT_KEEP  = INT32_MAX-1,
++  HTSP_DVR_PLAYCOUNT_INCR  = INT32_MAX
++} dvr_playcount_t;
++
+ enum eHTSPEventType
+ {
+   HTSP_EVENT_NONE = 0,
+diff --git a/src/HTSPVFS.cpp b/src/HTSPVFS.cpp
+index d792c93..7e9b861 100644
+--- a/src/HTSPVFS.cpp
++++ b/src/HTSPVFS.cpp
+@@ -31,6 +31,7 @@ extern "C" {
+ 
+ using namespace std;
+ using namespace P8PLATFORM;
++using namespace tvheadend;
+ using namespace tvheadend::utilities;
+ 
+ /*
+@@ -203,6 +204,11 @@ void CHTSPVFS::SendFileClose ( void )
+   m = htsmsg_create_map();
+   htsmsg_add_u32(m, "id", m_fileId);
+ 
++  /* If setting set, we will increase play count with CTvheadend::SetPlayCount */
++  if (m_conn.GetProtocol() >= 27)
++    htsmsg_add_u32(m, "playcount", Settings::GetInstance().GetDvrPlayStatus() ?
++        HTSP_DVR_PLAYCOUNT_KEEP : HTSP_DVR_PLAYCOUNT_INCR);
++
+   Logger::Log(LogLevel::LEVEL_DEBUG, "vfs close id=%d", m_fileId);
+   
+   /* Send */
+diff --git a/src/Tvheadend.cpp b/src/Tvheadend.cpp
+index 905c0e8..5b4efa5 100644
+--- a/src/Tvheadend.cpp
++++ b/src/Tvheadend.cpp
+@@ -452,6 +452,10 @@ PVR_ERROR CTvheadend::GetRecordings ( ADDON_HANDLE handle )
+       /* Lifetime (based on retention or removal) */
+       rec.iLifetime = recording.GetLifetime();
+ 
++      /* Play status */
++      rec.iPlayCount = recording.GetPlayCount();
++      rec.iLastPlayedPosition = recording.GetPlayPosition();
++
+       /* Directory */
+       // TODO: Move this logic to GetPath(), alternatively GetMangledPath()
+       if (recording.GetPath() != "")
+@@ -598,6 +602,49 @@ PVR_ERROR CTvheadend::RenameRecording ( const PVR_RECORDING &rec )
+   return SendDvrUpdate(m);
+ }
+ 
++PVR_ERROR CTvheadend::SetPlayCount ( const PVR_RECORDING &rec, int playCount )
++{
++  if (m_conn.GetProtocol() < 27 || !Settings::GetInstance().GetDvrPlayStatus())
++    return PVR_ERROR_NOT_IMPLEMENTED;
++
++  Logger::Log(LogLevel::LEVEL_DEBUG, "Setting play count to %i for recording %s", playCount, rec.strRecordingId);
++
++  /* Build message */
++  htsmsg_t *m = htsmsg_create_map();
++  htsmsg_add_u32(m, "id",        atoi(rec.strRecordingId));
++  htsmsg_add_u32(m, "playcount", playCount);
++  return SendDvrUpdate(m);
++}
++
++PVR_ERROR CTvheadend::SetPlayPosition ( const PVR_RECORDING &rec, int playPosition )
++{
++  if (m_conn.GetProtocol() < 27 || !Settings::GetInstance().GetDvrPlayStatus())
++    return PVR_ERROR_NOT_IMPLEMENTED;
++
++  Logger::Log(LogLevel::LEVEL_DEBUG, "Setting play position to %i for recording %s", playPosition, rec.strRecordingId);
++
++  /* Build message */
++  htsmsg_t *m = htsmsg_create_map();
++  htsmsg_add_u32(m, "id",           atoi(rec.strRecordingId));
++  htsmsg_add_u32(m, "playposition", playPosition >= 0 ? playPosition : 0); // Kodi uses -1 when fully watched
++  return SendDvrUpdate(m);
++}
++
++int CTvheadend::GetPlayPosition ( const PVR_RECORDING &rec )
++{
++  if (m_conn.GetProtocol() < 27 || !Settings::GetInstance().GetDvrPlayStatus())
++    return -1;
++
++  const auto &it = m_recordings.find(atoi(rec.strRecordingId));
++  if (it != m_recordings.end() && it->second.IsRecording())
++  {
++    Logger::Log(LogLevel::LEVEL_DEBUG, "Getting play position %i for recording %s", it->second.GetPlayPosition(), rec.strTitle);
++    return it->second.GetPlayPosition();
++  }
++
++  return -1;
++}
++
+ namespace
+ {
+ struct TimerType : PVR_TIMER_TYPE
+@@ -656,6 +703,7 @@ PVR_ERROR CTvheadend::GetTimerTypes ( PVR_TIMER_TYPE types[], int *size )
+   static std::vector< std::pair<int, std::string> > priorityValues;
+   if (priorityValues.size() == 0)
+   {
++    priorityValues.push_back(std::make_pair(DVR_PRIO_DEFAULT,     XBMC->GetLocalizedString(30368)));
+     priorityValues.push_back(std::make_pair(DVR_PRIO_UNIMPORTANT, XBMC->GetLocalizedString(30355)));
+     priorityValues.push_back(std::make_pair(DVR_PRIO_LOW,         XBMC->GetLocalizedString(30354)));
+     priorityValues.push_back(std::make_pair(DVR_PRIO_NORMAL,      XBMC->GetLocalizedString(30353)));
+@@ -1888,7 +1936,7 @@ void CTvheadend::ParseChannelDelete ( htsmsg_t *msg )
+ void CTvheadend::ParseRecordingAddOrUpdate ( htsmsg_t *msg, bool bAdd )
+ {
+   const char *state, *str;
+-  uint32_t id, channel, eventId, retention, removal, priority, enabled;
++  uint32_t id, channel, eventId, retention, removal, priority, enabled, playCount, playPosition;
+   int64_t start, stop, startExtra, stopExtra;
+ 
+   /* Channels must be complete */
+@@ -2028,6 +2076,7 @@ void CTvheadend::ParseRecordingAddOrUpdate ( htsmsg_t *msg, bool bAdd )
+       case DVR_PRIO_NORMAL:
+       case DVR_PRIO_LOW:
+       case DVR_PRIO_UNIMPORTANT:
++      case DVR_PRIO_DEFAULT:
+         rec.SetPriority(priority);
+         break;
+       default:
+@@ -2106,6 +2155,15 @@ void CTvheadend::ParseRecordingAddOrUpdate ( htsmsg_t *msg, bool bAdd )
+     }
+   }
+ 
++  /* Play status (optional) */
++  if (m_conn.GetProtocol() >= 27)
++  {
++    if (!htsmsg_get_u32(msg, "playcount", &playCount))
++      rec.SetPlayCount(playCount);
++    if (!htsmsg_get_u32(msg, "playposition", &playPosition))
++      rec.SetPlayPosition(playPosition);
++  }
++
+   /* Update */
+   if (rec != comparison)
+   {
+diff --git a/src/Tvheadend.h b/src/Tvheadend.h
+index 86eae36..664eaa6 100644
+--- a/src/Tvheadend.h
++++ b/src/Tvheadend.h
+@@ -67,7 +67,7 @@ extern "C" {
+  * Configuration defines
+  */
+ #define HTSP_MIN_SERVER_VERSION       (19) // Server must support at least this htsp version
+-#define HTSP_CLIENT_VERSION           (26) // Client uses HTSP features up to this version. If the respective
++#define HTSP_CLIENT_VERSION           (27) // Client uses HTSP features up to this version. If the respective
+                                            // addon feature requires htsp features introduced after
+                                            // HTSP_MIN_SERVER_VERSION this feature will only be available if the
+                                            // actual server HTSP version matches (runtime htsp version check).
+@@ -370,6 +370,9 @@ public:
+                                 int *num );
+   PVR_ERROR DeleteRecording   ( const PVR_RECORDING &rec );
+   PVR_ERROR RenameRecording   ( const PVR_RECORDING &rec );
++  PVR_ERROR SetPlayCount      ( const PVR_RECORDING &rec, int playcount );
++  PVR_ERROR SetPlayPosition   ( const PVR_RECORDING &rec, int playposition );
++  int GetPlayPosition         ( const PVR_RECORDING &rec );
+   PVR_ERROR GetTimerTypes     ( PVR_TIMER_TYPE types[], int *size );
+   int       GetTimerCount     ( void );
+   PVR_ERROR GetTimers         ( ADDON_HANDLE handle );
+diff --git a/src/client.cpp b/src/client.cpp
+index 27d108e..a43bd11 100644
+--- a/src/client.cpp
++++ b/src/client.cpp
+@@ -178,6 +178,8 @@ PVR_ERROR GetAddonCapabilities(PVR_ADDON_CAPABILITIES* pCapabilities)
+   pCapabilities->bHandlesInputStream         = true;
+   pCapabilities->bHandlesDemuxing            = true;
+   pCapabilities->bSupportsRecordingEdl       = true;
++  pCapabilities->bSupportsRecordingPlayCount = (tvh->GetProtocol() >= 27 && Settings::GetInstance().GetDvrPlayStatus());
++  pCapabilities->bSupportsLastPlayedPosition = (tvh->GetProtocol() >= 27 && Settings::GetInstance().GetDvrPlayStatus());
+ 
+   return PVR_ERROR_NO_ERROR;
+ }
+@@ -411,6 +413,21 @@ PVR_ERROR DeleteAllRecordingsFromTrash()
+   return PVR_ERROR_NOT_IMPLEMENTED;
+ }
+ 
++PVR_ERROR SetRecordingPlayCount(const PVR_RECORDING &recording, int count)
++{
++  return tvh->SetPlayCount(recording, count);
++}
++
++PVR_ERROR SetRecordingLastPlayedPosition(const PVR_RECORDING &recording, int lastplayedposition)
++{
++  return tvh->SetPlayPosition(recording, lastplayedposition);
++}
++
++int GetRecordingLastPlayedPosition(const PVR_RECORDING &recording)
++{
++  return tvh->GetPlayPosition(recording);
++}
++
+ PVR_ERROR GetTimerTypes(PVR_TIMER_TYPE types[], int *size)
+ {
+   return tvh->GetTimerTypes(types, size);
+@@ -481,22 +498,6 @@ long long LengthRecordedStream(void)
+ 
+ unsigned int GetChannelSwitchDelay(void) { return 0; }
+ 
+-/* Recording History */
+-PVR_ERROR SetRecordingPlayCount
+-  (const PVR_RECORDING &_unused(recording), int _unused(count))
+-{
+-  return PVR_ERROR_NOT_IMPLEMENTED;
+-}
+-PVR_ERROR SetRecordingLastPlayedPosition  
+-  (const PVR_RECORDING &_unused(recording), int _unused(lastplayedposition))
+-{
+-  return PVR_ERROR_NOT_IMPLEMENTED;
+-}
+-int GetRecordingLastPlayedPosition(const PVR_RECORDING &_unused(recording))
+-{
+-  return -1;
+-}
+-
+ /* Channel Management */
+ PVR_ERROR OpenDialogChannelScan(void)
+ {
+diff --git a/src/tvheadend/Settings.cpp b/src/tvheadend/Settings.cpp
+index 34786fc..3c7222d 100644
+--- a/src/tvheadend/Settings.cpp
++++ b/src/tvheadend/Settings.cpp
+@@ -44,6 +44,7 @@ const std::string Settings::DEFAULT_STREAMING_PROFILE   = "";
+ const int         Settings::DEFAULT_DVR_PRIO            = DVR_PRIO_NORMAL;
+ const int         Settings::DEFAULT_DVR_LIFETIME        = 8; // enum 8 = 3 months
+ const int         Settings::DEFAULT_DVR_DUBDETECT       = DVR_AUTOREC_RECORD_ALL;
++const bool        Settings::DEFAULT_DVR_PLAYSTATUS      = true;
+ 
+ void Settings::ReadSettings()
+ {
+@@ -80,6 +81,9 @@ void Settings::ReadSettings()
+   SetDvrPriority(ReadIntSetting("dvr_priority", DEFAULT_DVR_PRIO));
+   SetDvrLifetime(ReadIntSetting("dvr_lifetime", DEFAULT_DVR_LIFETIME));
+   SetDvrDupdetect(ReadIntSetting("dvr_dubdetect", DEFAULT_DVR_DUBDETECT));
++
++  /* Sever based play status */
++  SetDvrPlayStatus(ReadBoolSetting("dvr_playstatus", DEFAULT_DVR_PLAYSTATUS));
+ }
+ 
+ ADDON_STATUS Settings::SetSetting(const std::string &key, const void *value)
+@@ -147,6 +151,9 @@ ADDON_STATUS Settings::SetSetting(const std::string &key, const void *value)
+     return SetIntSetting(GetDvrLifetime(true), value);
+   else if (key == "dvr_dubdetect")
+     return SetIntSetting(GetDvrDupdetect(), value);
++  /* Server based play status */
++  else if (key == "dvr_playstatus")
++    return SetBoolSetting(GetDvrPlayStatus(), value);
+   else
+   {
+     Logger::Log(LogLevel::LEVEL_ERROR, "Settings::SetSetting - unknown setting '%s'", key.c_str());
+diff --git a/src/tvheadend/Settings.h b/src/tvheadend/Settings.h
+index 977292f..e989541 100644
+--- a/src/tvheadend/Settings.h
++++ b/src/tvheadend/Settings.h
+@@ -50,9 +50,10 @@ namespace tvheadend {
+     static const int         DEFAULT_AUTOREC_MAXDIFF; // mins. Maximum difference between real and approximate start time for auto recordings
+     static const int         DEFAULT_APPROX_TIME;     // 0..1 (0 = use a fixed start time, 1 = use an approximate start time for auto recordings)
+     static const std::string DEFAULT_STREAMING_PROFILE;
+-    static const int         DEFAULT_DVR_PRIO;        // 0..4  (0 = max, 4 = min)
++    static const int         DEFAULT_DVR_PRIO;        // any dvr_prio_t numeric value
+     static const int         DEFAULT_DVR_LIFETIME;    // 0..14 (0 = 1 day, 14 = forever)
+     static const int         DEFAULT_DVR_DUBDETECT;   // 0..5  (0 = record all, 5 = limit to once a day)
++    static const bool        DEFAULT_DVR_PLAYSTATUS;
+ 
+     /**
+      * Singleton getter for the instance
+@@ -94,6 +95,7 @@ namespace tvheadend {
+     int         GetDvrPriority() const { return m_iDvrPriority; }
+     int         GetDvrDupdetect() const { return m_iDvrDupdetect; }
+     int         GetDvrLifetime(bool asEnum = false) const;
++    bool        GetDvrPlayStatus() const { return m_bDvrPlayStatus; }
+ 
+   private:
+     Settings()
+@@ -114,7 +116,8 @@ namespace tvheadend {
+       m_strStreamingProfile(DEFAULT_STREAMING_PROFILE),
+       m_iDvrPriority(DEFAULT_DVR_PRIO),
+       m_iDvrLifetime(DEFAULT_DVR_LIFETIME),
+-      m_iDvrDupdetect(DEFAULT_DVR_DUBDETECT) {}
++      m_iDvrDupdetect(DEFAULT_DVR_DUBDETECT),
++      m_bDvrPlayStatus(DEFAULT_DVR_PLAYSTATUS) {}
+ 
+     Settings(Settings const &) = delete;
+     void operator=(Settings const &) = delete;
+@@ -139,6 +142,7 @@ namespace tvheadend {
+     void SetDvrPriority(int value) { m_iDvrPriority = value; }
+     void SetDvrLifetime(int value) { m_iDvrLifetime = value; }
+     void SetDvrDupdetect(int value) { m_iDvrDupdetect = value; }
++    void SetDvrPlayStatus(int value) { m_bDvrPlayStatus = value; }
+ 
+     /**
+      * Read/Set values according to definition in settings.xml
+@@ -170,6 +174,7 @@ namespace tvheadend {
+     int         m_iDvrPriority;
+     int         m_iDvrLifetime;
+     int         m_iDvrDupdetect;
++    bool        m_bDvrPlayStatus;
+   };
+ 
+ }
+diff --git a/src/tvheadend/entity/Recording.h b/src/tvheadend/entity/Recording.h
+index ca6a2d5..fc2f3c0 100644
+--- a/src/tvheadend/entity/Recording.h
++++ b/src/tvheadend/entity/Recording.h
+@@ -63,7 +63,9 @@ namespace tvheadend
+         m_stopExtra(0),
+         m_state(PVR_TIMER_STATE_ERROR),
+         m_lifetime(0),
+-        m_priority(50)   // Kodi default - "normal"
++        m_priority(50),   // Kodi default - "normal"
++        m_playCount(0),
++        m_playPosition(0)
+       {
+       }
+ 
+@@ -87,7 +89,9 @@ namespace tvheadend
+                m_state == other.m_state &&
+                m_error == other.m_error &&
+                m_lifetime == other.m_lifetime &&
+-               m_priority == other.m_priority;
++               m_priority == other.m_priority &&
++               m_playCount == other.m_playCount &&
++               m_playPosition == other.m_playPosition;
+       }
+ 
+       bool operator!=(const Recording &other) const
+@@ -187,6 +191,12 @@ namespace tvheadend
+       uint32_t GetPriority() const { return m_priority; }
+       void SetPriority(uint32_t priority) { m_priority = priority; }
+ 
++      uint32_t GetPlayCount() const { return m_playCount; }
++      void SetPlayCount(uint32_t playCount) { m_playCount = playCount; }
++
++      uint32_t GetPlayPosition() const { return m_playPosition; }
++      void SetPlayPosition(uint32_t playPosition) { m_playPosition = playPosition; }
++
+     private:
+       uint32_t         m_enabled;
+       uint32_t         m_channel;
+@@ -207,6 +217,8 @@ namespace tvheadend
+       std::string      m_error;
+       uint32_t         m_lifetime;
+       uint32_t         m_priority;
++      uint32_t         m_playCount;
++      uint32_t         m_playPosition;
+     };
+   }
+ }

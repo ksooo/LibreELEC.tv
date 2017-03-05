@@ -1,0 +1,181 @@
+diff --git a/addons/resource.language.en_gb/resources/strings.po b/addons/resource.language.en_gb/resources/strings.po
+index 13b6c5c..5be8b5b 100644
+--- a/addons/resource.language.en_gb/resources/strings.po
++++ b/addons/resource.language.en_gb/resources/strings.po
+@@ -10688,7 +10688,14 @@ msgctxt "#19298"
+ msgid "Horizontal"
+ msgstr ""
+ 
+-#empty strings from id 19299 to 19498
++#. generic "expiration" label used in different places
++#: addons/skin.estuary/xml/DialogPVRInfo.xml
++#: addons/skin.estuary/xml/MyPVRRecordings.xml
++msgctxt "#19299"
++msgid "Expires"
++msgstr ""
++
++#empty strings from id 19300 to 19498
+ 
+ #. label for epg genre value
+ #: xbmc/epg/Epg.cpp
+diff --git a/addons/skin.estuary/xml/DialogPVRInfo.xml b/addons/skin.estuary/xml/DialogPVRInfo.xml
+index 5fd7d65..1a81f84 100644
+--- a/addons/skin.estuary/xml/DialogPVRInfo.xml
++++ b/addons/skin.estuary/xml/DialogPVRInfo.xml
+@@ -49,7 +49,7 @@
+ 					<width>1050</width>
+ 					<height>425</height>
+ 					<align>justify</align>
+-					<label>$INFO[ListItem.StartTime] - $INFO[ListItem.EndTime] ($INFO[ListItem.Duration])[CR]$INFO[ListItem.StartDate][CR]$INFO[ListItem.Season, [COLOR grey]S[/COLOR]]$INFO[ListItem.Episode, [COLOR grey]E[/COLOR],: ]$INFO[ListItem.EpisodeName,[B],[/B][CR]]$INFO[ListItem.Genre,[COLOR grey]$LOCALIZE[515]:[/COLOR] ,[CR]]$INFO[ListItem.Writer,[COLOR grey]$LOCALIZE[20417]:[/COLOR] ,[CR]]$INFO[ListItem.Director,[COLOR grey]$LOCALIZE[20339]:[/COLOR] ,[CR]]$INFO[ListItem.Cast,[COLOR grey]$LOCALIZE[206]:[/COLOR] ,[CR]][CR]$INFO[ListItem.Plot]</label>
++					<label>$INFO[ListItem.ChannelName,[B],[/B][CR]]$INFO[ListItem.Date,[COLOR grey]$LOCALIZE[552]:[/COLOR] ,[CR]]$INFO[ListItem.Duration,[COLOR grey]$LOCALIZE[180]:[/COLOR] ,[CR]]$VAR[ExpirationDateTimeLabel]$INFO[ListItem.Genre,[COLOR grey]$LOCALIZE[515]:[/COLOR] ,[CR]]$INFO[ListItem.Writer,[COLOR grey]$LOCALIZE[20417]:[/COLOR] ,[CR]]$INFO[ListItem.Director,[COLOR grey]$LOCALIZE[20339]:[/COLOR] ,[CR]]$INFO[ListItem.Cast,[COLOR grey]$LOCALIZE[206]:[/COLOR] ,[CR]][CR]$INFO[ListItem.Plot]</label>
+ 					<autoscroll time="3000" delay="4000" repeat="5000">Skin.HasSetting(AutoScroll)</autoscroll>
+ 				</control>
+ 				<control type="grouplist" id="9000">
+@@ -105,8 +105,8 @@
+ 				</control>
+ 			</control>
+ 			<include content="InfoDialogTopBarInfo">
+-				<param name="main_label" value="$INFO[ListItem.Title]$INFO[ListItem.Season, ]$INFO[ListItem.Episode,[COLOR grey]x[/COLOR]]" />
+-				<param name="sub_label" value="$INFO[ListItem.ChannelName]" />
++				<param name="main_label" value="$INFO[ListItem.Title]" />
++				<param name="sub_label" value="$INFO[ListItem.Season, [COLOR grey]S[/COLOR]]$INFO[ListItem.Episode, [COLOR grey]E[/COLOR],: ]$INFO[ListItem.EpisodeName,[B],[/B]]" />
+ 				<param name="posy" value="40" />
+ 			</include>
+ 		</control>
+diff --git a/addons/skin.estuary/xml/MyPVRRecordings.xml b/addons/skin.estuary/xml/MyPVRRecordings.xml
+index b7e4a07..8f34ff9 100644
+--- a/addons/skin.estuary/xml/MyPVRRecordings.xml
++++ b/addons/skin.estuary/xml/MyPVRRecordings.xml
+@@ -118,7 +118,7 @@
+ 						<width>560</width>
+ 						<height>262</height>
+ 						<wrapmultiline>true</wrapmultiline>
+-						<label>$INFO[ListItem.Duration,$LOCALIZE[180]: ][CR]$INFO[ListItem.Date,$LOCALIZE[552]: ]</label>
++						<label>$INFO[ListItem.Date,[COLOR grey]$LOCALIZE[552]:[/COLOR] ,[CR]]$INFO[ListItem.Duration,[COLOR grey]$LOCALIZE[180]:[/COLOR] ,[CR]]$VAR[ExpirationDateTimeLabel]</label>
+ 					</control>
+ 					<control type="label">
+ 						<left>170</left>
+diff --git a/addons/skin.estuary/xml/Variables.xml b/addons/skin.estuary/xml/Variables.xml
+index c5b4a69..a911a92 100644
+--- a/addons/skin.estuary/xml/Variables.xml
++++ b/addons/skin.estuary/xml/Variables.xml
+@@ -398,6 +398,9 @@
+ 		<value condition="ListItem.HasTimerSchedule">icons/pvr/PVR-HasTimerSchedule.png</value>
+ 		<value condition="ListItem.HasTimer">icons/pvr/PVR-HasTimer.png</value>
+ 	</variable>
++	<variable name="ExpirationDateTimeLabel">
++		<value condition="!String.IsEmpty(ListItem.ExpirationDate)">[COLOR grey]$LOCALIZE[19299]:[/COLOR] $INFO[ListItem.ExpirationDate] $INFO[ListItem.ExpirationTime][CR]</value>
++	</variable>
+ 	<variable name="VideoHWDecoder">
+ 		<value condition="Player.Process(videohwdecoder)">HW</value>
+ 		<value>SW</value>
+diff --git a/xbmc/GUIInfoManager.cpp b/xbmc/GUIInfoManager.cpp
+index ea8612b..33af27a 100644
+--- a/xbmc/GUIInfoManager.cpp
++++ b/xbmc/GUIInfoManager.cpp
+@@ -3660,7 +3660,7 @@ const infomap container_str[]  = {{ "property",         CONTAINER_PROPERTY },
+ ///   \table_row3{   <b>`ListItem.EpgEventTitle`</b>,
+ ///                  \anchor ListItem_EpgEventTitle
+ ///                  _string_,
+-///     Returns the title of the epg event associated with the item, if any
++///     Returns the title of the epg event associated with the item\, if any
+ ///   }
+ ///   \table_row3{   <b>`ListItem.InProgress`</b>,
+ ///                  \anchor ListItem_InProgress
+@@ -3732,6 +3732,16 @@ const infomap container_str[]  = {{ "property",         CONTAINER_PROPERTY },
+ ///                  _string_,
+ ///     Name of the repository the add-on originates from.
+ ///   }
++///   \table_row3{   <b>`ListItem.ExpirationDate`</b>,
++///                  \anchor ListItem_ExpirationDate
++///                  _string_,
++///     Expiration date of the selected item in a container\, empty string if not supported
++///   }
++///   \table_row3{   <b>`ListItem.ExpirationTime`</b>,
++///                  \anchor ListItem_ExpirationTime
++///                  _string_,
++///     Expiration time of the selected item in a container\, empty string if not supported
++///   }
+ /// \table_end
+ ///
+ /// -----------------------------------------------------------------------------
+@@ -3914,6 +3924,8 @@ const infomap listitem_labels[]= {{ "thumb",            LISTITEM_THUMB },
+                                   { "addonlastused",    LISTITEM_ADDON_LAST_USED },
+                                   { "addonorigin",      LISTITEM_ADDON_ORIGIN },
+                                   { "addonsize",        LISTITEM_ADDON_SIZE },
++                                  { "expirationdate",   LISTITEM_EXPIRATION_DATE },
++                                  { "expirationtime",   LISTITEM_EXPIRATION_TIME },
+ };
+ 
+ /// \page modules__General__List_of_gui_access
+@@ -10295,6 +10307,14 @@ std::string CGUIInfoManager::GetItemLabel(const CFileItem *item, int info, std::
+     if (item->HasPVRTimerInfoTag())
+       return item->GetPVRTimerInfoTag()->EndAsLocalTime().GetAsLocalizedDate(true);
+     break;
++  case LISTITEM_EXPIRATION_DATE:
++    if (item->HasPVRRecordingInfoTag() && item->GetPVRRecordingInfoTag()->HasExpirationTime())
++      return item->GetPVRRecordingInfoTag()->ExpirationTimeAsLocalTime().GetAsLocalizedDate(false);
++    break;
++  case LISTITEM_EXPIRATION_TIME:
++    if (item->HasPVRRecordingInfoTag() && item->GetPVRRecordingInfoTag()->HasExpirationTime())
++      return item->GetPVRRecordingInfoTag()->ExpirationTimeAsLocalTime().GetAsLocalizedTime("", false);;
++    break;
+   case LISTITEM_CHANNEL_NUMBER:
+     {
+       std::string number;
+diff --git a/xbmc/guiinfo/GUIInfoLabels.h b/xbmc/guiinfo/GUIInfoLabels.h
+index 12ed3f5..13e26ec 100644
+--- a/xbmc/guiinfo/GUIInfoLabels.h
++++ b/xbmc/guiinfo/GUIInfoLabels.h
+@@ -807,6 +807,8 @@
+ #define LISTITEM_ADDON_ORIGIN       (LISTITEM_START + 177)
+ #define LISTITEM_ADDON_NEWS         (LISTITEM_START + 178)
+ #define LISTITEM_ADDON_SIZE         (LISTITEM_START + 179)
++#define LISTITEM_EXPIRATION_DATE    (LISTITEM_START + 180)
++#define LISTITEM_EXPIRATION_TIME    (LISTITEM_START + 181)
+ 
+ //! @todo There are issues with the LISTITEM_PROPERTY range, breakage occurs when more than 200 properties are used in skins.
+ #define LISTITEM_PROPERTY_START     (LISTITEM_START + 200)
+diff --git a/xbmc/pvr/recordings/PVRRecording.cpp b/xbmc/pvr/recordings/PVRRecording.cpp
+index 47e5070..bd66ef6 100644
+--- a/xbmc/pvr/recordings/PVRRecording.cpp
++++ b/xbmc/pvr/recordings/PVRRecording.cpp
+@@ -437,6 +437,15 @@ CDateTime CPVRRecording::EndTimeAsLocalTime() const
+   return ret;
+ }
+ 
++CDateTime CPVRRecording::ExpirationTimeAsLocalTime() const
++{
++  CDateTime ret;
++  if (m_iLifetime > 0)
++    ret = EndTimeAsLocalTime() + CDateTimeSpan(m_iLifetime, 0, 0, 0);
++
++  return ret;
++}
++
+ std::string CPVRRecording::GetTitleFromURL(const std::string &url)
+ {
+   return CPVRRecordingsPath(url).GetTitle();
+diff --git a/xbmc/pvr/recordings/PVRRecording.h b/xbmc/pvr/recordings/PVRRecording.h
+index 0a5fb39..3c43027 100644
+--- a/xbmc/pvr/recordings/PVRRecording.h
++++ b/xbmc/pvr/recordings/PVRRecording.h
+@@ -215,6 +215,18 @@ namespace PVR
+     CDateTime EndTimeAsLocalTime() const;
+ 
+     /*!
++     * @brief Check whether this recording has an expiration time
++     * @return True if the recording has an expiration time, false otherwise
++     */
++    bool HasExpirationTime() const { return m_iLifetime > 0; }
++
++    /*!
++     * @brief Retrieve the recording expiration time as local time
++     * @return the recording expiration time
++     */
++    CDateTime ExpirationTimeAsLocalTime() const;
++
++    /*!
+      * @brief Retrieve the recording title from the URL path
+      * @param url the URL for the recording
+      * @return Title of the recording

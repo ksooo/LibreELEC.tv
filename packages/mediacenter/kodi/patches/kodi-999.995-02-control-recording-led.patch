@@ -1,0 +1,88 @@
+diff --git a/xbmc/pvr/timers/PVRTimers.cpp b/xbmc/pvr/timers/PVRTimers.cpp
+index 8160b64..3d2afbd 100644
+--- a/xbmc/pvr/timers/PVRTimers.cpp
++++ b/xbmc/pvr/timers/PVRTimers.cpp
+@@ -20,6 +20,8 @@
+ 
+ #include "PVRTimers.h"
+ 
++#include <sys/ioctl.h>
++
+ #include <cassert>
+ #include <cstdlib>
+ #include <utility>
+@@ -37,6 +39,13 @@
+ #include "utils/StringUtils.h"
+ #include "utils/URIUtils.h"
+ 
++static void SetRecordingLED(bool bOn)
++{
++  static int fd = open("/dev/ttyS0", O_RDWR | O_NDELAY);
++  int state = bOn ? TIOCM_RTS : 0;
++  ioctl(fd, TIOCMSET, &state);
++}
++
+ using namespace PVR;
+ using namespace EPG;
+ 
+@@ -51,6 +60,7 @@ bool CPVRTimersContainer::UpdateFromClient(const CPVRTimerInfoTagPtr &timer)
+     InsertTimer(tag);
+   }
+ 
++  SetRecordingLED(IsRecording());
+   return tag->UpdateEntry(timer);
+ }
+ 
+@@ -141,7 +151,7 @@ bool CPVRTimers::Update(void)
+   return UpdateEntries(newTimerList, failedClients);
+ }
+ 
+-bool CPVRTimers::IsRecording(void) const
++bool CPVRTimersContainer::IsRecording(void) const
+ {
+   CSingleLock lock(m_critSection);
+ 
+@@ -342,6 +352,7 @@ bool CPVRTimers::UpdateEntries(const CPVRTimersContainer &timers, const std::vec
+   m_bIsUpdating = false;
+   if (bChanged)
+   {
++    SetRecordingLED(IsRecording());
+     UpdateChannels();
+     lock.Leave();
+ 
+@@ -662,6 +673,7 @@ bool CPVRTimers::DeleteTimersOnChannel(const CPVRChannelPtr &channel, bool bDele
+           CLog::Log(LOGDEBUG,"PVRTimers - %s - deleted timer %d on client %d", __FUNCTION__, (*timerIt)->m_iClientIndex, (*timerIt)->m_iClientId);
+           bReturn = (*timerIt)->DeleteFromClient(true) || bReturn;
+           bChanged = true;
++          SetRecordingLED(IsRecording());
+         }
+       }
+     }
+diff --git a/xbmc/pvr/timers/PVRTimers.h b/xbmc/pvr/timers/PVRTimers.h
+index 82fdf31..cf25ecd 100644
+--- a/xbmc/pvr/timers/PVRTimers.h
++++ b/xbmc/pvr/timers/PVRTimers.h
+@@ -72,6 +72,11 @@ namespace PVR
+      */
+     const MapTags& GetTags() const { return m_tags; }
+ 
++    /*!
++     * @return True when recording, false otherwise.
++     */
++    bool IsRecording(void) const;
++
+   protected:
+     void InsertTimer(const CPVRTimerInfoTagPtr &newTimer);
+ 
+@@ -159,11 +164,6 @@ namespace PVR
+     std::vector<CFileItemPtr> GetActiveRadioRecordings(void) const;
+ 
+     /*!
+-     * @return True when recording, false otherwise.
+-     */
+-    bool IsRecording(void) const;
+-
+-    /*!
+      * @brief Check if a recording is running on the given channel.
+      * @param channel The channel to check.
+      * @return True when recording, false otherwise.
