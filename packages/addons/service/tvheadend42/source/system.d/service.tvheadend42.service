@@ -4,7 +4,8 @@ After=network-online.service
 #Requires=network-online.service
 
 [Service]
-ExecStart=/bin/sh -c "exec sh /storage/.kodi/addons/service.tvheadend42/bin/tvheadend42.start"
+#ExecStart=/bin/sh -c "exec sh /storage/.kodi/addons/service.tvheadend42/bin/tvheadend42.start"
+ExecStart=/storage/.kodi/addons/service.tvheadend42/bin/tvheadend.sh
 TimeoutStopSec=2
 Restart=always
 RestartSec=2
