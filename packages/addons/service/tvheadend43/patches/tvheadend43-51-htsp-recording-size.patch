@@ -1,0 +1,44 @@
+diff --git a/src/dvr/dvr_db.c b/src/dvr/dvr_db.c
+index 701211850..7205b170d 100644
+--- a/src/dvr/dvr_db.c
++++ b/src/dvr/dvr_db.c
+@@ -3077,6 +3077,8 @@ dvr_entry_class_save(idnode_t *self, char *filename, size_t fsize)
+             htsmsg_add_s64(c, "start", s64);
+           if (!htsmsg_get_s64(e, "stop", &s64))
+             htsmsg_add_s64(c, "stop", s64);
++          if (!htsmsg_get_s64(e, "size", &s64))
++            htsmsg_add_s64(c, "size", s64);
+           htsmsg_add_msg(l, NULL, c);
+         }
+       }
+diff --git a/src/htsp_server.c b/src/htsp_server.c
+index d61b45eb3..a4b0d7645 100644
+--- a/src/htsp_server.c
++++ b/src/htsp_server.c
+@@ -50,7 +50,7 @@
+ 
+ static void *htsp_server, *htsp_server_2;
+ 
+-#define HTSP_PROTO_VERSION 34
++#define HTSP_PROTO_VERSION 35
+ 
+ #define HTSP_ASYNC_OFF  0x00
+ #define HTSP_ASYNC_ON   0x01
+@@ -955,7 +955,7 @@ htsp_build_dvrentry(htsp_connection_t *htsp, dvr_entry_t *de, const char *method
+   htsmsg_field_t *f;
+   const char *s = NULL, *error = NULL, *subscriptionError = NULL;
+   const char *p, *last;
+-  int64_t fsize = -1, start, stop;
++  int64_t fsize = -1, start, stop, size;
+   uint32_t u32;
+   char buf[512];
+   char ubuf[UUID_HEX_SIZE];
+@@ -1062,6 +1062,8 @@ htsp_build_dvrentry(htsp_connection_t *htsp, dvr_entry_t *de, const char *method
+             htsmsg_set_s64(e, "start", start);
+           if (!htsmsg_get_s64(m, "stop", &stop))
+             htsmsg_set_s64(e, "stop", stop);
++          if (!htsmsg_get_s64(m, "size", &size))
++            htsmsg_set_s64(e, "size", size);
+ 
+           htsmsg_add_msg(l, NULL, e);
+         }
