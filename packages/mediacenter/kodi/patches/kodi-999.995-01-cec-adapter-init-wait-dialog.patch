@@ -1,0 +1,62 @@
+diff --git a/xbmc/peripherals/devices/PeripheralCecAdapter.cpp b/xbmc/peripherals/devices/PeripheralCecAdapter.cpp
+index 04a3e40..ca710dd 100644
+--- a/xbmc/peripherals/devices/PeripheralCecAdapter.cpp
++++ b/xbmc/peripherals/devices/PeripheralCecAdapter.cpp
+@@ -329,9 +329,12 @@ bool CPeripheralCecAdapter::OpenConnection(void)
+   // open the CEC adapter
+   CLog::Log(LOGDEBUG, "%s - opening a connection to the CEC adapter: %s", __FUNCTION__, m_strComPort.c_str());
+ 
+-  // scanning the CEC bus takes about 5 seconds, so display a notification to inform users that we're busy
+-  std::string strMessage = StringUtils::Format(g_localizeStrings.Get(21336).c_str(), g_localizeStrings.Get(36000).c_str());
+-  CGUIDialogKaiToast::QueueNotification(CGUIDialogKaiToast::Info, g_localizeStrings.Get(36000), strMessage);
++  // scanning the CEC bus takes about 5 seconds, so inform users that we're busy
++  if (!m_pDlgBusy)
++    m_pDlgBusy = CServiceBroker::GetGUI()->GetWindowManager().GetWindow<CGUIDialogBusy>(WINDOW_DIALOG_BUSY);
++
++  if (m_pDlgBusy)
++    m_pDlgBusy->Open();
+ 
+   bool bConnectionFailedDisplayed(false);
+ 
+@@ -363,6 +366,9 @@ bool CPeripheralCecAdapter::OpenConnection(void)
+     }
+   }
+ 
++  if (!bIsOpen && m_pDlgBusy)
++    m_pDlgBusy->Close();
++
+   return bIsOpen;
+ }
+ 
+@@ -1607,7 +1613,8 @@ bool CPeripheralCecAdapterUpdateThread::SetInitialConfiguration(void)
+   m_adapter->m_bIsReady = true;
+ 
+   // and let the gui know that we're done
+-  CGUIDialogKaiToast::QueueNotification(CGUIDialogKaiToast::Info, g_localizeStrings.Get(36000), strNotification);
++  if (m_adapter->m_pDlgBusy)
++    m_adapter->m_pDlgBusy->Close();
+ 
+   CSingleLock lock(m_critSection);
+   m_bIsUpdating = false;
+diff --git a/xbmc/peripherals/devices/PeripheralCecAdapter.h b/xbmc/peripherals/devices/PeripheralCecAdapter.h
+index bd4d743..0d5faa2 100644
+--- a/xbmc/peripherals/devices/PeripheralCecAdapter.h
++++ b/xbmc/peripherals/devices/PeripheralCecAdapter.h
+@@ -52,6 +52,8 @@ namespace PERIPHERALS
+ #include <queue>
+ #include <vector>
+ 
++#include "dialogs/GUIDialogBusy.h"
++
+ // undefine macro isset, it collides with function in cectypes.h
+ #ifdef isset
+ #undef isset
+@@ -188,6 +190,8 @@ namespace PERIPHERALS
+     bool m_bSendInactiveSource;
+     bool m_bPowerOffScreensaver;
+     bool m_bShutdownOnStandby;
++
++    CGUIDialogBusy *m_pDlgBusy = nullptr;
+   };
+ 
+   class CPeripheralCecAdapterUpdateThread : public CThread

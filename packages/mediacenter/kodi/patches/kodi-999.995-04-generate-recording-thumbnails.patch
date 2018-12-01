@@ -1,0 +1,28 @@
+diff --git a/xbmc/FileItem.cpp b/xbmc/FileItem.cpp
+index e29d76a64f..a3959eba38 100644
+--- a/xbmc/FileItem.cpp
++++ b/xbmc/FileItem.cpp
+@@ -3191,7 +3191,8 @@ std::string CFileItem::GetFolderThumb(const std::string &folderJPG /* = "folder.
+   if (IsMultiPath())
+     strFolder = CMultiPathDirectory::GetFirstPath(m_strPath);
+ 
+-  if (IsPlugin())
++  if (IsPlugin() ||
++      IsPVR())
+     return "";
+ 
+   return URIUtils::AddFileToFolder(strFolder, folderJPG);
+diff --git a/xbmc/video/VideoThumbLoader.cpp b/xbmc/video/VideoThumbLoader.cpp
+index c232185b19..a1b4b9368e 100644
+--- a/xbmc/video/VideoThumbLoader.cpp
++++ b/xbmc/video/VideoThumbLoader.cpp
+@@ -76,9 +76,6 @@ bool CThumbExtractor::operator==(const CJob* job) const
+ bool CThumbExtractor::DoWork()
+ {
+   if (m_item.IsLiveTV()
+-  // Due to a pvr addon api design flaw (no support for multiple concurrent streams
+-  // per addon instance), pvr recording thumbnail extraction does not work (reliably).
+-  ||  URIUtils::IsPVRRecording(m_item.GetDynPath())
+   ||  URIUtils::IsUPnP(m_item.GetPath())
+   ||  URIUtils::IsBluray(m_item.GetPath())
+   ||  m_item.IsBDFile()
