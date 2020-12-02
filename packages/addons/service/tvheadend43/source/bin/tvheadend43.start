@@ -157,9 +157,9 @@ fi
 
 # debug commandline
 if [ "$DEBUG_LOG" = "true" ]; then
-  TVHEADEND_ARG="-B -C -u root -g video -c $ADDON_HOME $AVM_SATIP $CUSTOM_ARGS -l ${DEBUG_LOG_PATH} --trace $DEBUG_LOG_ARG"
+  TVHEADEND_ARG="-B -C -6 -u root -g video -c $ADDON_HOME $AVM_SATIP $CUSTOM_ARGS -l ${DEBUG_LOG_PATH} --trace $DEBUG_LOG_ARG"
 else
-  TVHEADEND_ARG="-B -C -u root -g video -c $ADDON_HOME $AVM_SATIP $CUSTOM_ARGS"
+  TVHEADEND_ARG="-B -C -6 -u root -g video -c $ADDON_HOME $AVM_SATIP $CUSTOM_ARGS"
 fi
 
 # start userspace DVB driver/addon
