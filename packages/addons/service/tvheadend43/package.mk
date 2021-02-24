@@ -2,9 +2,9 @@
 # Copyright (C) 2016-present Team LibreELEC (https://libreelec.tv)
 
 PKG_NAME="tvheadend43"
-PKG_VERSION="1884300f016027cc3427e3f84c1acfbace5561da"
+PKG_VERSION="052c629c530574f96018dd15efaa3384e9fe8a4d"
 PKG_VERSION_NUMBER="4.3.0"
-PKG_REV="10047"
+PKG_REV="10048"
 PKG_ARCH="any"
 
 PKG_LICENSE="GPL"
