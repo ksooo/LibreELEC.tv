@@ -1,0 +1,121 @@
+--- a/src/esfilter.h
++++ b/src/esfilter.h
+@@ -63,7 +63,7 @@ extern const idclass_t esfilter_class_other;
+   SCT_MASK(SCT_CA)
+ 
+ #define ESF_MASK_OTHER \
+-  (SCT_MASK(SCT_MPEGTS) | SCT_MASK(SCT_HBBTV))
++  (SCT_MASK(SCT_MPEGTS) | SCT_MASK(SCT_HBBTV) | SCT_MASK(SCT_RDS))
+ 
+ extern uint32_t esfilterclsmask[];
+ 
+--- a/src/esstream.h
++++ b/src/esstream.h
+@@ -45,6 +45,7 @@ enum streaming_component_type {
+   SCT_CAT,     /* MPEG-TS CAT (EMM) data */
+   SCT_CA,      /* MPEG-TS ECM data */
+   SCT_HBBTV,   /* HBBTV info */
++  SCT_RDS,     /* Radio Data System */
+   /* standard codecs */
+   SCT_MPEG2VIDEO,
+   SCT_MPEG2AUDIO,
+--- a/src/input/mpegts/dvb_psi_pmt.c
++++ b/src/input/mpegts/dvb_psi_pmt.c
+@@ -437,6 +437,14 @@ dvb_psi_parse_pmt
+           hts_stream_type = SCT_EAC3;
+         break;
+ 
++      case DVB_DESC_ANCILLARY_DATA:
++        if(dlen < 1 || hts_stream_type != SCT_UNKNOWN)
++          break;
++
++        if(estype == 0x89 && (ptr[0] & 0x40) == 0x40) // ancillary_data_id 0x40 : RDS via UECP
++          hts_stream_type = SCT_RDS;
++        break;
++
+       default:
+         break;
+       }
+--- a/src/parsers/parsers.c
++++ b/src/parsers/parsers.c
+@@ -1917,6 +1917,59 @@ parse_hbbtv(parser_t *t, parser_es_t *st, const uint8_t *data,
+   parser_deliver(t, st, pkt);
+ }
+ 
++/**
++ * RDS parser
++ */
++static void
++parse_rds(parser_t *t, parser_es_t *st, const uint8_t *data,
++          int len, int start)
++{
++  th_pkt_t *pkt;
++  int psize, hlen;
++  const uint8_t *buf;
++  const uint8_t *d;
++
++  if(start) {
++    /* Payload unit start */
++    st->es_parser_state = 1;
++    sbuf_reset(&st->es_buf, 4000);
++  }
++
++  if(st->es_parser_state == 0)
++    return;
++
++  sbuf_append(&st->es_buf, data, len);
++
++  if(st->es_buf.sb_ptr < 6)
++    return;
++  d = st->es_buf.sb_data;
++
++  psize = d[4] << 8 | d[5];
++
++  if(st->es_buf.sb_ptr != psize + 6)
++    return;
++
++  st->es_parser_state = 0;
++
++  hlen = parse_pes_header(t, st, d + 6, st->es_buf.sb_ptr - 6);
++  if(hlen < 0)
++    return;
++
++  psize -= hlen;
++  buf = d + 6 + hlen;
++
++  if(psize < 2 || buf[0] != 0xfe || buf[psize-1] != 0xff)
++    return;
++
++  if(psize > 2) {
++    pkt = pkt_alloc(st->es_type, buf, psize,
++                    t->prs_current_pcr, t->prs_current_pcr, t->prs_current_pcr);
++    pkt->pkt_err = st->es_buf.sb_err;
++    parser_deliver(t, st, pkt);
++    sbuf_reset(&st->es_buf, 4000);
++  }
++}
++
+ /**
+  * for debugging
+  */
+@@ -2008,6 +2065,10 @@ parse_mpeg_ts(parser_t *t, parser_es_t *st, const uint8_t *data,
+     st->es_parse_callback = parse_hbbtv;
+     break;
+ 
++  case SCT_RDS:
++    st->es_parse_callback = parse_rds;
++    break;
++
+   default:
+     st->es_parse_callback = parse_none;
+     break;
+--- a/src/streaming.c
++++ b/src/streaming.c
+@@ -570,6 +570,7 @@ static struct strtab streamtypetab[] = {
+   { "CAT",        SCT_CAT },
+   { "CA",         SCT_CA },
+   { "HBBTV",      SCT_HBBTV },
++  { "RDS",        SCT_RDS },
+   { "MPEG2VIDEO", SCT_MPEG2VIDEO },
+   { "MPEG2AUDIO", SCT_MPEG2AUDIO },
+   { "H264",       SCT_H264 },
