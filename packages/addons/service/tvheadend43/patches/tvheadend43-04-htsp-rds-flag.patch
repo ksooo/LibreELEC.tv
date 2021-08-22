@@ -1,0 +1,104 @@
+--- a/src/esstream.h
++++ b/src/esstream.h
+@@ -105,6 +105,7 @@ struct elementary_info {
+   uint8_t es_sri;
+   uint8_t es_ext_sri;
+   uint16_t es_channels;
++  uint8_t es_rds_uecp; /* RDS via UECP data present */
+ 
+   uint16_t es_composition_id;
+   uint16_t es_ancillary_id;
+--- a/src/htsp_server.c
++++ b/src/htsp_server.c
+@@ -50,7 +50,7 @@
+ 
+ static void *htsp_server, *htsp_server_2;
+ 
+-#define HTSP_PROTO_VERSION 35
++#define HTSP_PROTO_VERSION 36
+ 
+ #define HTSP_ASYNC_OFF  0x00
+ #define HTSP_ASYNC_ON   0x01
+@@ -4213,6 +4213,7 @@ htsp_subscription_start(htsp_subscription_t *hs, const streaming_start_t *ss)
+         htsmsg_add_u32(c, "channels", ssc->es_channels);
+       if (ssc->es_sri)
+         htsmsg_add_u32(c, "rate", ssc->es_sri);
++      htsmsg_add_u32(c, "rds_uecp", ssc->es_rds_uecp == 0 ? 0 : 1);
+     }
+ 
+     if (ssc->ssc_gh)
+--- a/src/input/mpegts/dvb_psi_pmt.c
++++ b/src/input/mpegts/dvb_psi_pmt.c
+@@ -248,6 +248,7 @@ dvb_psi_parse_pmt
+   int position;
+   int tt_position;
+   int video_stream;
++  int rds_uecp;
+   int pcr_shared = 0;
+   const char *lang;
+   uint8_t audio_type, audio_version;
+@@ -309,6 +310,7 @@ dvb_psi_parse_pmt
+     hts_stream_type = SCT_UNKNOWN;
+     composition_id = -1;
+     ancillary_id = -1;
++    rds_uecp = 0;
+     position = 0;
+     tt_position = 1000;
+     lang = NULL;
+@@ -438,10 +440,13 @@ dvb_psi_parse_pmt
+         break;
+ 
+       case DVB_DESC_ANCILLARY_DATA:
+-        if(dlen < 1 || hts_stream_type != SCT_UNKNOWN)
++        if(dlen < 1)
+           break;
+ 
+-        if(estype == 0x89 && (ptr[0] & 0x40) == 0x40) // ancillary_data_id 0x40 : RDS via UECP
++        if((ptr[0] & 0x40) == 0x40) /* ancillary_data_id : RDS via UECP */
++          rds_uecp = 1;
++
++        if(rds_uecp && hts_stream_type == SCT_UNKNOWN && estype == 0x89)
+           hts_stream_type = SCT_RDS;
+         break;
+ 
+@@ -510,6 +515,11 @@ dvb_psi_parse_pmt
+         update |= PMT_UPDATE_ANCILLARY_ID;
+       }
+ 
++      if(st->es_rds_uecp != rds_uecp) {
++        st->es_rds_uecp = rds_uecp;
++        update |= PMT_UPDATE_RDS_UECP;
++      }
++
+       if (st->es_pid == set->set_pcr_pid)
+         pcr_shared = 1;
+     }
+@@ -548,7 +558,7 @@ dvb_psi_parse_pmt
+ 
+   if (update) {
+     tvhdebug(mt->mt_subsys, "%s: Service \"%s\" PMT (version %d) updated"
+-     "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s",
++     "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s",
+      mt->mt_name,
+      nicename, version,
+      update&PMT_UPDATE_PCR               ? ", PCR PID changed":"",
+@@ -566,6 +576,7 @@ dvb_psi_parse_pmt
+      update&PMT_UPDATE_CA_PROVIDER_CHANGE? ", CA provider changed":"",
+      update&PMT_UPDATE_CAID_DELETED      ? ", CAID deleted":"",
+      update&PMT_UPDATE_CAID_PID          ? ", CAID PID changed":"",
++     update&PMT_UPDATE_RDS_UECP          ? ", RDS UECP flag changed":"",
+      update&PMT_REORDERED                ? ", PIDs reordered":"");
+   }
+ 
+--- a/src/input/mpegts/dvb_psi_pmt.h
++++ b/src/input/mpegts/dvb_psi_pmt.h
+@@ -39,7 +39,8 @@
+ #define PMT_UPDATE_CA_PROVIDER_CHANGE (1<<12)
+ #define PMT_UPDATE_CAID_DELETED       (1<<13)
+ #define PMT_UPDATE_CAID_PID           (1<<14)
+-#define PMT_REORDERED                 (1<<15)
++#define PMT_UPDATE_RDS_UECP           (1<<15)
++#define PMT_REORDERED                 (1<<16)
+ 
+ uint32_t dvb_psi_parse_pmt
+   (mpegts_table_t *mt, const char *nicename, elementary_set_t *set,
